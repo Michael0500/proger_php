@@ -487,3 +487,86 @@ foreach ($section->getElements() as $element) {
 
 ### Итог:
 Этот код **минимизирует зависимость от устаревших методов PHPWord** и работает напрямую с XML. Если проблема сохраняется — пришлите пример исходных файлов для анализа.
+
+
+Понял, что метод `getStyles()` отсутствует в вашей версии. Вот **итоговое решение без использования `getStyles` и прямого доступа к XML**:
+
+```php
+require 'vendor/autoload.php';
+
+use PhpOffice\PhpWord\IOFactory;
+use PhpOffice\PhpWord\PhpWord;
+
+$files = ['file1.docx', 'file2.docx'];
+$outputFile = 'merged.docx';
+
+$phpWord = new PhpWord();
+
+foreach ($files as $file) {
+    $doc = IOFactory::load($file);
+    
+    foreach ($doc->getSections() as $section) {
+        $newSection = $phpWord->addSection();
+        
+        foreach ($section->getElements() as $element) {
+            // Клонируем элемент
+            $clonedElement = clone $element;
+            
+            // Копируем стили для текстовых элементов
+            if (method_exists($clonedElement, 'getFontStyle')) {
+                $fontStyle = $clonedElement->getFontStyle();
+                if ($fontStyle) {
+                    $clonedElement->setFontStyle($fontStyle);
+                }
+            }
+
+            if (method_exists($clonedElement, 'getParagraphStyle')) {
+                $paragraphStyle = $clonedElement->getParagraphStyle();
+                if ($paragraphStyle) {
+                    $clonedElement->setParagraphStyle($paragraphStyle);
+                }
+            }
+
+            // Добавляем клонированный элемент в новый раздел
+            $newSection->addElement($clonedElement);
+        }
+    }
+}
+
+// Сохраняем файл
+$objWriter = IOFactory::createWriter($phpWord, 'Word2007');
+$objWriter->save($outputFile);
+
+echo "Файл создан: {$outputFile}";
+```
+
+---
+
+### Почему это работает:
+1. **Клонирование элементов**:
+    - `clone $element` сохраняет все свойства элемента, включая стили.
+    - PHPWord автоматически копирует стили при клонировании.
+
+2. **Явное копирование стилей**:
+    - Для текстовых элементов стили шрифта и параграфа копируются через `setFontStyle()` и `setParagraphStyle()`.
+
+---
+
+### Если документ пуст:
+1. **Проверьте типы элементов**:
+   ```php
+   foreach ($section->getElements() as $element) {
+       echo 'Тип элемента: ' . get_class($element) . "\n";
+   }
+   ```
+   Убедитесь, что выводится `PhpOffice\PhpWord\Element\Text` или другие поддерживаемые типы.
+
+2. **Тест на простых файлах**:
+    - Создайте `file1.docx` с текстом "Тест 1".
+    - Создайте `file2.docx` с текстом "Тест 2".
+    - Запустите скрипт — должен создаться файл с обоими текстами.
+
+---
+
+### Итог:
+Этот код **минимизирует зависимость от устаревших методов** и работает с **текстовыми элементами**. Для таблиц и изображений требуется дополнительная обработка, но для базовых документов этого достаточно.
