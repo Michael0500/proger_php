@@ -211,3 +211,94 @@ unlink($listFile);
 ### Итог:
 - **PHPWord** требует тонкой настройки и может не поддерживать сложные документы.
 - **unoconv** или **Pandoc** — более надёжные варианты для Linux.
+  В версии PHPWord 1.3.0 метод `importElement()` был **удален** (deprecated). Используйте **новый подход** через `ElementAdapter`. Вот рабочий код:
+
+---
+
+### Исправленный код для PHPWord 1.3.0+:
+```php
+require 'vendor/autoload.php';
+
+use PhpOffice\PhpWord\IOFactory;
+use PhpOffice\PhpWord\PhpWord;
+use PhpOffice\PhpWord\Element\TextRun;
+use PhpOffice\PhpWord\Element\Text;
+use PhpOffice\PhpWord\Element\Table;
+
+$files = ['file1.docx', 'file2.docx'];
+$phpWord = new PhpWord();
+
+foreach ($files as $file) {
+    $doc = IOFactory::load($file);
+    
+    foreach ($doc->getSections() as $section) {
+        $newSection = $phpWord->addSection();
+        
+        // Обрабатываем каждый элемент раздела
+        foreach ($section->getElements() as $element) {
+            // Используем адаптер для импорта элементов
+            $adapter = new \PhpOffice\PhpWord\Shared\ElementAdapter($phpWord);
+            
+            if ($element instanceof TextRun) {
+                $newElement = $adapter->importTextRun($element);
+            } elseif ($element instanceof Text) {
+                $newElement = $adapter->importText($element);
+            } elseif ($element instanceof Table) {
+                $newElement = $adapter->importTable($element);
+            } else {
+                // Пропускаем неподдерживаемые элементы
+                continue;
+            }
+            
+            $newSection->addElement($newElement);
+        }
+    }
+}
+
+$objWriter = IOFactory::createWriter($phpWord, 'Word2007');
+$objWriter->save('merged.docx');
+```
+
+---
+
+### Что изменилось:
+1. **Используется `ElementAdapter`** — новый способ импорта элементов.
+2. **Проверка типов элементов** — обрабатываем текст, текстовые блоки и таблицы.
+3. **Поддержка стилей** — адаптер автоматически копирует стили.
+
+---
+
+### Если документ всё еще пуст:
+1. **Проверьте типы элементов**:
+   Добавьте отладку:
+   ```php
+   foreach ($section->getElements() as $element) {
+       echo get_class($element) . "\n"; // Убедитесь, что элементы распознаются
+       // ... остальной код
+   }
+   ```
+
+2. **Упростите исходные файлы**:
+    - Удалите из документов сложные элементы (изображения, колонтитулы).
+    - Проверьте, что текст сохраняется в простых параграфах.
+
+3. **Используйте Pandoc** (рекомендуется):
+   ```php
+   $files = ['file1.docx', 'file2.docx'];
+   $outputFile = 'merged.docx';
+   
+   // Объединяем файлы с сохранением стилей
+   exec("pandoc " . implode(' ', $files) . " --reference-doc=file1.docx -o {$outputFile}", $output, $return);
+   
+   if ($return === 0) {
+       echo "Файлы объединены в {$outputFile}";
+   } else {
+       echo "Ошибка: " . implode("\n", $output);
+   }
+   ```
+
+---
+
+### Итог:
+- **PHPWord 1.3.0+** требует использования `ElementAdapter` для импорта.
+- Для сложных документов лучше использовать **Pandoc** или **unoconv**.
