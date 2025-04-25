@@ -115,3 +115,99 @@ if ($return === 0) {
 - **PHPWord** подходит только для простых документов.
 - Для сложных стилей используйте **Pandoc** или **Python**.
 - Убедитесь, что на сервере установлены зависимости: `pandoc`, `python3`, `python-docx`.
+
+Если PHPWord создаёт пустой документ, это связано с особенностями работы библиотеки. Вот **доработанный код** с проверками и поддержкой большинства элементов:
+
+```php
+require 'vendor/autoload.php';
+
+use PhpOffice\PhpWord\IOFactory;
+use PhpOffice\PhpWord\PhpWord;
+
+$files = ['file1.docx', 'file2.docx'];
+$phpWord = new PhpWord();
+
+foreach ($files as $file) {
+    $doc = IOFactory::load($file);
+
+    foreach ($doc->getSections() as $section) {
+        $newSection = $phpWord->addSection();
+
+        // Копируем все элементы из исходного раздела
+        foreach ($section->getElements() as $element) {
+            // Импортируем элемент в новый документ
+            $importedElement = $phpWord->importElement($element);
+            
+            // Добавляем элемент в новый раздел
+            $newSection->addElement($importedElement);
+        }
+    }
+}
+
+$objWriter = IOFactory::createWriter($phpWord, 'Word2007');
+$objWriter->save('merged.docx');
+```
+
+---
+
+### Что изменилось:
+1. **Метод `importElement()`** — корректно импортирует элементы между документами.
+2. **Убрано клонирование** — PHPWord требует явного импорта элементов.
+
+---
+
+### Если документ всё ещё пуст:
+1. **Проверьте исходные файлы**:
+    - Убедитесь, что файлы `file1.docx`, `file2.docx` существуют и не пусты.
+    - Попробуйте использовать простые документы с текстом для теста.
+
+2. **Включите отладку**:
+   Добавьте вывод информации о элементах:
+   ```php
+   foreach ($section->getElements() as $element) {
+       echo get_class($element) . "\n"; // Проверяем тип элемента
+       $importedElement = $phpWord->importElement($element);
+       $newSection->addElement($importedElement);
+   }
+   ```
+
+3. **Обновите PHPWord**:
+   Убедитесь, что установлена последняя версия:
+   ```bash
+   composer update phpoffice/phpword
+   ```
+
+---
+
+### Альтернатива: Используйте **unoconv** (Linux)
+Если PHPWord не работает, установите `unoconv` и LibreOffice в фоне:
+```bash
+sudo apt-get install unoconv libreoffice
+```
+
+PHP-код:
+```php
+$files = ['file1.docx', 'file2.docx'];
+$outputFile = 'merged.docx';
+
+// Создаем временный файл со списком
+$listFile = tempnam(sys_get_temp_dir(), 'doclist');
+file_put_contents($listFile, implode("\n", $files));
+
+// Объединяем через unoconv
+exec("unoconv --merge -f docx -o {$outputFile} $(cat {$listFile})", $output, $return);
+
+if ($return === 0) {
+    echo "Файлы объединены в {$outputFile}";
+} else {
+    echo "Ошибка: " . implode("\n", $output);
+}
+
+unlink($listFile);
+```
+
+---
+
+### Итог:
+- **PHPWord** требует тонкой настройки и может не поддерживать сложные документы.
+- **unoconv** или **Pandoc** — более надёжные варианты для Linux.
