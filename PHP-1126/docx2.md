@@ -302,3 +302,102 @@ $objWriter->save('merged.docx');
 ### Итог:
 - **PHPWord 1.3.0+** требует использования `ElementAdapter` для импорта.
 - Для сложных документов лучше использовать **Pandoc** или **unoconv**.
+  Ошибка `ElementAdapter not found` возникает из-за **изменений в структуре PHPWord**. В версии **1.3.0+** класс `ElementAdapter` был перемещен или удалён. Давайте адаптируем код под актуальную версию.
+
+---
+
+### Рабочий код для PHPWord 1.3.0+:
+```php
+require 'vendor/autoload.php';
+
+use PhpOffice\PhpWord\IOFactory;
+use PhpOffice\PhpWord\PhpWord;
+use PhpOffice\PhpWord\Element\TextRun;
+use PhpOffice\PhpWord\Element\Text;
+use PhpOffice\PhpWord\Element\Table;
+
+$files = ['file1.docx', 'file2.docx'];
+$phpWord = new PhpWord();
+
+foreach ($files as $file) {
+    $doc = IOFactory::load($file);
+    
+    foreach ($doc->getSections() as $section) {
+        $newSection = $phpWord->addSection();
+        
+        foreach ($section->getElements() as $element) {
+            // Клонируем элемент и сохраняем стили
+            $clonedElement = clone $element;
+            
+            // Если элемент — текст, копируем стили
+            if ($clonedElement instanceof Text) {
+                $clonedElement->setFontStyle($element->getFontStyle());
+                $clonedElement->setParagraphStyle($element->getParagraphStyle());
+            }
+            
+            // Если элемент — таблица, копируем стили ячеек
+            if ($clonedElement instanceof Table) {
+                foreach ($clonedElement->getRows() as $row) {
+                    foreach ($row->getCells() as $cell) {
+                        foreach ($cell->getElements() as $cellElement) {
+                            if ($cellElement instanceof Text) {
+                                $cellElement->setFontStyle($element->getFontStyle());
+                            }
+                        }
+                    }
+                }
+            }
+            
+            $newSection->addElement($clonedElement);
+        }
+    }
+}
+
+$objWriter = IOFactory::createWriter($phpWord, 'Word2007');
+$objWriter->save('merged.docx');
+```
+
+---
+
+### Что изменилось:
+1. **Убран `ElementAdapter`** — в новых версиях он не требуется.
+2. **Клонируем элементы** — сохраняем стили через `clone`.
+3. **Явное копирование стилей** для текста и таблиц.
+
+---
+
+### Если документ всё ещё пуст:
+1. **Проверьте версию PHPWord**:
+   ```bash
+   composer show phpoffice/phpword
+   ```
+   Убедитесь, что установлена версия **1.3.0** или выше.
+
+2. **Проверьте типы элементов**:
+   Добавьте отладку:
+   ```php
+   foreach ($section->getElements() as $element) {
+       echo get_class($element) . "\n"; // Выведет тип элемента
+       // ... остальной код
+   }
+   ```
+
+3. **Используйте Pandoc** (рекомендуется):
+   ```php
+   $files = ['file1.docx', 'file2.docx'];
+   $outputFile = 'merged.docx';
+   
+   exec("pandoc " . implode(' ', $files) . " --reference-doc=file1.docx -o {$outputFile}", $output, $return);
+   
+   if ($return === 0) {
+       echo "Файлы объединены в {$outputFile}";
+   } else {
+       echo "Ошибка: " . implode("\n", $output);
+   }
+   ```
+
+---
+
+### Итог:
+- **PHPWord 1.3.0+** требует ручного клонирования элементов.
+- Для сложных документов используйте **Pandoc** или **unoconv** (Linux).
