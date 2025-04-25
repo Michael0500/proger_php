@@ -570,3 +570,101 @@ echo "Файл создан: {$outputFile}";
 
 ### Итог:
 Этот код **минимизирует зависимость от устаревших методов** и работает с **текстовыми элементами**. Для таблиц и изображений требуется дополнительная обработка, но для базовых документов этого достаточно.
+Вот исправленный код, который корректно обрабатывает элементы `TextRun` и `TextBreak`:
+
+```php
+require 'vendor/autoload.php';
+
+use PhpOffice\PhpWord\IOFactory;
+use PhpOffice\PhpWord\PhpWord;
+use PhpOffice\PhpWord\Element\TextRun;
+use PhpOffice\PhpWord\Element\Text;
+use PhpOffice\PhpWord\Element\TextBreak;
+
+$files = ['file1.docx', 'file2.docx'];
+$outputFile = 'merged.docx';
+
+$phpWord = new PhpWord();
+
+foreach ($files as $file) {
+    $doc = IOFactory::load($file);
+    
+    foreach ($doc->getSections() as $section) {
+        $newSection = $phpWord->addSection();
+        
+        foreach ($section->getElements() as $element) {
+            if ($element instanceof TextRun) {
+                // Обработка TextRun (блока текста)
+                $textRun = $newSection->addTextRun();
+                
+                // Копируем стили TextRun
+                if ($element->getFontStyle()) {
+                    $textRun->setFontStyle($element->getFontStyle());
+                }
+                if ($element->getParagraphStyle()) {
+                    $textRun->setParagraphStyle($element->getParagraphStyle());
+                }
+                
+                // Копируем вложенные элементы (текст и разрывы)
+                foreach ($element->getElements() as $childElement) {
+                    if ($childElement instanceof Text) {
+                        $textRun->addText(
+                            $childElement->getText(),
+                            $childElement->getFontStyle(),
+                            $childElement->getParagraphStyle()
+                        );
+                    } elseif ($childElement instanceof TextBreak) {
+                        $textRun->addTextBreak();
+                    }
+                }
+            } elseif ($element instanceof TextBreak) {
+                // Обработка разрыва строки
+                $newSection->addTextBreak();
+            }
+        }
+    }
+}
+
+$objWriter = IOFactory::createWriter($phpWord, 'Word2007');
+$objWriter->save($outputFile);
+
+echo "Файл создан: {$outputFile}";
+```
+
+---
+
+### Что изменилось:
+1. **Обработка `TextRun`**:
+    - Клонируем блоки текста (`TextRun`) и их вложенные элементы (текст и разрывы).
+    - Сохраняем стили шрифта и параграфа.
+
+2. **Обработка `TextBreak`**:
+    - Явно добавляем разрывы строк через `addTextBreak()`.
+
+3. **Проверка типов элементов**:
+    - Код теперь корректно обрабатывает контейнеры текста и разрывы.
+
+---
+
+### Проверьте:
+1. **Тест на простых файлах**:
+    - `file1.docx`: "Текст 1" + разрыв строки.
+    - `file2.docx`: "Текст 2".
+    - Результат должен содержать оба текста с разрывом.
+
+2. **Отладочная информация**:
+   ```php
+   foreach ($section->getElements() as $element) {
+       echo 'Тип элемента: ' . get_class($element) . "\n";
+   }
+   ```
+
+---
+
+### Итог:
+Этот код корректно обрабатывает:
+- Блоки текста (`TextRun`) с вложенными элементами.
+- Разрывы строк (`TextBreak`).
+- Стили шрифта и параграфа.
+
+Если документ всё ещё пуст — пришлите пример исходных файлов (можно упрощённых) для анализа.
