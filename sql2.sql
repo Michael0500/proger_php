@@ -64,3 +64,9 @@ SELECT
 FROM final_addresses
 GROUP BY objectguid
 ORDER BY full_address;
+
+
+CREATE TABLE full_addresses (
+                                objectguid UUID PRIMARY KEY,
+                                full_address TEXT
+);
