@@ -16,18 +16,23 @@ class AppAsset extends AssetBundle
     ];
 
     public $js = [
-        // ── Внешние библиотеки ───────────────────────────────────────
+        // Внешние библиотеки
         'js/vue.min.js',
         'js/axios.min.js',
         'js/sweetalert2.all.min.js',
 
-        // ── Приложение: порядок важен! ───────────────────────────────
-        'js/app/api.js',              // API-слой (использует AppRoutes)
-        'js/app/mixins/modals.js',    // утилиты Bootstrap-модалок
-        'js/app/mixins/groups.js',    // методы групп
-        'js/app/mixins/pools.js',     // методы пулов
-        'js/app/mixins/entries.js',   // методы записей NostroEntry
-        'js/app/app.js',              // Vue-инициализация
+        // API-слой
+        'js/app/api.js',
+
+        // Миксины (порядок важен!)
+        'js/app/mixins/modals.js',
+        'js/app/mixins/groups.js',
+        'js/app/mixins/pools.js',
+        'js/app/mixins/entries.js',
+        'js/app/mixins/matching.js',
+
+        // Главный файл
+        'js/app/app.js',
     ];
 
     public $jsOptions = [
@@ -37,5 +42,6 @@ class AppAsset extends AssetBundle
     public $depends = [
         'yii\web\YiiAsset',
         'yii\bootstrap5\BootstrapAsset',
+        'app\assets\FontAwesomeAsset',
     ];
 }

@@ -64,6 +64,8 @@ $config = [
                 'account-pool/create' => 'account-pool/create',
                 'account-pool/update' => 'account-pool/update',
                 'account-pool/delete' => 'account-pool/delete',
+
+                'matching/<action>' => 'matching/<action>'
             ],
         ],
         'authManager' => [

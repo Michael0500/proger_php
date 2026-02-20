@@ -1,19 +1,13 @@
 <?php
 /**
- * _vue-scripts.php
- *
- * Единственная задача этого файла — передать PHP/Yii2 маршруты в JS.
- * Вся логика приложения находится в web/js/app/*.js
+ * _vue-scripts.php — передаёт маршруты из Yii2 в JS.
+ * Вся логика в web/js/app/*.js
  *
  * @var yii\web\View $this
  */
 use yii\helpers\Url;
 ?>
 <script>
-    /**
-     * AppRoutes — глобальный объект с URL-адресами для API вызовов.
-     * Генерируется Yii2, чтобы JS не знал о структуре маршрутов напрямую.
-     */
     window.AppRoutes = {
         // Группы
         groupGetGroups: '<?= Url::to(['/account-group/get-groups']) ?>',
@@ -27,10 +21,18 @@ use yii\helpers\Url;
         poolDelete:      '<?= Url::to(['/account-pool/delete']) ?>',
         poolGetAccounts: '<?= Url::to(['/account-pool/get-accounts']) ?>',
 
-        // Записи выверки (NostroEntry)
+        // Записи (NostroEntry)
         entryCreate:        '<?= Url::to(['/nostro-entry/create']) ?>',
         entryUpdate:        '<?= Url::to(['/nostro-entry/update']) ?>',
         entryDelete:        '<?= Url::to(['/nostro-entry/delete']) ?>',
-        entryUpdateComment: '<?= Url::to(['/nostro-entry/update-comment']) ?>'
+        entryUpdateComment: '<?= Url::to(['/nostro-entry/update-comment']) ?>',
+
+        // Квитование (Matching)
+        matchManual: '<?= Url::to(['/matching/match-manual']) ?>',
+        unmatch:     '<?= Url::to(['/matching/unmatch']) ?>',
+        autoMatch:   '<?= Url::to(['/matching/auto-match']) ?>',
+        getRules:    '<?= Url::to(['/matching/get-rules']) ?>',
+        saveRule:    '<?= Url::to(['/matching/save-rule']) ?>',
+        deleteRule:  '<?= Url::to(['/matching/delete-rule']) ?>'
     };
 </script>

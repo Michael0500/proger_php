@@ -1,235 +1,371 @@
-<?php
-/** @var yii\web\View $this */
-use yii\helpers\Html;
-use yii\helpers\Url;
-?>
+<?php /** @var yii\web\View $this */ ?>
 
-<div class="table-container">
-
-    <div v-if="!selectedPool" class="text-center py-5">
-        <i class="fas fa-arrow-left fa-3x text-muted mb-3"></i>
-        <p class="text-muted">Выберите пул в меню слева, чтобы увидеть записи выверки</p>
+<div>
+    <!-- Пул не выбран -->
+    <div v-if="!selectedPool" class="empty-pool">
+        <i class="fas fa-hand-point-left"></i>
+        <p>Выберите пул в панели слева</p>
     </div>
 
     <div v-else>
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5>
-                <i class="fas fa-table me-2"></i>
-                Записи выверки — пул «{{ selectedPool.name }}»
-            </h5>
-            <div class="d-flex gap-2">
-                <button class="btn btn-sm btn-success" @click="showAddEntryModal(null)">
-                    <i class="fas fa-plus me-1"></i>Добавить запись
+
+        <!-- ── Тулбар ──────────────────────────────────────── -->
+        <div style="display:flex; align-items:center; justify-content:space-between;
+                    flex-wrap:wrap; gap:12px; margin-bottom:20px">
+            <div style="display:flex; align-items:center; gap:10px">
+                <span class="pool-title">{{ selectedPool.name }}</span>
+                <span class="pool-title pool-tag">{{ selectedGroup ? selectedGroup.name : '' }}</span>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap">
+                <button class="toolbar-btn outline"
+                        @click="loadMatchingRules(); _showModal('rulesListModal')">
+                    <i class="fas fa-sliders-h"></i>Правила
                 </button>
-                <button class="btn btn-sm btn-outline-secondary" @click="refreshAccounts">
-                    <i class="fas fa-sync"></i>
+                <button class="toolbar-btn primary"
+                        :disabled="autoMatchRunning"
+                        @click="runAutoMatch(null)">
+                    <i :class="autoMatchRunning ? 'fas fa-spinner fa-spin' : 'fas fa-magic'"></i>
+                    {{ autoMatchRunning ? 'Выполняется...' : 'Автоквитование' }}
+                </button>
+                <button class="toolbar-btn success"
+                        :disabled="!hasSelection"
+                        @click="matchSelected">
+                    <i class="fas fa-link"></i>
+                    Сквитовать{{ selectedIds.length > 0 ? ' (' + selectedIds.length + ')' : '' }}
+                </button>
+                <button class="toolbar-btn danger-soft"
+                        v-if="selectedIds.length > 0"
+                        @click="clearSelection">
+                    <i class="fas fa-times"></i>Сбросить
                 </button>
             </div>
         </div>
 
-        <div v-if="loadingAccounts" class="text-center py-5">
-            <div class="spinner-border" role="status">
-                <span class="visually-hidden">Загрузка...</span>
-            </div>
+        <!-- ── Панель итогов ───────────────────────────────── -->
+        <div v-if="selectionSummary"
+             class="summary-bar"
+             :class="summaryBalanced ? 'balanced' : 'unbalanced'">
+            <span style="font-weight:700; color:#374151">
+                Выбрано: {{ selectedIds.length }}
+            </span>
+            <span style="color:#d1d5db">|</span>
+            <span>
+                <span style="display:inline-flex;align-items:center;gap:4px;color:#6366f1;font-weight:600">
+                    <i class="fas fa-database" style="font-size:11px"></i>
+                    Ledger ({{ selectionSummary.cnt_ledger }}):
+                </span>
+                <strong style="font-family:monospace;margin-left:3px">
+                    {{ formatAmount(selectionSummary.sum_ledger) }}
+                </strong>
+            </span>
+            <span>
+                <span style="display:inline-flex;align-items:center;gap:4px;color:#0284c7;font-weight:600">
+                    <i class="fas fa-file-alt" style="font-size:11px"></i>
+                    Statement ({{ selectionSummary.cnt_statement }}):
+                </span>
+                <strong style="font-family:monospace;margin-left:3px">
+                    {{ formatAmount(selectionSummary.sum_statement) }}
+                </strong>
+            </span>
+            <span :style="summaryBalanced
+                ? 'color:#059669;font-weight:700'
+                : 'color:#d97706;font-weight:700'">
+                <i :class="summaryBalanced ? 'fas fa-check-circle' : 'fas fa-exclamation-triangle'"></i>
+                Разница: <span style="font-family:monospace">{{ formatAmount(selectionSummary.diff) }}</span>
+                <span v-if="summaryBalanced" style="font-weight:500;margin-left:4px">— готово к квитованию</span>
+            </span>
         </div>
 
-        <div v-else-if="accounts.length === 0" class="text-center py-5">
-            <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
-            <p class="text-muted">В этом пуле нет Ностро банков</p>
+        <!-- Загрузка -->
+        <div v-if="loadingAccounts" style="display:flex;justify-content:center;padding:60px 0">
+            <div class="spinner-border" style="color:#6366f1"></div>
         </div>
 
-        <div v-else>
-            <div v-for="account in accounts" :key="account.id" class="mb-4">
+        <div v-else-if="accounts.length === 0" class="empty-pool">
+            <i class="fas fa-inbox"></i>
+            <p>Нет Ностро банков в этом пуле</p>
+        </div>
 
-                <div class="d-flex align-items-center justify-content-between bg-light px-3 py-2 rounded mb-1 border">
-                    <div>
-                        <i class="fas fa-university me-2 text-primary"></i>
-                        <strong>{{ account.name }}</strong>
-                        <span v-if="account.currency" class="badge bg-secondary ms-2">{{ account.currency }}</span>
-                        <span v-if="account.is_suspense" class="badge bg-warning text-dark ms-1">INV / suspense</span>
-                        <span v-else class="badge bg-info text-dark ms-1">NRE</span>
-                        <span class="ms-2 text-muted small">{{ account.entries.length }} записей</span>
-                    </div>
-                    <button class="btn btn-sm btn-outline-success" @click="showAddEntryModal(account)">
-                        <i class="fas fa-plus me-1"></i>Добавить запись
+        <!-- ── Карточки счетов ─────────────────────────────── -->
+        <div v-for="account in accounts" :key="account.id" class="account-card">
+
+            <!-- Заголовок -->
+            <div class="account-card-header">
+                <div class="acc-meta">
+                    <i class="fas fa-university" style="color:#6366f1;font-size:14px;margin-right:8px"></i>
+                    <span class="acc-name">{{ account.name }}</span>
+                    <span v-if="account.currency" class="badge-currency">{{ account.currency }}</span>
+                    <span v-if="account.is_suspense" class="badge-suspense">
+                        <i class="fas fa-exclamation-circle" style="font-size:9px"></i> Suspense
+                    </span>
+                    <span class="acc-count">{{ account.entries ? account.entries.length : 0 }} записей</span>
+                </div>
+                <div style="display:flex;gap:4px">
+                    <button class="card-hdr-btn green"
+                            @click="selectAllInAccount(account)"
+                            title="Выбрать все незаквитованные">
+                        <i class="fas fa-check-square"></i>
+                    </button>
+                    <button class="card-hdr-btn blue"
+                            @click="runAutoMatch(account.id)"
+                            title="Автоквитование по счёту">
+                        <i class="fas fa-magic"></i>
+                    </button>
+                    <button class="card-hdr-btn green"
+                            @click="showAddEntryModal(account)"
+                            title="Добавить запись">
+                        <i class="fas fa-plus"></i>
                     </button>
                 </div>
+            </div>
 
-                <div v-if="account.entries.length === 0" class="text-muted small ps-4 py-2">
-                    Нет записей для этого Ностро банка
-                </div>
+            <!-- Таблица -->
+            <div style="overflow-x:auto" v-if="account.entries && account.entries.length > 0">
+                <table class="entries-table">
+                    <thead>
+                    <tr>
+                        <th style="width:32px;padding-left:16px"></th>
+                        <th>Match ID</th>
+                        <th>L/S</th>
+                        <th>D/C</th>
+                        <th style="text-align:right">Сумма</th>
+                        <th>Вал.</th>
+                        <th>Value Date</th>
+                        <th>Post Date</th>
+                        <th>Instr.ID</th>
+                        <th>E2E ID</th>
+                        <th>Txn ID</th>
+                        <th>Msg ID</th>
+                        <th>Комментарий</th>
+                        <th>Статус</th>
+                        <th style="width:80px; text-align:right; padding-right:16px">
+                            <i class="fas fa-cog" style="opacity:.4"></i>
+                        </th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr v-for="entry in account.entries" :key="entry.id"
+                        :class="{
+                            'entry-selected': isSelected(entry.id),
+                            'entry-matched':  !isSelected(entry.id) && entry.match_status === 'M'
+                        }">
 
-                <div v-else class="table-responsive">
-                    <table class="table table-sm table-hover table-striped mb-0">
-                        <thead class="table-light">
-                        <tr>
-                            <th style="width:120px">Match ID</th>
-                            <th style="width:40px">L/S</th>
-                            <th style="width:60px">D/C</th>
-                            <th style="width:150px" class="text-end">Сумма</th>
-                            <th style="width:60px">Валюта</th>
-                            <th style="width:100px">Value Date</th>
-                            <th style="width:100px">Post Date</th>
-                            <th style="width:160px">Instruction ID</th>
-                            <th style="width:160px">EndToEnd ID</th>
-                            <th style="width:180px">Transaction ID</th>
-                            <th style="width:140px">Message ID</th>
-                            <th>Комментарий</th>
-                            <th style="width:110px">Статус</th>
-                            <th style="width:80px"></th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        <tr v-for="entry in account.entries" :key="entry.id">
-                            <td class="font-monospace small">{{ entry.match_id || '—' }}</td>
-                            <td>
-                                <span :class="entry.ls === 'L' ? 'badge bg-primary' : 'badge bg-dark'">
-                                    {{ entry.ls }}
-                                </span>
-                            </td>
-                            <td>
-                                <span :class="entry.dc === 'Debit' ? 'text-danger fw-bold' : 'text-success fw-bold'">
-                                    {{ entry.dc === 'Debit' ? 'D' : 'C' }}
-                                </span>
-                            </td>
-                            <td class="text-end font-monospace">{{ entry.amount }}</td>
-                            <td>{{ entry.currency }}</td>
-                            <td>{{ entry.value_date || '—' }}</td>
-                            <td>{{ entry.post_date || '—' }}</td>
-                            <td class="small" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" :title="entry.instruction_id">{{ entry.instruction_id || '—' }}</td>
-                            <td class="small" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" :title="entry.end_to_end_id">{{ entry.end_to_end_id || '—' }}</td>
-                            <td class="small" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" :title="entry.transaction_id">{{ entry.transaction_id || '—' }}</td>
-                            <td class="small" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" :title="entry.message_id">{{ entry.message_id || '—' }}</td>
-                            <td>
-                                <span v-if="editingCommentId !== entry.id"
-                                      style="cursor:pointer;border-bottom:1px dashed #aaa"
-                                      @dblclick="startEditComment(entry)"
-                                      title="Двойной клик для редактирования">
-                                    {{ entry.comment || '—' }}
-                                </span>
-                                <div v-else class="input-group input-group-sm" style="min-width:150px">
-                                    <input type="text"
-                                           class="form-control form-control-sm"
-                                           v-model="editingCommentValue"
-                                           maxlength="40"
-                                           @keyup.enter="saveComment(entry)"
-                                           @keyup.esc="cancelEditComment">
-                                    <button class="btn btn-success btn-sm" @click="saveComment(entry)">&#10003;</button>
-                                    <button class="btn btn-secondary btn-sm" @click="cancelEditComment">&#10005;</button>
-                                </div>
-                            </td>
-                            <td>
-                                <span :class="'badge bg-' + entry.match_status_badge">
-                                    {{ entry.match_status === 'M' ? 'Квит.' : (entry.match_status === 'I' ? 'Игн.' : 'Нет') }}
-                                </span>
-                            </td>
-                            <td>
-                                <div class="dropdown">
-                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
-                                        <i class="fas fa-ellipsis-v"></i>
-                                    </button>
-                                    <ul class="dropdown-menu dropdown-menu-end">
-                                        <li><a class="dropdown-item" href="#" @click.prevent="editEntry(entry, account)">
-                                                <i class="fas fa-edit me-2"></i>Редактировать
-                                            </a></li>
-                                        <li><hr class="dropdown-divider"></li>
-                                        <li><a class="dropdown-item text-danger" href="#" @click.prevent="deleteEntry(entry, account)">
-                                                <i class="fas fa-trash me-2"></i>Удалить
-                                            </a></li>
-                                    </ul>
-                                </div>
-                            </td>
-                        </tr>
-                        </tbody>
-                    </table>
-                </div>
+                        <!-- Чекбокс -->
+                        <td style="padding-left:16px">
+                            <input type="checkbox"
+                                   style="width:14px;height:14px;cursor:pointer;accent-color:#6366f1"
+                                   v-if="entry.match_status === 'U'"
+                                   :checked="isSelected(entry.id)"
+                                   @change="toggleEntrySelection(entry.id)">
+                            <i v-else class="fas fa-lock"
+                               style="font-size:10px;color:#d1d5db" title="Сквитовано"></i>
+                        </td>
 
+                        <!-- Match ID -->
+                        <td>
+                            <span v-if="entry.match_id"
+                                  class="match-id-badge"
+                                  @click="unmatchEntry(entry.match_id)"
+                                  title="Нажмите для расквитования">
+                                <i class="fas fa-link" style="font-size:9px"></i>
+                                {{ entry.match_id }}
+                            </span>
+                            <span v-else style="color:#d1d5db;font-size:11px">—</span>
+                        </td>
+
+                        <!-- L/S -->
+                        <td>
+                            <span :class="entry.ls === 'L' ? 'badge-ls-l' : 'badge-ls-s'">
+                                {{ entry.ls }}
+                            </span>
+                        </td>
+
+                        <!-- D/C -->
+                        <td>
+                            <span :class="entry.dc === 'Debit' ? 'badge-debit' : 'badge-credit'">
+                                {{ entry.dc === 'Debit' ? 'D' : 'C' }}
+                            </span>
+                        </td>
+
+                        <td style="text-align:right;font-family:monospace;font-weight:600;color:#1a202c">
+                            {{ entry.amount }}
+                        </td>
+
+                        <td>
+                            <span style="font-size:11px;color:#6b7280;font-weight:600">{{ entry.currency }}</span>
+                        </td>
+
+                        <td style="white-space:nowrap;font-size:12px">{{ entry.value_date || '—' }}</td>
+                        <td style="white-space:nowrap;font-size:12px">{{ entry.post_date  || '—' }}</td>
+
+                        <!-- ID поля -->
+                        <td style="max-width:80px;overflow:hidden;text-overflow:ellipsis;
+                                   white-space:nowrap;font-family:monospace;font-size:11px;color:#6b7280"
+                            :title="entry.instruction_id">{{ entry.instruction_id || '—' }}</td>
+                        <td style="max-width:80px;overflow:hidden;text-overflow:ellipsis;
+                                   white-space:nowrap;font-family:monospace;font-size:11px;color:#6b7280"
+                            :title="entry.end_to_end_id">{{ entry.end_to_end_id || '—' }}</td>
+                        <td style="max-width:80px;overflow:hidden;text-overflow:ellipsis;
+                                   white-space:nowrap;font-family:monospace;font-size:11px;color:#6b7280"
+                            :title="entry.transaction_id">{{ entry.transaction_id || '—' }}</td>
+                        <td style="max-width:80px;overflow:hidden;text-overflow:ellipsis;
+                                   white-space:nowrap;font-family:monospace;font-size:11px;color:#6b7280"
+                            :title="entry.message_id">{{ entry.message_id || '—' }}</td>
+
+                        <!-- Комментарий -->
+                        <td style="min-width:100px">
+                            <span v-if="editingCommentId !== entry.id"
+                                  @dblclick="startEditComment(entry)"
+                                  class="comment-inline"
+                                  :class="{ 'has-value': entry.comment }"
+                                  :title="entry.comment ? 'Двойной клик — редактировать' : 'Нет комментария'">
+                                {{ entry.comment || '—' }}
+                            </span>
+                            <div v-else style="display:flex;gap:3px;min-width:140px">
+                                <input type="text"
+                                       style="flex:1;font-size:11px;padding:3px 6px;border:1px solid #c7d2fe;
+                                              border-radius:5px;font-family:monospace;outline:none;
+                                              box-shadow:0 0 0 3px rgba(99,102,241,.1)"
+                                       v-model="editingCommentValue" maxlength="40"
+                                       @keyup.enter="saveComment(entry)"
+                                       @keyup.esc="cancelEditComment">
+                                <button class="row-btn edit" @click="saveComment(entry)" title="Сохранить">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                                <button class="row-btn delete" @click="cancelEditComment" title="Отмена">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </td>
+
+                        <!-- Статус -->
+                        <td>
+                            <span :class="entry.match_status === 'M' ? 'status-badge status-matched' :
+                                          entry.match_status === 'I' ? 'status-badge status-ignored' :
+                                          'status-badge status-waiting'">
+                                {{ entry.match_status === 'M' ? 'Сквит.' :
+                                   entry.match_status === 'I' ? 'Игнор'  : 'Ожидает' }}
+                            </span>
+                        </td>
+
+                        <!-- Кнопки -->
+                        <td style="text-align:right;padding-right:16px">
+                            <div style="display:flex;gap:3px;justify-content:flex-end">
+                                <button class="row-btn edit"
+                                        @click="editEntry(entry, account)"
+                                        title="Редактировать">
+                                    <i class="fas fa-pen"></i>
+                                </button>
+                                <button class="row-btn unlink"
+                                        v-if="entry.match_status === 'M'"
+                                        @click="unmatchEntry(entry.match_id)"
+                                        title="Расквитовать">
+                                    <i class="fas fa-unlink"></i>
+                                </button>
+                                <button class="row-btn delete"
+                                        @click="deleteEntry(entry)"
+                                        title="Удалить">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Нет записей -->
+            <div v-else class="empty-row">
+                <i class="fas fa-inbox" style="font-size:14px;opacity:.3"></i>
+                Нет записей
+                <button @click="showAddEntryModal(account)"
+                        style="background:none;border:none;color:#6366f1;font-weight:600;
+                               font-size:12.5px;cursor:pointer;padding:0;margin-left:4px">
+                    <i class="fas fa-plus" style="font-size:10px;margin-right:2px"></i>Добавить первую
+                </button>
             </div>
         </div>
+        <!-- /v-for -->
+
     </div>
 </div>
 
-<!-- Модальное окно добавления/редактирования записи -->
-<div class="modal fade" id="entryModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">{{ editingEntry.id ? 'Редактировать запись' : 'Добавить запись' }}</h5>
-                <button type="button" class="btn-close" @click="closeEntryModal"></button>
+<!-- ── Список правил (модал) ───────────────────────── -->
+<div class="modal fade" id="rulesListModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content" style="border-radius:14px;border:none;
+                    box-shadow:0 20px 60px rgba(0,0,0,.15)">
+            <div class="modal-header" style="border-bottom:1px solid #f1f3f7;padding:16px 20px">
+                <h5 class="modal-title" style="font-weight:700;font-size:15px">
+                    <i class="fas fa-sliders-h me-2" style="color:#6366f1"></i>Правила автоквитования
+                </h5>
+                <button type="button" class="btn-close" @click="_hideModal('rulesListModal')"></button>
             </div>
-            <div class="modal-body">
-                <div class="row g-3">
-                    <div class="col-md-4">
-                        <label class="form-label">Ностро банк <span class="text-danger">*</span></label>
-                        <select class="form-select" v-model="editingEntry.account_id" :disabled="!!editingEntry.id">
-                            <option value="">— выберите —</option>
-                            <option v-for="acc in accounts" :key="acc.id" :value="acc.id">{{ acc.name }}</option>
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">L/S <span class="text-danger">*</span></label>
-                        <select class="form-select" v-model="editingEntry.ls">
-                            <option value="L">L — Ledger</option>
-                            <option value="S">S — Statement</option>
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">D/C <span class="text-danger">*</span></label>
-                        <select class="form-select" v-model="editingEntry.dc">
-                            <option value="Debit">Debit</option>
-                            <option value="Credit">Credit</option>
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Сумма <span class="text-danger">*</span></label>
-                        <input type="number" step="0.01" class="form-control" v-model="editingEntry.amount">
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Валюта <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" v-model="editingEntry.currency" maxlength="3" placeholder="EUR">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Value Date</label>
-                        <input type="date" class="form-control" v-model="editingEntry.value_date">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Post Date</label>
-                        <input type="date" class="form-control" v-model="editingEntry.post_date">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Instruction ID</label>
-                        <input type="text" class="form-control" v-model="editingEntry.instruction_id" maxlength="40">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">EndToEnd ID</label>
-                        <input type="text" class="form-control" v-model="editingEntry.end_to_end_id" maxlength="40">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Transaction ID</label>
-                        <input type="text" class="form-control" v-model="editingEntry.transaction_id" maxlength="60">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Message ID</label>
-                        <input type="text" class="form-control" v-model="editingEntry.message_id" maxlength="40">
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label">Комментарий</label>
-                        <input type="text" class="form-control" v-model="editingEntry.comment" maxlength="40"
-                               placeholder="до 40 символов">
-                    </div>
+            <div class="modal-body" style="padding:0">
+                <div style="padding:12px 16px;border-bottom:1px solid #f1f3f7">
+                    <button class="toolbar-btn success" @click="showAddRuleModal">
+                        <i class="fas fa-plus"></i>Добавить правило
+                    </button>
                 </div>
+                <div v-if="loadingRules" style="text-align:center;padding:40px">
+                    <div class="spinner-border" style="color:#6366f1"></div>
+                </div>
+                <div v-else-if="matchingRules.length === 0" class="empty-pool" style="padding:50px">
+                    <i class="fas fa-inbox"></i>
+                    <p>Нет правил. Создайте первое.</p>
+                </div>
+                <table v-else class="entries-table">
+                    <thead>
+                    <tr>
+                        <th style="padding-left:16px">Название</th>
+                        <th>Раздел</th>
+                        <th>Тип пары</th>
+                        <th>Условия</th>
+                        <th style="width:55px">Приор.</th>
+                        <th style="width:80px">Статус</th>
+                        <th style="width:72px;text-align:right;padding-right:16px"></th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr v-for="rule in matchingRules" :key="rule.id">
+                        <td style="padding-left:16px">
+                            <span style="font-weight:600">{{ rule.name }}</span>
+                            <div v-if="rule.description"
+                                 style="font-size:11px;color:#9ca3af">{{ rule.description }}</div>
+                        </td>
+                        <td>
+                            <span style="background:#1e2532;color:#fff;border-radius:6px;
+                                         padding:2px 8px;font-size:11px;font-weight:700">
+                                {{ rule.section }}
+                            </span>
+                        </td>
+                        <td style="font-size:12px">{{ rule.pair_type_label }}</td>
+                        <td style="font-size:11px;color:#6b7280">{{ rule.conditions_summary }}</td>
+                        <td style="text-align:center;font-size:12px">{{ rule.priority }}</td>
+                        <td>
+                            <span :class="rule.is_active
+                                ? 'status-badge status-matched'
+                                : 'status-badge status-ignored'">
+                                {{ rule.is_active ? 'Активно' : 'Откл.' }}
+                            </span>
+                        </td>
+                        <td style="text-align:right;padding-right:16px">
+                            <div style="display:flex;gap:3px;justify-content:flex-end">
+                                <button class="row-btn edit" @click="editRule(rule)"
+                                        title="Редактировать"><i class="fas fa-pen"></i></button>
+                                <button class="row-btn delete" @click="deleteRule(rule)"
+                                        title="Удалить"><i class="fas fa-trash"></i></button>
+                            </div>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" @click="closeEntryModal">Отмена</button>
-                <button type="button" class="btn btn-primary" @click="saveEntry">
-                    {{ editingEntry.id ? 'Сохранить' : 'Добавить' }}
+            <div class="modal-footer" style="border-top:1px solid #f1f3f7;padding:12px 16px">
+                <button class="toolbar-btn outline" @click="_hideModal('rulesListModal')">
+                    <i class="fas fa-times"></i>Закрыть
                 </button>
             </div>
         </div>
     </div>
-</div>
-
-<!-- Original content for other pages -->
-<div v-if="!isAccountPage">
-    <?= $content ?>
 </div>
