@@ -4,6 +4,7 @@ namespace app\models;
 
 use Yii;
 use yii\db\ActiveRecord;
+use yii\helpers\Json;
 
 /**
  * Модель группы ностробанков
@@ -87,7 +88,7 @@ class AccountPool extends ActiveRecord
      */
     public function getFilteredAccounts()
     {
-        $query = Account::find()->where(['pool_id' => $this->id]);
+        $query = Account::find()->where(['company_id' => Yii::$app->user->identity->company_id]);
 
         if ($this->filter_criteria) {
             $criteria = Json::decode($this->filter_criteria);

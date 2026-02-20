@@ -95,6 +95,7 @@ class AccountGroupController extends BaseController
 
         $model->name = Yii::$app->request->post('name');
         $model->description = Yii::$app->request->post('description');
+        $model->updated_at = date('Y-m-d H:i:s');
 
         if ($model->save()) {
             return [
