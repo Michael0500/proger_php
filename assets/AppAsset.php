@@ -12,6 +12,7 @@ class AppAsset extends AssetBundle
 
     public $css = [
         'css/site.css',
+        'css/app.css',
         'css/sweetalert2.min.css',
     ];
 
