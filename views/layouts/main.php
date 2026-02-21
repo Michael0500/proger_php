@@ -20,6 +20,9 @@ $isGuest     = Yii::$app->user->isGuest;
 $hasCompany  = !$isGuest && Yii::$app->user->identity->hasCompany();
 $showApp     = !$isGuest && $hasCompany;
 $showNoComp  = !$isGuest && !$hasCompany;
+
+$currentUser = $isGuest ? null : Yii::$app->user->identity;
+$currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->company : null;
 ?>
 <?php $this->beginPage() ?>
     <!DOCTYPE html>
@@ -39,20 +42,75 @@ $showNoComp  = !$isGuest && !$hasCompany;
                 'brandUrl'   => Yii::$app->homeUrl,
                 'options'    => ['class' => 'navbar-expand-md navbar-dark fixed-top'],
         ]);
+
         $menuItems = [['label' => 'Главная', 'url' => ['/site/index']]];
+
         if ($isGuest) {
             $menuItems[] = ['label' => 'Вход', 'url' => ['/site/login']];
         } else {
-            $menuItems[] = [
-                    'label'  => '<i class="fas fa-user-circle me-1"></i>' . Html::encode(Yii::$app->user->identity->username),
-                    'encode' => false,
-                    'items'  => [
-                            ['label' => 'Профиль', 'url' => ['/user/view', 'id' => Yii::$app->user->id]],
-                            '<div class="dropdown-divider"></div>',
-                            ['label' => 'Выход', 'url' => ['/site/logout'], 'linkOptions' => ['data-method' => 'post']],
+            // Пункт "Счета" — только если есть компания
+            if ($hasCompany) {
+                $menuItems[] = [
+                        'label'  => '<i class="fas fa-university me-1"></i>Счета',
+                        'encode' => false,
+                        'url'    => ['/user/view', 'id' => $currentUser->id, '#' => 'accounts'],
+                ];
+            }
+
+            // Меню пользователя
+            $userMenuItems = [
+                    [
+                            'label'  => '<i class="fas fa-user me-1"></i>Профиль',
+                            'encode' => false,
+                            'url'    => ['/user/view', 'id' => $currentUser->id],
                     ],
             ];
+
+            // Блок смены компании
+            if ($currentComp) {
+                $userMenuItems[] = '<div class="dropdown-divider"></div>';
+                $userMenuItems[] = '<div class="dropdown-header" style="font-size:11px;color:#6b7a99;padding:6px 16px 2px">
+                <i class="fas fa-building me-1"></i>Компания: <strong>' . Html::encode($currentComp->name) . '</strong>
+            </div>';
+                $userMenuItems[] = [
+                        'label'  => '<i class="fas fa-exchange-alt me-1"></i>Сменить компанию',
+                        'encode' => false,
+                        'url'    => ['/user/view', 'id' => $currentUser->id],
+                ];
+                $userMenuItems[] = [
+                        'label'       => '<i class="fas fa-times me-1" style="color:#ef4444"></i><span style="color:#ef4444">Сбросить компанию</span>',
+                        'encode'      => false,
+                        'url'         => ['/company/reset'],
+                ];
+            } else {
+                $userMenuItems[] = '<div class="dropdown-divider"></div>';
+                $userMenuItems[] = [
+                        'label'  => '<i class="fas fa-building me-1" style="color:#f59e0b"></i><span style="color:#f59e0b">Выбрать компанию</span>',
+                        'encode' => false,
+                        'url'    => ['/user/view', 'id' => $currentUser->id],
+                ];
+            }
+
+            $userMenuItems[] = '<div class="dropdown-divider"></div>';
+            $userMenuItems[] = [
+                    'label'       => 'Выход',
+                    'url'         => ['/site/logout'],
+                    'linkOptions' => ['data-method' => 'post'],
+            ];
+
+            // Лейбл с именем + значок компании
+            $companyBadge = $currentComp
+                    ? '<span style="font-size:10px;background:#4f46e5;color:#fff;border-radius:10px;padding:1px 7px;margin-left:6px;font-weight:600">'
+                    . Html::encode($currentComp->code) . '</span>'
+                    : '<span style="font-size:10px;background:#f59e0b;color:#fff;border-radius:10px;padding:1px 7px;margin-left:6px">!</span>';
+
+            $menuItems[] = [
+                    'label'  => '<i class="fas fa-user-circle me-1"></i>' . Html::encode($currentUser->username) . $companyBadge,
+                    'encode' => false,
+                    'items'  => $userMenuItems,
+            ];
         }
+
         echo Nav::widget(['options' => ['class' => 'navbar-nav ms-auto'], 'items' => $menuItems]);
         NavBar::end();
         ?>
@@ -80,13 +138,12 @@ $showNoComp  = !$isGuest && !$hasCompany;
                     </div>
                     <h3>Компания не выбрана</h3>
                     <p>
-                        Для работы с системой вам необходимо выбрать или создать компанию.
-                        Перейдите в профиль и укажите вашу организацию.
+                        Для работы с системой необходимо выбрать компанию.
                     </p>
                     <?= Html::a(
                             '<i class="fas fa-user-cog me-2"></i>Перейти в профиль',
                             ['/user/view', 'id' => Yii::$app->user->id],
-                            ['class' => 'btn-go-profile']
+                            ['class' => 'btn-go-profile', 'data-turbolinks' => 'false']
                     ) ?>
                 </div>
             </div>
