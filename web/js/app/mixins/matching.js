@@ -1,19 +1,14 @@
 /**
- * Mixin: Matching
- * Ручное квитование, автоквитование, управление правилами.
- *
- * Зависимости: SmartMatchApi (api.js должен иметь matching секцию)
+ * MatchingMixin — квитование, автоквитование, правила.
+ * Работает с плоским массивом this.entries (из EntriesMixin).
  */
 var MatchingMixin = {
     data: function () {
         return {
-            // ── Выбранные для квитования ────────────────────────────
-            selectedIds: [],          // ID выбранных записей (checkbox)
-            selectionSummary: null,   // { sum_ledger, sum_statement, diff, cnt_ledger, cnt_statement }
-
-            // ── Правила автоквитования ──────────────────────────────
-            matchingRules: [],
-            loadingRules:  false,
+            selectedIds:      [],
+            selectionSummary: null,
+            matchingRules:    [],
+            loadingRules:     false,
             editingRule: {
                 id: null, name: '', section: 'NRE', pair_type: 'LS',
                 match_dc: true, match_amount: true, match_value_date: true,
@@ -21,222 +16,141 @@ var MatchingMixin = {
                 match_transaction_id: false, match_message_id: false,
                 cross_id_search: false, is_active: true, priority: 100, description: ''
             },
-
-            // ── Автоквитование ──────────────────────────────────────
-            autoMatchRunning: false,
+            autoMatchRunning: false
         };
     },
 
     computed: {
-        // Есть ли выбранные записи
-        hasSelection: function () { return this.selectedIds.length >= 2; },
-
-        // Разница сумм для UI
-        summaryDiff: function () {
-            if (!this.selectionSummary) return null;
-            return this.selectionSummary.diff;
-        },
-
-        summaryBalanced: function () {
-            return this.selectionSummary && this.selectionSummary.diff === 0;
-        }
+        hasSelection:   function () { return this.selectedIds.length >= 2; },
+        summaryDiff:    function () { return this.selectionSummary ? this.selectionSummary.diff : null; },
+        summaryBalanced:function () { return this.selectionSummary && this.selectionSummary.diff === 0; }
     },
 
     methods: {
 
-        // ── Выбор записей ──────────────────────────────────────────
-
-        toggleEntrySelection: function (entryId) {
-            var idx = this.selectedIds.indexOf(entryId);
-            if (idx === -1) {
-                this.selectedIds.push(entryId);
-            } else {
-                this.selectedIds.splice(idx, 1);
-            }
+        // ─── Выбор ─────────────────────────────────────────────────
+        toggleEntrySelection: function (id) {
+            var i = this.selectedIds.indexOf(id);
+            if (i === -1) this.selectedIds.push(id);
+            else          this.selectedIds.splice(i, 1);
             this.updateSummary();
         },
 
-        isSelected: function (entryId) {
-            return this.selectedIds.indexOf(entryId) !== -1;
-        },
-
-        // Выбрать все записи счёта (только незаквитованные)
-        selectAllInAccount: function (account) {
-            var self = this;
-            account.entries.forEach(function (e) {
-                if (e.match_status === 'U' && self.selectedIds.indexOf(e.id) === -1) {
-                    self.selectedIds.push(e.id);
-                }
-            });
-            this.updateSummary();
-        },
+        isSelected: function (id) { return this.selectedIds.indexOf(id) !== -1; },
 
         clearSelection: function () {
-            this.selectedIds = [];
+            this.selectedIds      = [];
             this.selectionSummary = null;
         },
 
-        // Обновить панель подсчёта сумм
+        // ─── Пересчёт суммы ────────────────────────────────────────
         updateSummary: function () {
             var self = this;
-            if (self.selectedIds.length < 1) {
-                self.selectionSummary = null;
-                return;
-            }
-            // Считаем локально из уже загруженных данных
-            var sumL = 0, sumS = 0, cntL = 0, cntS = 0;
-            self.accounts.forEach(function (acc) {
-                acc.entries.forEach(function (e) {
-                    if (self.selectedIds.indexOf(e.id) !== -1) {
-                        if (e.ls === 'L') { sumL += parseFloat(e.amount_raw || 0); cntL++; }
-                        else              { sumS += parseFloat(e.amount_raw || 0); cntS++; }
-                    }
-                });
+            if (!self.selectedIds.length) { self.selectionSummary = null; return; }
+            var sL = 0, sS = 0, cL = 0, cS = 0;
+            (self.entries || []).forEach(function (e) {
+                if (self.selectedIds.indexOf(e.id) === -1) return;
+                var a = parseFloat(e.amount || 0);
+                if (e.ls === 'L') { sL += a; cL++; } else { sS += a; cS++; }
             });
             self.selectionSummary = {
-                sum_ledger:    sumL,
-                sum_statement: sumS,
-                diff:          Math.round((sumL - sumS) * 100) / 100,
-                cnt_ledger:    cntL,
-                cnt_statement: cntS
+                sum_ledger:    Math.round(sL * 100) / 100,
+                sum_statement: Math.round(sS * 100) / 100,
+                diff:          Math.round((sL - sS) * 100) / 100,
+                cnt_ledger:    cL,
+                cnt_statement: cS
             };
         },
 
-        // ── Ручное квитование ──────────────────────────────────────
-
+        // ─── Ручное квитование ─────────────────────────────────────
         matchSelected: function () {
             var self = this;
             if (!self.hasSelection) {
-                Swal.fire('Внимание', 'Выберите минимум 2 записи', 'warning');
+                Swal.fire({ icon: 'warning', title: 'Выберите минимум 2 записи', toast: true, position: 'top-end', timer: 2000, showConfirmButton: false });
                 return;
             }
-
-            // Предупреждение если дисбаланс
-            var diff = self.summaryDiff;
-            if (diff !== null && diff !== 0) {
+            if (self.summaryDiff !== 0) {
                 Swal.fire({
-                    title: 'Дисбаланс сумм',
-                    html: 'Разница между Ledger и Statement: <strong>' +
-                        self.formatAmount(Math.abs(diff)) + '</strong><br>' +
-                        'Записи останутся на ручном разборе.',
-                    icon: 'warning',
-                    confirmButtonText: 'Понятно'
-                });
+                    icon: 'warning', title: 'Дисбаланс сумм',
+                    html: 'Разница: <b>' + self.formatAmount(Math.abs(self.summaryDiff)) + '</b>.<br>Сквитовать всё равно?',
+                    showCancelButton: true, confirmButtonText: 'Да, сквитовать', cancelButtonText: 'Отмена', confirmButtonColor: '#f59e0b'
+                }).then(function (r) { if (r.isConfirmed) self._doMatch(); });
                 return;
             }
+            self._doMatch();
+        },
 
-            Swal.fire({
-                title: 'Подтвердите квитование',
-                html: 'Выбрано записей: <strong>' + self.selectedIds.length + '</strong><br>' +
-                    'Ledger: ' + self.selectionSummary.cnt_ledger +
-                    ' | Statement: ' + self.selectionSummary.cnt_statement,
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonText: 'Сквитовать',
-                cancelButtonText: 'Отмена',
-                confirmButtonColor: '#198754'
-            }).then(function (result) {
-                if (!result.isConfirmed) return;
-
-                // Отправляем ids как массив
-                var formData = self.selectedIds.map(function (id) {
-                    return 'ids[]=' + id;
-                }).join('&');
-
-                axios.post(AppRoutes.matchManual, formData, {
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-                }).then(function (response) {
-                    if (response.data.success) {
-                        Swal.fire('Готово!', response.data.message, 'success');
-                        self.clearSelection();
-                        self.refreshAccounts();
-                    } else {
-                        Swal.fire('Ошибка', response.data.message, 'error');
-                    }
-                }).catch(function () {
-                    Swal.fire('Ошибка', 'Не удалось выполнить квитование', 'error');
-                });
+        _doMatch: function () {
+            var self = this;
+            var body = self.selectedIds.map(function (id) { return 'ids[]=' + id; }).join('&');
+            SmartMatchApi.postRaw(window.window.AppRoutes.matchManual, body).then(function (r) {
+                if (r.success) {
+                    Swal.fire({ icon: 'success', title: r.message, toast: true, position: 'top-end', timer: 2500, showConfirmButton: false });
+                    self.clearSelection();
+                    self.loadEntries(true);         // перезагрузить таблицу
+                } else {
+                    Swal.fire({ icon: 'error', title: 'Ошибка', text: r.message });
+                }
             });
         },
 
-        // Расквитование по match_id
+        // ─── Расквитование ─────────────────────────────────────────
         unmatchEntry: function (matchId) {
-            var self = this;
             if (!matchId) return;
-
+            var self = this;
             Swal.fire({
                 title: 'Расквитовать?',
-                text: 'Match ID: ' + matchId + '. Все записи вернутся в статус "Не сквитовано".',
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#dc3545',
-                confirmButtonText: 'Расквитовать',
-                cancelButtonText: 'Отмена'
-            }).then(function (result) {
-                if (!result.isConfirmed) return;
-                axios.post(AppRoutes.unmatch, 'match_id=' + encodeURIComponent(matchId), {
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-                }).then(function (response) {
-                    if (response.data.success) {
-                        Swal.fire('Готово', response.data.message, 'success');
-                        self.refreshAccounts();
-                    } else {
-                        Swal.fire('Ошибка', response.data.message, 'error');
-                    }
-                }).catch(function () {
-                    Swal.fire('Ошибка', 'Не удалось расквитовать', 'error');
-                });
+                html: 'Match ID: <code>' + matchId + '</code><br>Все записи вернутся в статус «Ожидает».',
+                icon: 'warning', showCancelButton: true,
+                confirmButtonColor: '#ef4444', confirmButtonText: 'Расквитовать', cancelButtonText: 'Отмена'
+            }).then(function (r) {
+                if (!r.isConfirmed) return;
+                SmartMatchApi.postRaw(window.window.AppRoutes.unmatch, 'match_id=' + encodeURIComponent(matchId))
+                    .then(function (res) {
+                        if (res.success) {
+                            Swal.fire({ icon: 'success', title: res.message, toast: true, position: 'top-end', timer: 2000, showConfirmButton: false });
+                            self.loadEntries(true);
+                        } else {
+                            Swal.fire({ icon: 'error', title: res.message });
+                        }
+                    });
             });
         },
 
-        // ── Автоквитование ─────────────────────────────────────────
-
-        runAutoMatch: function (accountId) {
+        // ─── Автоквитование ────────────────────────────────────────
+        runAutoMatch: function () {
             var self = this;
-            self.autoMatchRunning = true;
-
-            var body = accountId ? 'account_id=' + accountId : '';
+            if (!self.selectedPool) return;
 
             Swal.fire({
-                title: 'Запустить автоквитование?',
-                text: accountId ? 'По выбранному счёту' : 'По всем счетам пула',
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonText: 'Запустить',
-                cancelButtonText: 'Отмена',
-                confirmButtonColor: '#0d6efd'
-            }).then(function (result) {
-                if (!result.isConfirmed) {
-                    self.autoMatchRunning = false;
-                    return;
-                }
-
-                axios.post(AppRoutes.autoMatch, body, {
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-                }).then(function (response) {
-                    if (response.data.success) {
-                        Swal.fire('Готово!', response.data.message, 'success');
-                        self.refreshAccounts();
-                    } else {
-                        Swal.fire('Ошибка', response.data.message, 'error');
-                    }
-                }).catch(function () {
-                    Swal.fire('Ошибка', 'Ошибка при автоквитовании', 'error');
-                }).finally(function () {
-                    self.autoMatchRunning = false;
-                });
+                title: 'Автоквитование',
+                html: 'Запустить по всем записям пула <b>' + self.selectedPool.name + '</b>?',
+                icon: 'question', showCancelButton: true,
+                confirmButtonText: '<i class="fas fa-magic me-1"></i>Запустить',
+                cancelButtonText: 'Отмена', confirmButtonColor: '#6366f1'
+            }).then(function (r) {
+                if (!r.isConfirmed) return;
+                self.autoMatchRunning = true;
+                var body = 'pool_id=' + self.selectedPool.id;
+                SmartMatchApi.postRaw(window.window.AppRoutes.autoMatch, body)
+                    .then(function (res) {
+                        if (res.success) {
+                            Swal.fire({ icon: 'success', title: 'Готово!', text: res.message });
+                            self.loadEntries(true);
+                        } else {
+                            Swal.fire({ icon: 'error', title: 'Ошибка', text: res.message });
+                        }
+                    })
+                    .finally(function () { self.autoMatchRunning = false; });
             });
         },
 
-        // ── Правила квитования ─────────────────────────────────────
-
+        // ─── Правила ───────────────────────────────────────────────
         loadMatchingRules: function () {
             var self = this;
             self.loadingRules = true;
-            axios.get(AppRoutes.getRules)
-                .then(function (r) {
-                    if (r.data.success) self.matchingRules = r.data.data;
-                })
+            SmartMatchApi.get(window.window.AppRoutes.getRules, {})
+                .then(function (r) { if (r.success) self.matchingRules = r.data; })
                 .finally(function () { self.loadingRules = false; });
         },
 
@@ -251,76 +165,43 @@ var MatchingMixin = {
             this._showModal('ruleModal');
         },
 
-        editRule: function (rule) {
-            this.editingRule = Object.assign({}, rule);
-            this._showModal('ruleModal');
-        },
-
-        closeRuleModal: function () { this._hideModal('ruleModal'); },
+        editRule:       function (rule) { this.editingRule = Object.assign({}, rule); this._showModal('ruleModal'); },
+        closeRuleModal: function ()     { this._hideModal('ruleModal'); },
 
         saveRule: function () {
             var self = this;
             if (!self.editingRule.name) {
-                Swal.fire('Ошибка', 'Введите название правила', 'error'); return;
+                Swal.fire({ icon: 'warning', title: 'Введите название', toast: true, position: 'top-end', timer: 2000, showConfirmButton: false });
+                return;
             }
-
-            // Собираем форм-дату вручную (булевы поля)
-            var fields = ['id','name','section','pair_type','match_dc','match_amount',
-                'match_value_date','match_instruction_id','match_end_to_end_id',
-                'match_transaction_id','match_message_id','cross_id_search',
-                'is_active','priority','description'];
-            var parts = fields.map(function (k) {
-                var v = self.editingRule[k];
-                if (v === true)  v = 1;
-                if (v === false) v = 0;
-                if (v === null || v === undefined) v = '';
-                return encodeURIComponent(k) + '=' + encodeURIComponent(v);
-            });
-
-            axios.post(AppRoutes.saveRule, parts.join('&'), {
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-            }).then(function (response) {
-                if (response.data.success) {
-                    Swal.fire('Сохранено', response.data.message, 'success');
+            SmartMatchApi.post(window.window.AppRoutes.saveRule, self.editingRule).then(function (r) {
+                if (r.success) {
+                    Swal.fire({ icon: 'success', title: r.message, toast: true, position: 'top-end', timer: 2000, showConfirmButton: false });
                     self.closeRuleModal();
                     self.loadMatchingRules();
                 } else {
-                    var err = response.data.errors
-                        ? Object.values(response.data.errors).join('\n')
-                        : response.data.message;
-                    Swal.fire('Ошибка', err, 'error');
+                    Swal.fire({ icon: 'error', title: 'Ошибка', text: r.message || JSON.stringify(r.errors) });
                 }
-            }).catch(function () { Swal.fire('Ошибка', 'Не удалось сохранить', 'error'); });
+            });
         },
 
         deleteRule: function (rule) {
             var self = this;
             Swal.fire({
-                title: 'Удалить правило?',
-                text: rule.name,
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#d33',
-                confirmButtonText: 'Удалить',
-                cancelButtonText: 'Отмена'
+                title: 'Удалить правило?', text: rule.name, icon: 'warning',
+                showCancelButton: true, confirmButtonColor: '#ef4444',
+                confirmButtonText: 'Удалить', cancelButtonText: 'Отмена'
             }).then(function (r) {
                 if (!r.isConfirmed) return;
-                axios.post(AppRoutes.deleteRule, 'id=' + rule.id, {
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-                }).then(function (response) {
-                    if (response.data.success) {
-                        Swal.fire('Удалено', response.data.message, 'success');
+                SmartMatchApi.post(window.window.AppRoutes.deleteRule, { id: rule.id }).then(function (res) {
+                    if (res.success) {
+                        Swal.fire({ icon: 'success', title: 'Удалено', toast: true, position: 'top-end', timer: 1500, showConfirmButton: false });
                         self.loadMatchingRules();
                     } else {
-                        Swal.fire('Ошибка', response.data.message, 'error');
+                        Swal.fire({ icon: 'error', title: res.message });
                     }
                 });
             });
-        },
-
-        // ── Утилиты ────────────────────────────────────────────────
-        formatAmount: function (val) {
-            return parseFloat(val).toLocaleString('ru-RU', { minimumFractionDigits: 2 });
         }
     }
 };

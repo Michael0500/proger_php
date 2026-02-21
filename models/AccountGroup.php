@@ -24,13 +24,6 @@ class AccountGroup extends ActiveRecord
         return '{{%account_groups}}';
     }
 
-    public function behaviors()
-    {
-        return [
-            TimestampBehavior::className(),
-        ];
-    }
-
     public function rules()
     {
         return [

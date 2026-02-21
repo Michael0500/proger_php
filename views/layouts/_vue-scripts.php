@@ -1,10 +1,5 @@
 <?php
-/**
- * _vue-scripts.php — передаёт маршруты из Yii2 в JS.
- * Вся логика в web/js/app/*.js
- *
- * @var yii\web\View $this
- */
+/** @var yii\web\View $this */
 use yii\helpers\Url;
 ?>
 <script>
@@ -21,13 +16,15 @@ use yii\helpers\Url;
         poolDelete:      '<?= Url::to(['/account-pool/delete']) ?>',
         poolGetAccounts: '<?= Url::to(['/account-pool/get-accounts']) ?>',
 
-        // Записи (NostroEntry)
+        // Записи (NostroEntry) — НОВЫЕ роуты
+        entryList:          '<?= Url::to(['/nostro-entry/list']) ?>',
+        entrySearchAccounts:'<?= Url::to(['/nostro-entry/search-accounts']) ?>',
         entryCreate:        '<?= Url::to(['/nostro-entry/create']) ?>',
         entryUpdate:        '<?= Url::to(['/nostro-entry/update']) ?>',
         entryDelete:        '<?= Url::to(['/nostro-entry/delete']) ?>',
         entryUpdateComment: '<?= Url::to(['/nostro-entry/update-comment']) ?>',
 
-        // Квитование (Matching)
+        // Квитование
         matchManual: '<?= Url::to(['/matching/match-manual']) ?>',
         unmatch:     '<?= Url::to(['/matching/unmatch']) ?>',
         autoMatch:   '<?= Url::to(['/matching/auto-match']) ?>',

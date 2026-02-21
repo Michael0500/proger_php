@@ -1,5 +1,4 @@
 <?php
-
 namespace app\assets;
 
 use yii\web\AssetBundle;
@@ -11,38 +10,41 @@ class AppAsset extends AssetBundle
     public $baseUrl  = '@web';
 
     public $css = [
-        'css/site.css',
-        'css/app.css',
+        // Select2 — должны быть файлы в web/css/
+        'css/select2.min.css',
+        'css/select2-bootstrap-5-theme.min.css',
         'css/sweetalert2.min.css',
+        'css/app.css',
     ];
 
     public $js = [
-        // Внешние библиотеки
-        'js/vue.min.js',
-        'js/axios.min.js',
+        // Порядок важен:
+        // 1. jQuery (нужен для Select2)
+        'js/jquery.min.js',
+        // 2. Bootstrap bundle (нужен для модалок)
+        'js/bootstrap.bundle.min.js',
+        // 3. Select2 (зависит от jQuery)
+        'js/select2.min.js',
+        // 4. SweetAlert2
         'js/sweetalert2.all.min.js',
-
-        // API-слой
+        // 5. Vue 2
+        'js/vue.min.js',
+        // 6. Axios
+        'js/axios.min.js',
+        // 7. Приложение
         'js/app/api.js',
-
-        // Миксины (порядок важен!)
         'js/app/mixins/modals.js',
         'js/app/mixins/groups.js',
         'js/app/mixins/pools.js',
         'js/app/mixins/entries.js',
         'js/app/mixins/matching.js',
-
-        // Главный файл
         'js/app/app.js',
     ];
 
-    public $jsOptions = [
-        'position' => View::POS_HEAD,
-    ];
+    // POS_END чтобы скрипты грузились после DOM
+    public $jsOptions = ['position' => View::POS_END];
 
     public $depends = [
-        'yii\web\YiiAsset',
-        'yii\bootstrap5\BootstrapAsset',
         'app\assets\FontAwesomeAsset',
     ];
 }
