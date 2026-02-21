@@ -1,4 +1,5 @@
 <?php
+
 namespace app\assets;
 
 use yii\web\AssetBundle;
@@ -15,6 +16,7 @@ class AppAsset extends AssetBundle
         'css/select2-bootstrap-5-theme.min.css',
         'css/sweetalert2.min.css',
         'css/app.css',
+        'fontawesome/css/all.min.css',
     ];
 
     public $js = [
@@ -45,6 +47,6 @@ class AppAsset extends AssetBundle
     public $jsOptions = ['position' => View::POS_END];
 
     public $depends = [
-        'app\assets\FontAwesomeAsset',
+        //
     ];
 }

@@ -4,11 +4,6 @@ use yii\helpers\Url;
 
 $this->title = 'Группы ностробанков';
 ?>
-<?php $this->registerJsFile('https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js', ['position' => $this->POS_HEAD]); ?>
-<?php $this->registerJsFile('https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js', ['position' => $this->POS_HEAD]); ?>
-<?php $this->registerJsFile('https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js', ['position' => $this->POS_HEAD]); ?>
-<?php $this->registerCssFile('https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css'); ?>
-
     <style>
         .sidebar {
             position: fixed;

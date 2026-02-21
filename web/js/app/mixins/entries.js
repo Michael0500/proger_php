@@ -99,7 +99,7 @@ var EntriesMixin = {
                 dir:     self.sortDir,
                 filters: JSON.stringify(self.filters)
             }).then(function (response) {
-                var r = response.data || response;
+                var r = response.data !== undefined ? response.data : response;
                 if (r.success) {
                     self.entries      = reset ? r.data : self.entries.concat(r.data);
                     self.entriesTotal = r.total;
