@@ -21,9 +21,9 @@ var MatchingMixin = {
     },
 
     computed: {
-        hasSelection:   function () { return this.selectedIds.length >= 2; },
-        summaryDiff:    function () { return this.selectionSummary ? this.selectionSummary.diff : null; },
-        summaryBalanced:function () { return this.selectionSummary && this.selectionSummary.diff === 0; }
+        hasSelection:    function () { return this.selectedIds.length >= 2; },
+        summaryDiff:     function () { return this.selectionSummary ? this.selectionSummary.diff : null; },
+        summaryBalanced: function () { return this.selectionSummary && this.selectionSummary.diff === 0; }
     },
 
     methods: {
@@ -66,14 +66,16 @@ var MatchingMixin = {
         matchSelected: function () {
             var self = this;
             if (!self.hasSelection) {
-                Swal.fire({ icon: 'warning', title: 'Выберите минимум 2 записи', toast: true, position: 'top-end', timer: 2000, showConfirmButton: false });
+                Swal.fire({ icon: 'warning', title: 'Выберите минимум 2 записи', toast: true,
+                    position: 'top-end', timer: 2000, showConfirmButton: false });
                 return;
             }
             if (self.summaryDiff !== 0) {
                 Swal.fire({
                     icon: 'warning', title: 'Дисбаланс сумм',
                     html: 'Разница: <b>' + self.formatAmount(Math.abs(self.summaryDiff)) + '</b>.<br>Сквитовать всё равно?',
-                    showCancelButton: true, confirmButtonText: 'Да, сквитовать', cancelButtonText: 'Отмена', confirmButtonColor: '#f59e0b'
+                    showCancelButton: true, confirmButtonText: 'Да, сквитовать',
+                    cancelButtonText: 'Отмена', confirmButtonColor: '#f59e0b'
                 }).then(function (r) { if (r.isConfirmed) self._doMatch(); });
                 return;
             }
@@ -83,11 +85,13 @@ var MatchingMixin = {
         _doMatch: function () {
             var self = this;
             var body = self.selectedIds.map(function (id) { return 'ids[]=' + id; }).join('&');
-            SmartMatchApi.postRaw(window.window.AppRoutes.matchManual, body).then(function (r) {
+            // ИСПРАВЛЕНО: было window.window.AppRoutes
+            SmartMatchApi.postRaw(window.AppRoutes.matchManual, body).then(function (r) {
                 if (r.success) {
-                    Swal.fire({ icon: 'success', title: r.message, toast: true, position: 'top-end', timer: 2500, showConfirmButton: false });
+                    Swal.fire({ icon: 'success', title: r.message, toast: true,
+                        position: 'top-end', timer: 2500, showConfirmButton: false });
                     self.clearSelection();
-                    self.loadEntries(true);         // перезагрузить таблицу
+                    self.loadEntries(true);
                 } else {
                     Swal.fire({ icon: 'error', title: 'Ошибка', text: r.message });
                 }
@@ -105,10 +109,12 @@ var MatchingMixin = {
                 confirmButtonColor: '#ef4444', confirmButtonText: 'Расквитовать', cancelButtonText: 'Отмена'
             }).then(function (r) {
                 if (!r.isConfirmed) return;
-                SmartMatchApi.postRaw(window.window.AppRoutes.unmatch, 'match_id=' + encodeURIComponent(matchId))
+                // ИСПРАВЛЕНО: было window.window.AppRoutes
+                SmartMatchApi.postRaw(window.AppRoutes.unmatch, 'match_id=' + encodeURIComponent(matchId))
                     .then(function (res) {
                         if (res.success) {
-                            Swal.fire({ icon: 'success', title: res.message, toast: true, position: 'top-end', timer: 2000, showConfirmButton: false });
+                            Swal.fire({ icon: 'success', title: res.message, toast: true,
+                                position: 'top-end', timer: 2000, showConfirmButton: false });
                             self.loadEntries(true);
                         } else {
                             Swal.fire({ icon: 'error', title: res.message });
@@ -132,7 +138,8 @@ var MatchingMixin = {
                 if (!r.isConfirmed) return;
                 self.autoMatchRunning = true;
                 var body = 'pool_id=' + self.selectedPool.id;
-                SmartMatchApi.postRaw(window.window.AppRoutes.autoMatch, body)
+                // ИСПРАВЛЕНО: было window.window.AppRoutes
+                SmartMatchApi.postRaw(window.AppRoutes.autoMatch, body)
                     .then(function (res) {
                         if (res.success) {
                             Swal.fire({ icon: 'success', title: 'Готово!', text: res.message });
@@ -149,8 +156,12 @@ var MatchingMixin = {
         loadMatchingRules: function () {
             var self = this;
             self.loadingRules = true;
-            SmartMatchApi.get(window.window.AppRoutes.getRules, {})
-                .then(function (r) { if (r.success) self.matchingRules = r.data; })
+            // ИСПРАВЛЕНО: было window.window.AppRoutes
+            SmartMatchApi.get(window.AppRoutes.getRules, {})
+                .then(function (r) {
+                    // SmartMatchApi.get возвращает axios response, данные в r.data
+                    if (r.data && r.data.success) self.matchingRules = r.data.data;
+                })
                 .finally(function () { self.loadingRules = false; });
         },
 
@@ -171,12 +182,16 @@ var MatchingMixin = {
         saveRule: function () {
             var self = this;
             if (!self.editingRule.name) {
-                Swal.fire({ icon: 'warning', title: 'Введите название', toast: true, position: 'top-end', timer: 2000, showConfirmButton: false });
+                Swal.fire({ icon: 'warning', title: 'Введите название', toast: true,
+                    position: 'top-end', timer: 2000, showConfirmButton: false });
                 return;
             }
-            SmartMatchApi.post(window.window.AppRoutes.saveRule, self.editingRule).then(function (r) {
+            // ИСПРАВЛЕНО: было window.window.AppRoutes
+            // SmartMatchApi.post возвращает r.data уже распакованным (см. api.js)
+            SmartMatchApi.post(window.AppRoutes.saveRule, self.editingRule).then(function (r) {
                 if (r.success) {
-                    Swal.fire({ icon: 'success', title: r.message, toast: true, position: 'top-end', timer: 2000, showConfirmButton: false });
+                    Swal.fire({ icon: 'success', title: r.message, toast: true,
+                        position: 'top-end', timer: 2000, showConfirmButton: false });
                     self.closeRuleModal();
                     self.loadMatchingRules();
                 } else {
@@ -193,9 +208,11 @@ var MatchingMixin = {
                 confirmButtonText: 'Удалить', cancelButtonText: 'Отмена'
             }).then(function (r) {
                 if (!r.isConfirmed) return;
-                SmartMatchApi.post(window.window.AppRoutes.deleteRule, { id: rule.id }).then(function (res) {
+                // ИСПРАВЛЕНО: было window.window.AppRoutes
+                SmartMatchApi.post(window.AppRoutes.deleteRule, { id: rule.id }).then(function (res) {
                     if (res.success) {
-                        Swal.fire({ icon: 'success', title: 'Удалено', toast: true, position: 'top-end', timer: 1500, showConfirmButton: false });
+                        Swal.fire({ icon: 'success', title: 'Удалено', toast: true,
+                            position: 'top-end', timer: 1500, showConfirmButton: false });
                         self.loadMatchingRules();
                     } else {
                         Swal.fire({ icon: 'error', title: res.message });

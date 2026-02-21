@@ -8,27 +8,12 @@ var PoolsMixin = {
         selectPool: function (pool, group) {
             this.selectedPool  = pool;
             this.selectedGroup = group;
-            this.loadAccounts(pool.id);
-        },
-
-        loadAccounts: function (poolId) {
-            var self = this;
-            self.loadingAccounts = true;
-            self.accounts = [];
-            SmartMatchApi.pools.accounts(poolId)
-                .then(function (response) {
-                    if (response.data.success) {
-                        self.accounts = response.data.data;
-                    } else {
-                        Swal.fire('Ошибка', response.data.message || 'Не удалось загрузить данные', 'error');
-                    }
-                })
-                .catch(function () { Swal.fire('Ошибка', 'Не удалось загрузить данные', 'error'); })
-                .finally(function () { self.loadingAccounts = false; });
+            // Загружаем записи через EntriesMixin (таблица entries)
+            this.loadEntries(true);
         },
 
         refreshAccounts: function () {
-            if (this.selectedPool) this.loadAccounts(this.selectedPool.id);
+            if (this.selectedPool) this.loadEntries(true);
         },
 
         // Добавление
@@ -76,7 +61,7 @@ var PoolsMixin = {
                         self.closeConfigurePoolModal();
                         self.loadGroups();
                         if (self.selectedPool && self.selectedPool.id === self.editingPool.id) {
-                            self.loadAccounts(self.selectedPool.id);
+                            self.loadEntries(true);
                         }
                     } else {
                         Swal.fire('Ошибка', response.data.message || 'Не удалось обновить пул', 'error');
@@ -112,7 +97,8 @@ var PoolsMixin = {
                             self.loadGroups();
                             if (self.selectedPool && self.selectedPool.id === pool.id) {
                                 self.selectedPool = null;
-                                self.accounts     = [];
+                                self.entries      = [];
+                                self.entriesTotal = 0;
                             }
                         } else {
                             Swal.fire('Ошибка', response.data.message, 'error');
