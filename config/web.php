@@ -69,6 +69,9 @@ $config = [
                 // ── Nostro entries & Matching (универсальные) ─────
                 'nostro-entry/<action>' => 'nostro-entry/<action>',
                 'matching/<action>'     => 'matching/<action>',
+
+                'nostro-balance'                    => 'nostro-balance/index',
+                'nostro-balance/<action>'           => 'nostro-balance/<action>',
             ],
         ],
         'authManager' => [

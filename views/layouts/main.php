@@ -58,6 +58,7 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
                         'encode' => false,
                         'url'    => ['/user/view', 'id' => $currentUser->id, '#' => 'accounts'],
                 ];
+                $menuItems[] = ['label' => 'Баланс', 'url' => ['/nostro-balance']];
             }
 
             // Меню пользователя

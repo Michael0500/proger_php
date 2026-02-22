@@ -18,7 +18,7 @@
 
         new Vue({
             el: '#app',
-            mixins: [ModalsMixin, GroupsMixin, PoolsMixin, EntriesMixin, MatchingMixin],
+            mixins: [ModalsMixin, GroupsMixin, PoolsMixin, EntriesMixin, MatchingMixin,BalanceMixin],
 
             data: {
                 isSidebarCollapsed: false,

@@ -40,6 +40,7 @@ class AppAsset extends AssetBundle
         'js/app/mixins/pools.js',
         'js/app/mixins/entries.js',
         'js/app/mixins/matching.js',
+        'js/app/mixins/balance.js',
         'js/app/app.js',
     ];
 

@@ -30,6 +30,18 @@ use yii\helpers\Url;
         autoMatch:   '<?= Url::to(['/matching/auto-match']) ?>',
         getRules:    '<?= Url::to(['/matching/get-rules']) ?>',
         saveRule:    '<?= Url::to(['/matching/save-rule']) ?>',
-        deleteRule:  '<?= Url::to(['/matching/delete-rule']) ?>'
+        deleteRule:  '<?= Url::to(['/matching/delete-rule']) ?>',
+
+
+        // ── Баланс Ностро ─────────────────────────────────────────────
+        balanceList:      '<?= Url::to(['/nostro-balance/list']) ?>',
+        balanceCreate:    '<?= Url::to(['/nostro-balance/create']) ?>',
+        balanceUpdate:    '<?= Url::to(['/nostro-balance/update']) ?>',
+        balanceDelete:    '<?= Url::to(['/nostro-balance/delete']) ?>',
+        balanceConfirm:   '<?= Url::to(['/nostro-balance/confirm']) ?>',
+        balanceHistory:   '<?= Url::to(['/nostro-balance/history']) ?>',
+        balanceAccounts:  '<?= Url::to(['/nostro-balance/accounts']) ?>',
+        balanceImportBnd: '<?= Url::to(['/nostro-balance/import-bnd']) ?>',
+        balanceImportAsb: '<?= Url::to(['/nostro-balance/import-asb']) ?>',
     };
 </script>
