@@ -1,6 +1,11 @@
 <?php
 /** @var yii\web\View $this */
 use yii\helpers\Url;
+
+$currentUser = Yii::$app->user->identity;
+$currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->company : null;
+// code компании = секция: 'NRE' или 'INV'
+$companySection = $currentComp ? strtoupper($currentComp->code) : '';
 ?>
 <script>
     window.AppRoutes = {
@@ -16,13 +21,13 @@ use yii\helpers\Url;
         poolDelete:      '<?= Url::to(['/account-pool/delete']) ?>',
         poolGetAccounts: '<?= Url::to(['/account-pool/get-accounts']) ?>',
 
-        // Записи (NostroEntry) — НОВЫЕ роуты
-        entryList:          '<?= Url::to(['/nostro-entry/list']) ?>',
-        entrySearchAccounts:'<?= Url::to(['/nostro-entry/search-accounts']) ?>',
-        entryCreate:        '<?= Url::to(['/nostro-entry/create']) ?>',
-        entryUpdate:        '<?= Url::to(['/nostro-entry/update']) ?>',
-        entryDelete:        '<?= Url::to(['/nostro-entry/delete']) ?>',
-        entryUpdateComment: '<?= Url::to(['/nostro-entry/update-comment']) ?>',
+        // Записи (NostroEntry)
+        entryList:           '<?= Url::to(['/nostro-entry/list']) ?>',
+        entrySearchAccounts: '<?= Url::to(['/nostro-entry/search-accounts']) ?>',
+        entryCreate:         '<?= Url::to(['/nostro-entry/create']) ?>',
+        entryUpdate:         '<?= Url::to(['/nostro-entry/update']) ?>',
+        entryDelete:         '<?= Url::to(['/nostro-entry/delete']) ?>',
+        entryUpdateComment:  '<?= Url::to(['/nostro-entry/update-comment']) ?>',
 
         // Квитование
         matchManual: '<?= Url::to(['/matching/match-manual']) ?>',
@@ -32,8 +37,7 @@ use yii\helpers\Url;
         saveRule:    '<?= Url::to(['/matching/save-rule']) ?>',
         deleteRule:  '<?= Url::to(['/matching/delete-rule']) ?>',
 
-
-        // ── Баланс Ностро ─────────────────────────────────────────────
+        // Баланс Ностро
         balanceList:      '<?= Url::to(['/nostro-balance/list']) ?>',
         balanceCreate:    '<?= Url::to(['/nostro-balance/create']) ?>',
         balanceUpdate:    '<?= Url::to(['/nostro-balance/update']) ?>',
@@ -43,5 +47,10 @@ use yii\helpers\Url;
         balanceAccounts:  '<?= Url::to(['/nostro-balance/accounts']) ?>',
         balanceImportBnd: '<?= Url::to(['/nostro-balance/import-bnd']) ?>',
         balanceImportAsb: '<?= Url::to(['/nostro-balance/import-asb']) ?>',
+    };
+
+    // Секция текущей компании пользователя: 'NRE' | 'INV' | ''
+    window.AppConfig = {
+        companySection: '<?= addslashes($companySection) ?>',
     };
 </script>

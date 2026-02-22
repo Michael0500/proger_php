@@ -26,14 +26,6 @@ class NostroBalanceController extends BaseController
     }
 
     // ─────────────────────────────────────────────────────────────
-    // GET /nostro-balance/index  — страница раздела
-    // ─────────────────────────────────────────────────────────────
-    public function actionIndex(): string
-    {
-        return $this->render('index');
-    }
-
-    // ─────────────────────────────────────────────────────────────
     // GET /nostro-balance/list
     // ─────────────────────────────────────────────────────────────
     public function actionList(): array

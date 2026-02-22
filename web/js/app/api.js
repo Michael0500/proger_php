@@ -13,18 +13,6 @@ var SmartMatchApi = (function () {
         return axios.get(url, { params: params || {} });
     }
 
-    /**
-     * postRaw — отправка уже сформированной строки application/x-www-form-urlencoded
-     * Используется в matching.js для ids[] и других массивов
-     */
-    function postRaw(url, body) {
-        return axios.post(url, body, {
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-        }).then(function (response) {
-            // matching.js ожидает r.success напрямую (не r.data.success)
-            return response.data;
-        });
-    }
 
     return {
         // ── Прямые методы (используются в entries.js, matching.js) ──
@@ -32,7 +20,6 @@ var SmartMatchApi = (function () {
         post:    function (url, data) {
             return post(url, data).then(function (r) { return r.data; });
         },
-        postRaw: postRaw,
 
         // ── Группы ──────────────────────────────────────────────────
         groups: {

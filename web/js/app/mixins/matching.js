@@ -84,16 +84,15 @@ var MatchingMixin = {
 
         _doMatch: function () {
             var self = this;
-            var body = self.selectedIds.map(function (id) { return 'ids[]=' + id; }).join('&');
+
             // ИСПРАВЛЕНО: было window.window.AppRoutes
-            SmartMatchApi.postRaw(window.AppRoutes.matchManual, body).then(function (r) {
-                if (r.success) {
-                    Swal.fire({ icon: 'success', title: r.message, toast: true,
-                        position: 'top-end', timer: 2500, showConfirmButton: false });
-                    self.clearSelection();
+            SmartMatchApi.post(window.AppRoutes.matchManual, { ids: self.selectedIds }).then(function (res) {
+                if (res.success) {
+                    Swal.fire({ icon: 'success', title: res.message, toast: true,
+                        position: 'top-end', timer: 2000, showConfirmButton: false });
                     self.loadEntries(true);
                 } else {
-                    Swal.fire({ icon: 'error', title: 'Ошибка', text: r.message });
+                    Swal.fire({ icon: 'error', title: res.message });
                 }
             });
         },
@@ -110,16 +109,15 @@ var MatchingMixin = {
             }).then(function (r) {
                 if (!r.isConfirmed) return;
                 // ИСПРАВЛЕНО: было window.window.AppRoutes
-                SmartMatchApi.postRaw(window.AppRoutes.unmatch, 'match_id=' + encodeURIComponent(matchId))
-                    .then(function (res) {
-                        if (res.success) {
-                            Swal.fire({ icon: 'success', title: res.message, toast: true,
-                                position: 'top-end', timer: 2000, showConfirmButton: false });
-                            self.loadEntries(true);
-                        } else {
-                            Swal.fire({ icon: 'error', title: res.message });
-                        }
-                    });
+                SmartMatchApi.post(window.AppRoutes.unmatch, { match_id: encodeURIComponent(matchId) }).then(function (res) {
+                    if (res.success) {
+                        Swal.fire({ icon: 'success', title: res.message, toast: true,
+                            position: 'top-end', timer: 2000, showConfirmButton: false });
+                        self.loadEntries(true);
+                    } else {
+                        Swal.fire({ icon: 'error', title: res.message });
+                    }
+                });
             });
         },
 
@@ -137,18 +135,19 @@ var MatchingMixin = {
             }).then(function (r) {
                 if (!r.isConfirmed) return;
                 self.autoMatchRunning = true;
-                var body = 'pool_id=' + self.selectedPool.id;
+
                 // ИСПРАВЛЕНО: было window.window.AppRoutes
-                SmartMatchApi.postRaw(window.AppRoutes.autoMatch, body)
-                    .then(function (res) {
-                        if (res.success) {
-                            Swal.fire({ icon: 'success', title: 'Готово!', text: res.message });
-                            self.loadEntries(true);
-                        } else {
-                            Swal.fire({ icon: 'error', title: 'Ошибка', text: res.message });
-                        }
-                    })
+                SmartMatchApi.post(window.AppRoutes.autoMatch, { pool_id: self.selectedPool.id }).then(function (res) {
+                    if (res.success) {
+                        Swal.fire({ icon: 'success', title: 'Готово!', text: res.message });
+                        self.loadEntries(true);
+                    } else {
+                        Swal.fire({ icon: 'error', title: 'Ошибка', text: res.message });
+                    }
+                })
                     .finally(function () { self.autoMatchRunning = false; });
+
+
             });
         },
 

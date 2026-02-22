@@ -1,9 +1,13 @@
 /**
  * balance.js — Mixin для раздела баланса Ностро счетов
  * Уведомления через Swal.fire (SweetAlert2) — как во всём проекте
+ * Секция (NRE/INV) автоматически берётся из компании пользователя (AppConfig.companySection)
  */
 var BalanceMixin = {
     data: function () {
+        // Секция текущего пользователя — NRE или INV
+        var section = (window.AppConfig && window.AppConfig.companySection) || 'NRE';
+
         return {
             balances:            [],
             balancesTotal:       0,
@@ -15,7 +19,8 @@ var BalanceMixin = {
             balanceSortCol: 'value_date',
             balanceSortDir: 'desc',
 
-            balanceFilters:     {},
+            // Фильтр section предустановлен по компании пользователя
+            balanceFilters:     section ? { section: section } : {},
             balanceFiltersOpen: false,
 
             balanceAccounts: [],
@@ -25,7 +30,8 @@ var BalanceMixin = {
                 ls_type: 'S', statement_number: '', currency: 'RUB',
                 value_date: '', opening_balance: '', opening_dc: 'C',
                 closing_balance: '', closing_dc: 'C',
-                section: 'NRE', source: 'MANUAL', comment: '', status: 'normal',
+                section:  section,   // ← дефолт из компании
+                source:  'MANUAL', comment: '', status: 'normal',
             },
             balanceModalOpen: false,
             balanceSaving:    false,
@@ -43,7 +49,7 @@ var BalanceMixin = {
             importModalOpen:    false,
             importType:         'bnd',
             importAccountId:    null,
-            importSection:      'NRE',
+            importSection:      section,  // ← дефолт из компании
             importFile:         null,
             importLoading:      false,
             importResult:       null,
@@ -56,11 +62,16 @@ var BalanceMixin = {
         hasMoreBalances: function () {
             return this.balances.length < this.balancesTotal;
         },
+
+        // Секция пользователя для удобного доступа из шаблона
+        userSection: function () {
+            return (window.AppConfig && window.AppConfig.companySection) || '';
+        },
     },
 
     methods: {
 
-        // ── Уведомление (Swal toast) ──────────────────────────────
+        // ── Уведомление ───────────────────────────────────────────
         _balanceNotify: function (message, type) {
             Swal.fire({
                 toast:             true,
@@ -143,12 +154,14 @@ var BalanceMixin = {
 
         // ── CRUD форма ────────────────────────────────────────────
         openCreateBalanceModal: function () {
+            var section = (window.AppConfig && window.AppConfig.companySection) || 'NRE';
             this.editingBalance = {
                 id: null, account_id: null, account_name: '',
                 ls_type: 'S', statement_number: '', currency: 'RUB',
                 value_date: '', opening_balance: '', opening_dc: 'C',
                 closing_balance: '', closing_dc: 'C',
-                section: 'NRE', source: 'MANUAL', comment: '', status: 'normal',
+                section:  section,
+                source:  'MANUAL', comment: '', status: 'normal',
             };
             this.balanceModalOpen = true;
         },
@@ -282,9 +295,10 @@ var BalanceMixin = {
 
         // ── Импорт ────────────────────────────────────────────────
         openImportModal: function (type) {
+            var section = (window.AppConfig && window.AppConfig.companySection) || 'NRE';
             this.importType      = type || 'bnd';
             this.importAccountId = null;
-            this.importSection   = 'NRE';
+            this.importSection   = section;   // ← дефолт из компании
             this.importFile      = null;
             this.importResult    = null;
             this.importModalOpen = true;
@@ -301,7 +315,6 @@ var BalanceMixin = {
         submitImport: function () {
             var self = this;
 
-            // importAccountId приходит из <option :value="a.id"> — может быть числом или строкой
             var accountId = parseInt(self.importAccountId, 10);
             if (!accountId || isNaN(accountId)) {
                 self._balanceNotify('Выберите счёт', 'warning');
@@ -325,7 +338,6 @@ var BalanceMixin = {
                 ? AppRoutes.balanceImportAsb
                 : AppRoutes.balanceImportBnd;
 
-            // Используем чистый axios без глобального transformRequest (JSON.stringify сломает FormData)
             axios.post(url, fd, {
                 transformRequest: [function (data) { return data; }],
                 headers: { 'Content-Type': undefined },
