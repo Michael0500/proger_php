@@ -191,11 +191,9 @@ class NostroBalance extends ActiveRecord
      */
     public function getStatusIcon(): string
     {
-        return match ($this->status) {
-            self::STATUS_ERROR     => '🔴',
-            self::STATUS_CONFIRMED => '⚫',
-            default                => '⚪',
-        };
+        if ($this->status === self::STATUS_ERROR)     return '🔴';
+        if ($this->status === self::STATUS_CONFIRMED) return '⚫';
+        return '⚪';
     }
 
     /**

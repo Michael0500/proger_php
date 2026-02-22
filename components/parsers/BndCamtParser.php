@@ -206,7 +206,7 @@ class BndCamtParser
         return null;
     }
 
-    private function xpathSafe(\SimpleXMLElement $xml, string $path): array|false
+    private function xpathSafe(\SimpleXMLElement $xml, string $path): array
     {
         try {
             return $xml->xpath($path) ?: [];

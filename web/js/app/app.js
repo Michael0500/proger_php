@@ -1,5 +1,6 @@
 /**
  * SmartMatch — Vue App entry point
+ * ИЗМЕНЕНИЯ: добавлены activeSection, BalanceMixin, switchToBalance, onBalanceScroll
  */
 (function () {
     'use strict';
@@ -9,7 +10,6 @@
     if (csrfMeta) {
         axios.defaults.headers.common['X-CSRF-Token'] = csrfMeta.getAttribute('content');
     }
-    //axios.defaults.headers.post['Content-Type'] = 'application/x-www-form-urlencoded';
     axios.defaults.transformRequest = [(data) => JSON.stringify(data)];
     axios.defaults.headers.post['Content-Type'] = 'application/json';
 
@@ -18,7 +18,9 @@
 
         new Vue({
             el: '#app',
-            mixins: [ModalsMixin, GroupsMixin, PoolsMixin, EntriesMixin, MatchingMixin,BalanceMixin],
+
+            // BalanceMixin добавлен к существующим миксинам
+            mixins: [ModalsMixin, GroupsMixin, PoolsMixin, EntriesMixin, MatchingMixin, BalanceMixin],
 
             data: {
                 isSidebarCollapsed: false,
@@ -26,6 +28,9 @@
                 groups:             [],
                 selectedGroup:      null,
                 selectedPool:       null,
+
+                // ── Активная секция: 'entries' | 'balance' ────────
+                activeSection: 'entries',
 
                 // Группы
                 newGroup:     { name: '', description: '' },
@@ -48,12 +53,35 @@
 
             mounted: function () {
                 this.loadGroups();
+
+                // Загружаем счета для баланса при старте
+                this.loadBalanceAccounts();
             },
 
             methods: {
                 toggleSidebar: function () {
                     this.isSidebarCollapsed = !this.isSidebarCollapsed;
-                }
+                },
+
+                /**
+                 * Переключиться на вкладку Баланс и загрузить данные если ещё нет
+                 */
+                switchToBalance: function () {
+                    this.activeSection = 'balance';
+                    if (!this.balances.length && !this.balancesLoading) {
+                        this.loadBalances(true);
+                    }
+                },
+
+                /**
+                 * Infinite scroll для таблицы баланса
+                 */
+                onBalanceScroll: function (e) {
+                    var el = e.target;
+                    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 120) {
+                        this.loadMoreBalances();
+                    }
+                },
             }
         });
     });

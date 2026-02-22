@@ -1,11 +1,10 @@
 /**
  * balance.js — Mixin для раздела баланса Ностро счетов
- * Работает по тем же паттернам что entries.js (infinite scroll, Select2, debounce)
+ * Уведомления через Swal.fire (SweetAlert2) — как во всём проекте
  */
 var BalanceMixin = {
     data: function () {
         return {
-            // ── Таблица ───────────────────────────────────────────
             balances:            [],
             balancesTotal:       0,
             balancesPage:        1,
@@ -13,60 +12,42 @@ var BalanceMixin = {
             balancesLoading:     false,
             balancesLoadingMore: false,
 
-            // Сортировка
             balanceSortCol: 'value_date',
             balanceSortDir: 'desc',
 
-            // Фильтры
             balanceFilters:     {},
             balanceFiltersOpen: false,
 
-            // Аккаунты для dropdown
             balanceAccounts: [],
 
-            // ── Форма записи ──────────────────────────────────────
             editingBalance: {
-                id:               null,
-                account_id:       null,
-                account_name:     '',
-                ls_type:          'S',
-                statement_number: '',
-                currency:         'RUB',
-                value_date:       '',
-                opening_balance:  '',
-                opening_dc:       'C',
-                closing_balance:  '',
-                closing_dc:       'C',
-                section:          'NRE',
-                source:           'MANUAL',
-                comment:          '',
-                status:           'normal',
+                id: null, account_id: null, account_name: '',
+                ls_type: 'S', statement_number: '', currency: 'RUB',
+                value_date: '', opening_balance: '', opening_dc: 'C',
+                closing_balance: '', closing_dc: 'C',
+                section: 'NRE', source: 'MANUAL', comment: '', status: 'normal',
             },
-            balanceModalOpen:   false,
-            balanceSaving:      false,
+            balanceModalOpen: false,
+            balanceSaving:    false,
 
-            // ── Подтверждение ошибки ──────────────────────────────
-            confirmingBalance:  null,
-            confirmReason:      '',
-            confirmModalOpen:   false,
-            confirmSaving:      false,
+            confirmingBalance: null,
+            confirmReason:     '',
+            confirmModalOpen:  false,
+            confirmSaving:     false,
 
-            // ── История изменений ─────────────────────────────────
             historyBalance:     null,
             historyLogs:        [],
             historyModalOpen:   false,
             historyLoading:     false,
 
-            // ── Импорт ────────────────────────────────────────────
             importModalOpen:    false,
-            importType:         'bnd', // bnd | asb
+            importType:         'bnd',
             importAccountId:    null,
             importSection:      'NRE',
             importFile:         null,
             importLoading:      false,
             importResult:       null,
 
-            // debounce
             _balanceDebounceTimer: null,
         };
     },
@@ -79,8 +60,20 @@ var BalanceMixin = {
 
     methods: {
 
-        // ── Загрузка данных ───────────────────────────────────────
+        // ── Уведомление (Swal toast) ──────────────────────────────
+        _balanceNotify: function (message, type) {
+            Swal.fire({
+                toast:             true,
+                position:          'top-end',
+                icon:              type || 'info',
+                title:             message,
+                showConfirmButton: false,
+                timer:             3000,
+                timerProgressBar:  true,
+            });
+        },
 
+        // ── Загрузка ──────────────────────────────────────────────
         loadBalances: function (reset) {
             if (reset) {
                 this.balancesPage = 1;
@@ -88,9 +81,9 @@ var BalanceMixin = {
             }
             if (this.balancesLoading || this.balancesLoadingMore) return;
 
-            var isFirstPage = this.balancesPage === 1;
-            if (isFirstPage) this.balancesLoading     = true;
-            else             this.balancesLoadingMore  = true;
+            var isFirstPage = (this.balancesPage === 1);
+            if (isFirstPage) this.balancesLoading    = true;
+            else             this.balancesLoadingMore = true;
 
             var self = this;
             SmartMatchApi.get(AppRoutes.balanceList, {
@@ -101,13 +94,15 @@ var BalanceMixin = {
                 filters: JSON.stringify(self.balanceFilters),
             }).then(function (r) {
                 var d = r.data;
-                if (!d.success) { self.showToast(d.message || 'Ошибка', 'error'); return; }
-
+                if (!d.success) {
+                    self._balanceNotify(d.message || 'Ошибка загрузки', 'error');
+                    return;
+                }
                 self.balancesTotal = d.total;
                 if (isFirstPage) self.balances = d.data;
                 else             self.balances = self.balances.concat(d.data);
             }).finally(function () {
-                self.balancesLoading     = false;
+                self.balancesLoading    = false;
                 self.balancesLoadingMore = false;
             });
         },
@@ -121,7 +116,9 @@ var BalanceMixin = {
         loadBalanceAccounts: function () {
             var self = this;
             SmartMatchApi.get(AppRoutes.balanceAccounts).then(function (r) {
-                if (r.data.success) self.balanceAccounts = r.data.data;
+                if (r.data && r.data.success) {
+                    self.balanceAccounts = r.data.data;
+                }
             });
         },
 
@@ -134,10 +131,9 @@ var BalanceMixin = {
         },
 
         // ── Сортировка ────────────────────────────────────────────
-
         sortBalance: function (col) {
             if (this.balanceSortCol === col) {
-                this.balanceSortDir = this.balanceSortDir === 'asc' ? 'desc' : 'asc';
+                this.balanceSortDir = (this.balanceSortDir === 'asc') ? 'desc' : 'asc';
             } else {
                 this.balanceSortCol = col;
                 this.balanceSortDir = 'desc';
@@ -145,8 +141,7 @@ var BalanceMixin = {
             this.loadBalances(true);
         },
 
-        // ── Форма создания / редактирования ───────────────────────
-
+        // ── CRUD форма ────────────────────────────────────────────
         openCreateBalanceModal: function () {
             this.editingBalance = {
                 id: null, account_id: null, account_name: '',
@@ -174,37 +169,58 @@ var BalanceMixin = {
         saveBalance: function () {
             var self = this;
             if (self.balanceSaving) return;
+            if (!self.editingBalance.account_id) {
+                self._balanceNotify('Выберите счёт', 'warning'); return;
+            }
+            if (!self.editingBalance.value_date) {
+                self._balanceNotify('Укажите дату валютирования', 'warning'); return;
+            }
+            if (self.editingBalance.ls_type === 'S' && !self.editingBalance.statement_number) {
+                self._balanceNotify('Укажите номер выписки', 'warning'); return;
+            }
             self.balanceSaving = true;
 
-            var isEdit = !!self.editingBalance.id;
-            var url    = isEdit ? AppRoutes.balanceUpdate : AppRoutes.balanceCreate;
-
+            var url = self.editingBalance.id ? AppRoutes.balanceUpdate : AppRoutes.balanceCreate;
             SmartMatchApi.post(url, self.editingBalance).then(function (d) {
                 if (!d.success) {
-                    self.showToast(d.message || 'Ошибка', 'error');
+                    Swal.fire('Ошибка', d.message || 'Не удалось сохранить', 'error');
                     return;
                 }
-                self.showToast(d.message || 'Сохранено', 'success');
+                self._balanceNotify(d.message || 'Сохранено', 'success');
                 self.balanceModalOpen = false;
                 self.loadBalances(true);
-            }).finally(function () { self.balanceSaving = false; });
+            }).catch(function () {
+                Swal.fire('Ошибка', 'Ошибка соединения', 'error');
+            }).finally(function () {
+                self.balanceSaving = false;
+            });
         },
 
         deleteBalance: function (row) {
-            if (!confirm('Удалить запись баланса?')) return;
             var self = this;
-            SmartMatchApi.post(AppRoutes.balanceDelete, { id: row.id }).then(function (d) {
-                if (d.success) {
-                    self.showToast('Удалено', 'success');
-                    self.loadBalances(true);
-                } else {
-                    self.showToast(d.message || 'Ошибка', 'error');
-                }
+            Swal.fire({
+                title: 'Удалить запись?',
+                text:  (row.account_name || '') + ' · ' + (row.currency || '') + ' · ' + (row.value_date_fmt || row.value_date || ''),
+                icon:  'warning',
+                showCancelButton:   true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor:  '#6b7280',
+                confirmButtonText:  'Да, удалить',
+                cancelButtonText:   'Отмена',
+            }).then(function (result) {
+                if (!result.isConfirmed) return;
+                SmartMatchApi.post(AppRoutes.balanceDelete, { id: row.id }).then(function (d) {
+                    if (d.success) {
+                        self._balanceNotify('Запись удалена', 'success');
+                        self.loadBalances(true);
+                    } else {
+                        Swal.fire('Ошибка', d.message || 'Не удалось удалить', 'error');
+                    }
+                });
             });
         },
 
         // ── Подтверждение ошибки ──────────────────────────────────
-
         openConfirmModal: function (row) {
             this.confirmingBalance = row;
             this.confirmReason     = '';
@@ -212,15 +228,14 @@ var BalanceMixin = {
         },
 
         closeConfirmModal: function () {
-            this.confirmModalOpen = false;
+            this.confirmModalOpen  = false;
             this.confirmingBalance = null;
         },
 
         submitConfirm: function () {
             var self = this;
             if (!self.confirmReason.trim()) {
-                self.showToast('Укажите причину корректировки', 'warning');
-                return;
+                self._balanceNotify('Укажите причину корректировки', 'warning'); return;
             }
             if (self.confirmSaving) return;
             self.confirmSaving = true;
@@ -229,18 +244,24 @@ var BalanceMixin = {
                 id:     self.confirmingBalance.id,
                 reason: self.confirmReason,
             }).then(function (d) {
-                if (!d.success) { self.showToast(d.message || 'Ошибка', 'error'); return; }
-                self.showToast('Запись подтверждена ⚫', 'success');
+                if (!d.success) {
+                    Swal.fire('Ошибка', d.message || 'Не удалось подтвердить', 'error');
+                    return;
+                }
+                self._balanceNotify('Запись подтверждена ⚫', 'success');
                 self.confirmModalOpen = false;
                 self.loadBalances(true);
-            }).finally(function () { self.confirmSaving = false; });
+            }).catch(function () {
+                Swal.fire('Ошибка', 'Ошибка соединения', 'error');
+            }).finally(function () {
+                self.confirmSaving = false;
+            });
         },
 
         // ── История изменений ─────────────────────────────────────
-
         openHistoryModal: function (row) {
-            this.historyBalance  = row;
-            this.historyLogs     = [];
+            this.historyBalance   = row;
+            this.historyLogs      = [];
             this.historyModalOpen = true;
             this.loadHistory(row.id);
         },
@@ -253,12 +274,13 @@ var BalanceMixin = {
             var self = this;
             self.historyLoading = true;
             SmartMatchApi.get(AppRoutes.balanceHistory, { id: id }).then(function (r) {
-                if (r.data.success) self.historyLogs = r.data.data;
-            }).finally(function () { self.historyLoading = false; });
+                if (r.data && r.data.success) self.historyLogs = r.data.data;
+            }).finally(function () {
+                self.historyLoading = false;
+            });
         },
 
-        // ── Импорт файлов ─────────────────────────────────────────
-
+        // ── Импорт ────────────────────────────────────────────────
         openImportModal: function (type) {
             this.importType      = type || 'bnd';
             this.importAccountId = null;
@@ -278,8 +300,17 @@ var BalanceMixin = {
 
         submitImport: function () {
             var self = this;
-            if (!self.importFile)      { self.showToast('Выберите файл',  'warning'); return; }
-            if (!self.importAccountId) { self.showToast('Выберите счёт', 'warning'); return; }
+
+            // importAccountId приходит из <option :value="a.id"> — может быть числом или строкой
+            var accountId = parseInt(self.importAccountId, 10);
+            if (!accountId || isNaN(accountId)) {
+                self._balanceNotify('Выберите счёт', 'warning');
+                return;
+            }
+            if (!self.importFile) {
+                self._balanceNotify('Выберите файл', 'warning');
+                return;
+            }
             if (self.importLoading) return;
 
             self.importLoading = true;
@@ -287,52 +318,45 @@ var BalanceMixin = {
 
             var fd = new FormData();
             fd.append('file',       self.importFile);
-            fd.append('account_id', self.importAccountId);
+            fd.append('account_id', accountId);
             fd.append('section',    self.importSection);
 
-            var url = self.importType === 'asb'
+            var url = (self.importType === 'asb')
                 ? AppRoutes.balanceImportAsb
                 : AppRoutes.balanceImportBnd;
 
+            // Используем чистый axios без глобального transformRequest (JSON.stringify сломает FormData)
             axios.post(url, fd, {
-                headers: { 'Content-Type': 'multipart/form-data' }
+                transformRequest: [function (data) { return data; }],
+                headers: { 'Content-Type': undefined },
             }).then(function (r) {
                 self.importResult = r.data;
                 if (r.data.success) {
-                    self.showToast(r.data.message, r.data.errors > 0 ? 'warning' : 'success');
+                    self._balanceNotify(r.data.message, r.data.errors > 0 ? 'warning' : 'success');
                     self.loadBalances(true);
                 } else {
-                    self.showToast(r.data.message || 'Ошибка импорта', 'error');
+                    Swal.fire('Ошибка импорта', r.data.message || 'Неизвестная ошибка', 'error');
                 }
-            }).catch(function () {
-                self.showToast('Ошибка при загрузке файла', 'error');
+            }).catch(function (err) {
+                console.error('Import error:', err);
+                Swal.fire('Ошибка', 'Не удалось загрузить файл', 'error');
             }).finally(function () {
                 self.importLoading = false;
             });
         },
 
         // ── Хелперы ───────────────────────────────────────────────
-
-        balanceStatusClass: function (status) {
-            return {
-                'status-normal':    status === 'normal',
-                'status-error':     status === 'error',
-                'status-confirmed': status === 'confirmed',
-            };
-        },
-
         balanceStatusIcon: function (status) {
             if (status === 'error')     return '🔴';
             if (status === 'confirmed') return '⚫';
             return '⚪';
         },
 
-        formatBalanceAmount: function (amount, dc) {
-            if (amount === null || amount === undefined) return '—';
-            var sign = dc === 'D' ? '-' : '';
-            return sign + parseFloat(amount).toLocaleString('ru-RU', {
+        formatBalanceAmount: function (amount) {
+            if (amount === null || amount === undefined || amount === '') return '—';
+            return parseFloat(amount).toLocaleString('ru-RU', {
                 minimumFractionDigits: 2,
-                maximumFractionDigits: 2
+                maximumFractionDigits: 2,
             });
         },
 
