@@ -345,25 +345,25 @@ $initData = [
 
         // axios уже настроен в app.js (CSRF, Content-Type)
         // Но app.js не инициализируется (нет #app), поэтому настраиваем здесь
-        var csrfMeta = document.querySelector('meta[name="csrf-token"]');
-        if (csrfMeta) {
-            axios.defaults.headers.common['X-CSRF-Token'] = csrfMeta.getAttribute('content');
-        }
-        axios.defaults.headers.post['Content-Type'] = 'application/x-www-form-urlencoded';
-        axios.defaults.transformRequest = [function (data) {
-            if (data && typeof data === 'object') {
-                return Object.keys(data).map(function (k) {
-                    var v = data[k];
-                    if (v === null || v === undefined) v = '';
-                    if (v === true)  v = 1;
-                    if (v === false) v = 0;
-                    return encodeURIComponent(k) + '=' + encodeURIComponent(v);
-                }).join('&');
-            }
-            return data;
-        }];
 
         document.addEventListener('DOMContentLoaded', function () {
+            var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+            if (csrfMeta) {
+                axios.defaults.headers.common['X-CSRF-Token'] = csrfMeta.getAttribute('content');
+            }
+            axios.defaults.headers.post['Content-Type'] = 'application/x-www-form-urlencoded';
+            axios.defaults.transformRequest = [function (data) {
+                if (data && typeof data === 'object') {
+                    return Object.keys(data).map(function (k) {
+                        var v = data[k];
+                        if (v === null || v === undefined) v = '';
+                        if (v === true)  v = 1;
+                        if (v === false) v = 0;
+                        return encodeURIComponent(k) + '=' + encodeURIComponent(v);
+                    }).join('&');
+                }
+                return data;
+            }];
 
             new Vue({
                 el: '#profile-app',

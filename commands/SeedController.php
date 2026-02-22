@@ -24,13 +24,15 @@ class SeedController extends Controller
     /** @var int ID компании (0 = первая найденная) */
     public $company = 0;
     /** @var int Количество несквитованных записей */
-    public $count = 1000;
+    public $count = 3000000;
     /** @var int Количество сквитованных пар */
-    public $matched = 200;
+    public $matched = 3000000;
     /** @var bool Очистить таблицу перед генерацией */
     public $clear = false;
     /** @var bool Создать тестовую структуру (группа/пул/счета) если нет */
     public $withSetup = false;
+
+    private $batchSize = 1000; // количество строк в одном пакете
 
     public function options($actionID)
     {
@@ -90,9 +92,36 @@ class SeedController extends Controller
             $this->stdout("🗑  Удалено старых записей: {$deleted}\n");
         }
 
+        // Список столбцов для batchInsert
+        $columns = [
+            'account_id', 'company_id', 'match_id', 'ls', 'dc', 'amount', 'currency',
+            'value_date', 'post_date', 'instruction_id', 'end_to_end_id',
+            'transaction_id', 'message_id', 'comment', 'match_status',
+            'created_at', 'updated_at'
+        ];
+
         $currencies  = ['USD', 'EUR', 'RUB', 'GBP', 'CHF', 'CNY', 'JPY'];
         $accountIds  = array_map(function ($a) { return $a->id; }, $accounts);
         $total       = 0;
+        $rows        = []; // буфер строк для пакетной вставки
+
+        // Вспомогательная функция для выполнения пакетной вставки
+        $flush = function() use ($db, $table, $columns, &$rows, &$total) {
+            if (!empty($rows)) {
+                $db->createCommand()->batchInsert($table, $columns, $rows)->execute();
+                $total += count($rows);
+                $rows = [];
+            }
+        };
+
+        // Прогресс
+        $packetCounter = 0;
+        $progressCallback = function() use (&$packetCounter, &$total) {
+            $packetCounter++;
+            if ($packetCounter % 10 == 0) {
+                $this->stdout("   ... вставлено {$total} записей\n");
+            }
+        };
 
         // ── 1. Сквитованные пары ──────────────────────────────────────
         $this->stdout("⚡ Генерирую {$this->matched} сквитованных пар...\n");
@@ -108,31 +137,36 @@ class SeedController extends Controller
             $matchId = 'M' . strtoupper(substr(md5($i . 'matched' . $now), 0, 10));
 
             foreach (['L' => 'Debit', 'S' => 'Credit'] as $ls => $dc) {
-                $db->createCommand()->insert($table, [
-                    'account_id'     => $accId,
-                    'company_id'     => $company->id,
-                    'match_id'       => $matchId,
-                    'ls'             => $ls,
-                    'dc'             => $dc,
-                    'amount'         => $amt,
-                    'currency'       => $cur,
-                    'value_date'     => $vDate,
-                    'post_date'      => $pDate,
-                    'instruction_id' => $instr,
-                    'end_to_end_id'  => $e2e,
-                    'transaction_id' => $txn,
-                    'message_id'     => 'MSG' . mt_rand(1000000, 9999999),
-                    'comment'        => 'Matched pair #' . $i,
-                    'match_status'   => 'M',
-                    'created_at'     => $now,
-                    'updated_at'     => $now,
-                ])->execute();
-                $total++;
+                $rows[] = [
+                    $accId,
+                    $company->id,
+                    $matchId,
+                    $ls,
+                    $dc,
+                    $amt,
+                    $cur,
+                    $vDate,
+                    $pDate,
+                    $instr,
+                    $e2e,
+                    $txn,
+                    'MSG' . mt_rand(1000000, 9999999),
+                    'Matched pair #' . $i,
+                    'M',
+                    $now,
+                    $now,
+                ];
+
+                if (count($rows) >= $this->batchSize) {
+                    $flush();
+                    $progressCallback();
+                }
             }
         }
+        $flush(); // остатки
         $this->stdout("   ✓ " . ($this->matched * 2) . " сквитованных записей\n");
 
-        // ── 2. Пары для автоквитования (одинаковые instr/e2e) ─────────
+        // ── 2. Пары для автоквитования ────────────────────────────────
         $pairsReady = (int)($this->count * 0.35);
         $this->stdout("🔗 Генерирую {$pairsReady} пар для автоквитования...\n");
         for ($i = 0; $i < $pairsReady; $i++) {
@@ -144,28 +178,33 @@ class SeedController extends Controller
             $e2e   = 'AE'   . str_pad($i, 7, '0', STR_PAD_LEFT);
 
             foreach (['L' => 'Debit', 'S' => 'Credit'] as $ls => $dc) {
-                $db->createCommand()->insert($table, [
-                    'account_id'     => $accId,
-                    'company_id'     => $company->id,
-                    'match_id'       => null,
-                    'ls'             => $ls,
-                    'dc'             => $dc,
-                    'amount'         => $amt,
-                    'currency'       => $cur,
-                    'value_date'     => $vDate,
-                    'post_date'      => $this->rDate($vDate, '2026-02-20'),
-                    'instruction_id' => $instr,
-                    'end_to_end_id'  => $e2e,
-                    'transaction_id' => 'AT' . mt_rand(1000000, 9999999),
-                    'message_id'     => 'AM' . mt_rand(1000000, 9999999),
-                    'comment'        => null,
-                    'match_status'   => 'U',
-                    'created_at'     => $now,
-                    'updated_at'     => $now,
-                ])->execute();
-                $total++;
+                $rows[] = [
+                    $accId,
+                    $company->id,
+                    null, // match_id
+                    $ls,
+                    $dc,
+                    $amt,
+                    $cur,
+                    $vDate,
+                    $this->rDate($vDate, '2026-02-20'),
+                    $instr,
+                    $e2e,
+                    'AT' . mt_rand(1000000, 9999999),
+                    'AM' . mt_rand(1000000, 9999999),
+                    null, // comment
+                    'U',
+                    $now,
+                    $now,
+                ];
+
+                if (count($rows) >= $this->batchSize) {
+                    $flush();
+                    $progressCallback();
+                }
             }
         }
+        $flush();
         $this->stdout("   ✓ " . ($pairsReady * 2) . " записей для автоквитования\n");
 
         // ── 3. Одиночные несквитованные ──────────────────────────────
@@ -180,27 +219,32 @@ class SeedController extends Controller
                 $dc    = $dcList[array_rand($dcList)];
                 $vDate = $this->rDate('2023-01-01', '2026-02-20');
 
-                $db->createCommand()->insert($table, [
-                    'account_id'     => $accId,
-                    'company_id'     => $company->id,
-                    'match_id'       => null,
-                    'ls'             => $ls,
-                    'dc'             => $dc,
-                    'amount'         => round(mt_rand(500, 50000000) / 100, 2),
-                    'currency'       => $currencies[array_rand($currencies)],
-                    'value_date'     => $vDate,
-                    'post_date'      => $this->rDate($vDate, '2026-02-20'),
-                    'instruction_id' => (mt_rand(0, 1) ? 'S' . mt_rand(100000, 9999999) : null),
-                    'end_to_end_id'  => (mt_rand(0, 1) ? 'E' . mt_rand(100000, 9999999) : null),
-                    'transaction_id' => (mt_rand(0, 1) ? 'T' . mt_rand(100000, 9999999) : null),
-                    'message_id'     => (mt_rand(0, 1) ? 'G' . mt_rand(100000, 9999999) : null),
-                    'comment'        => (mt_rand(0, 4) === 0 ? 'Запись #' . ($i + 1) : null),
-                    'match_status'   => 'U',
-                    'created_at'     => $now,
-                    'updated_at'     => $now,
-                ])->execute();
-                $total++;
+                $rows[] = [
+                    $accId,
+                    $company->id,
+                    null,
+                    $ls,
+                    $dc,
+                    round(mt_rand(500, 50000000) / 100, 2),
+                    $currencies[array_rand($currencies)],
+                    $vDate,
+                    $this->rDate($vDate, '2026-02-20'),
+                    (mt_rand(0, 1) ? 'S' . mt_rand(100000, 9999999) : null),
+                    (mt_rand(0, 1) ? 'E' . mt_rand(100000, 9999999) : null),
+                    (mt_rand(0, 1) ? 'T' . mt_rand(100000, 9999999) : null),
+                    (mt_rand(0, 1) ? 'G' . mt_rand(100000, 9999999) : null),
+                    (mt_rand(0, 4) === 0 ? 'Запись #' . ($i + 1) : null),
+                    'U',
+                    $now,
+                    $now,
+                ];
+
+                if (count($rows) >= $this->batchSize) {
+                    $flush();
+                    $progressCallback();
+                }
             }
+            $flush();
             $this->stdout("   ✓ {$singles} одиночных записей\n");
         }
 

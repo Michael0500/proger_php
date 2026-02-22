@@ -50,7 +50,67 @@ class NostroEntryController extends BaseController
             ->leftJoin(['a' => 'accounts'], 'a.id = ne.account_id')
             ->where(['ne.company_id' => $cid]);
 
-        if ($poolId > 0) $q->andWhere(['a.pool_id' => $poolId]);
+        if ($poolId > 0) {
+            $pool = \app\models\AccountPool::findOne($poolId);
+
+            if ($pool) {
+                $criteria = $pool->getFilterCriteria(); // ✅ Используем геттер модели
+
+                if (!empty($criteria)) {
+                    // Находим счета, соответствующие критериям пула
+                    $accountQuery = Account::find()
+                        ->where(['company_id' => $cid]);
+
+                    // Применяем критерии фильтрации (аналогично AccountPool::getFilteredAccounts)
+                    if (!empty($criteria['currency'])) {
+                        $accountQuery->andFilterWhere(['currency' => $criteria['currency']]);
+                    }
+                    if (!empty($criteria['account_type'])) {
+                        $accountQuery->andFilterWhere(['account_type' => $criteria['account_type']]);
+                    }
+                    if (!empty($criteria['bank_code'])) {
+                        $accountQuery->andFilterWhere(['bank_code' => $criteria['bank_code']]);
+                    }
+                    if (!empty($criteria['country'])) {
+                        $accountQuery->andFilterWhere(['country' => $criteria['country']]);
+                    }
+                    if (isset($criteria['is_suspense'])) {
+                        $accountQuery->andFilterWhere(['is_suspense' => $criteria['is_suspense']]);
+                    }
+
+                    // Получаем ID подходящих счетов
+                    $accountIds = $accountQuery->select('id')->column();
+
+                    // Фильтруем записи по найденным счетам
+                    if (!empty($accountIds)) {
+                        $q->andWhere(['ne.account_id' => $accountIds]);
+                    } else {
+                        // Если ни один счёт не подошёл — возвращаем пустой результат
+                        return [
+                            'success' => true,
+                            'data' => [],
+                            'total' => 0,
+                            'page' => $page,
+                            'limit' => $limit,
+                            'pages' => 0,
+                        ];
+                    }
+                } else {
+                    return [
+                        'success' => true,
+                        'data' => [],
+                        'total' => 0,
+                        'page' => $page,
+                        'limit' => $limit,
+                        'pages' => 0,
+                    ];
+                }
+            } else {
+                // Пул не найден — возвращаем ошибку
+                return ['success' => false, 'message' => 'Пул не найден'];
+            }
+        }
+
 
         // Текстовые ILIKE-фильтры
         foreach (['ls','dc','currency','match_status','match_id',

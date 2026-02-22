@@ -15,11 +15,14 @@ $this->registerLinkTag(['rel' => 'icon', 'type' => 'image/x-icon', 'href' => Yii
 $this->registerLinkTag(['rel' => 'preconnect', 'href' => 'https://fonts.googleapis.com']);
 $this->registerLinkTag(['rel' => 'stylesheet', 'href' => 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap']);
 
-// Определяем состояние пользователя
 $isGuest     = Yii::$app->user->isGuest;
 $hasCompany  = !$isGuest && Yii::$app->user->identity->hasCompany();
 $showApp     = !$isGuest && $hasCompany;
 $showNoComp  = !$isGuest && !$hasCompany;
+
+// ДОБАВИТЬ: Проверяем, не находимся ли мы на странице профиля
+$currentRoute = Yii::$app->controller->route;
+$isProfilePage = ($currentRoute === 'user/view');
 
 $currentUser = $isGuest ? null : Yii::$app->user->identity;
 $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->company : null;
@@ -116,7 +119,7 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
         ?>
     </header>
 
-    <?php if ($showApp): ?>
+    <?php if ($showApp && !$isProfilePage): ?>
         <!-- ── Основное приложение (есть компания) ──── -->
         <div id="app" class="d-flex">
             <?= $this->render('_sidebar') ?>
@@ -128,7 +131,7 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
         </div>
         <?= $this->render('_vue-scripts') ?>
 
-    <?php elseif ($showNoComp): ?>
+    <?php elseif ($showNoComp && !$isProfilePage): ?>
         <!-- ── Нет компании ─────────────────────────── -->
         <main style="margin-top:52px">
             <div class="company-required">

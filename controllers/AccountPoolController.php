@@ -94,9 +94,20 @@ class AccountPoolController extends BaseController
         $model->is_active    = ($isActive === true || $isActive === 'true' || $isActive === '1' || $isActive == 1);
 
         $filterCriteria = Yii::$app->request->post('filter_criteria', []);
-        if (!empty($filterCriteria)) {
+
+        if (is_string($filterCriteria) && !empty($filterCriteria)) {
+            try {
+                $filterCriteria = \yii\helpers\Json::decode($filterCriteria);
+            } catch (\Exception $e) {
+                Yii::warning('Failed to decode filter_criteria: ' . $e->getMessage());
+                $filterCriteria = [];
+            }
+        }
+
+        if (!empty($filterCriteria) && is_array($filterCriteria)) {
             $model->setFilterCriteria($filterCriteria);
         }
+
 
         if ($model->save()) {
             return ['success' => true, 'message' => 'Пул успешно создан', 'data' => ['id' => $model->id, 'name' => $model->name]];
@@ -122,7 +133,16 @@ class AccountPoolController extends BaseController
         $model->is_active   = ($isActive === true || $isActive === 'true' || $isActive === '1' || $isActive == 1);
 
         $filterCriteria = Yii::$app->request->post('filter_criteria', []);
-        if (!empty($filterCriteria)) {
+        if (is_string($filterCriteria) && !empty($filterCriteria)) {
+            try {
+                $filterCriteria = \yii\helpers\Json::decode($filterCriteria);
+            } catch (\Exception $e) {
+                Yii::warning('Failed to decode filter_criteria: ' . $e->getMessage());
+                $filterCriteria = [];
+            }
+        }
+
+        if (!empty($filterCriteria) && is_array($filterCriteria)) {
             $model->setFilterCriteria($filterCriteria);
         }
 

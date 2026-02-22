@@ -28,6 +28,11 @@ var PoolsMixin = {
                 Swal.fire('Ошибка', 'Название пула обязательно', 'error');
                 return;
             }
+
+            // ✅ Копируем данные и сериализуем filter_criteria
+            var payload = Object.assign({}, self.newPool);
+            payload.filter_criteria = JSON.stringify(payload.filter_criteria);
+
             SmartMatchApi.pools.create(self.newPool)
                 .then(function (response) {
                     if (response.data.success) {
@@ -43,8 +48,20 @@ var PoolsMixin = {
 
         // Редактирование
         editPool: function (pool) {
-            this.editingPool = this._poolFormData(pool);
+            var formData = this._poolFormData(pool);
+            // ✅ Обновляем через $set для сохранения реактивности
+            Object.keys(formData).forEach(function (key) {
+                this.$set(this.editingPool, key, formData[key]);
+            }, this);
             this._showModal('editPoolModal');
+        },
+
+        configurePool: function (pool) {
+            var formData = this._poolFormData(pool);
+            Object.keys(formData).forEach(function (key) {
+                this.$set(this.editingPool, key, formData[key]);
+            }, this);
+            this._showModal('configurePoolModal');
         },
 
         updatePool: function () {
@@ -53,6 +70,10 @@ var PoolsMixin = {
                 Swal.fire('Ошибка', 'Название пула обязательно', 'error');
                 return;
             }
+
+            var payload = Object.assign({}, self.editingPool);
+            payload.filter_criteria = JSON.stringify(payload.filter_criteria);
+
             SmartMatchApi.pools.update(self.editingPool)
                 .then(function (response) {
                     if (response.data.success) {
@@ -68,12 +89,6 @@ var PoolsMixin = {
                     }
                 })
                 .catch(function () { Swal.fire('Ошибка', 'Не удалось обновить пул', 'error'); });
-        },
-
-        // Настройка фильтров
-        configurePool: function (pool) {
-            this.editingPool = this._poolFormData(pool);
-            this._showModal('configurePoolModal');
         },
 
         // Удаление
@@ -110,14 +125,30 @@ var PoolsMixin = {
 
         // Вспомогательный метод: собирает объект формы пула
         _poolFormData: function (pool) {
+            // Безопасно парсим filter_criteria: проверяем тип перед JSON.parse
+            let filters = { currency: '', account_type: '', bank_code: '', country: '', is_suspense: false };
+
+            if (pool.filter_criteria) {
+                if (typeof pool.filter_criteria === 'string') {
+                    try {
+                        var parsed = JSON.parse(pool.filter_criteria);
+                        if (parsed && typeof parsed === 'object') {
+                            filters = Object.assign({}, filters, parsed);
+                        }
+                    } catch (e) {
+                        console.warn('Failed to parse filter_criteria:', e);
+                    }
+                } else if (typeof pool.filter_criteria === 'object') {
+                    filters = Object.assign({}, filters, pool.filter_criteria);
+                }
+            }
+
             return {
                 id: pool.id,
                 name: pool.name,
                 description: pool.description || '',
-                is_active: pool.is_active,
-                filter_criteria: pool.filter_criteria
-                    ? JSON.parse(pool.filter_criteria)
-                    : { currency: '', account_type: '', bank_code: '', country: '', is_suspense: false }
+                is_active: pool.is_active !== false,
+                filter_criteria: filters
             };
         }
     }

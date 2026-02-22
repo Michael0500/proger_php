@@ -579,7 +579,7 @@ new Vue({
         deleteGroup(group) {
             Swal.fire({
                 title: 'Вы уверены?',
-                text: `Удалить группу "${group.name}"? Все связанные пулы и счета будут отвязаны.`,
+                text: `Удалить группу "group.name"? Все связанные пулы и счета будут отвязаны.`,
                 icon: 'warning',
                 showCancelButton: true,
                 confirmButtonColor: '#d33',
@@ -695,7 +695,7 @@ new Vue({
         deletePool(pool) {
             Swal.fire({
                 title: 'Вы уверены?',
-                text: `Удалить пул "${pool.name}"? Все связанные счета будут отвязаны.`,
+                text: `Удалить пул "pool.name"? Все связанные счета будут отвязаны.`,
                 icon: 'warning',
                 showCancelButton: true,
                 confirmButtonColor: '#d33',
