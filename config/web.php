@@ -72,6 +72,11 @@ $config = [
 
                 'nostro-balance'                    => 'nostro-balance/index',
                 'nostro-balance/<action>'           => 'nostro-balance/<action>',
+
+                  // ── Отчёты (Раккорд) ─────────────────────────────────────────
+                'recon-report'           => 'recon-report/index',
+                'recon-report/generate'  => 'recon-report/generate',
+                'recon-report/accounts'  => 'recon-report/accounts',
             ],
         ],
         'authManager' => [

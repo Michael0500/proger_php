@@ -47,6 +47,10 @@ $companySection = $currentComp ? strtoupper($currentComp->code) : '';
         balanceAccounts:  '<?= Url::to(['/nostro-balance/accounts']) ?>',
         balanceImportBnd: '<?= Url::to(['/nostro-balance/import-bnd']) ?>',
         balanceImportAsb: '<?= Url::to(['/nostro-balance/import-asb']) ?>',
+
+        // Раккорд
+        reconReportGenerate:  '<?= Url::to(['/recon-report/generate']) ?>',
+        reconReportAccounts:  '<?= Url::to(['/recon-report/accounts']) ?>',
     };
 
     // Секция текущей компании пользователя: 'NRE' | 'INV' | ''

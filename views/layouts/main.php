@@ -20,9 +20,14 @@ $hasCompany  = !$isGuest && Yii::$app->user->identity->hasCompany();
 $showApp     = !$isGuest && $hasCompany;
 $showNoComp  = !$isGuest && !$hasCompany;
 
-// ДОБАВИТЬ: Проверяем, не находимся ли мы на странице профиля
 $currentRoute = Yii::$app->controller->route;
+
+// Страницы, которые рендерятся без sidebar/Vue-app (напрямую в $content)
 $isProfilePage = ($currentRoute === 'user/view');
+$isReconPage   = (Yii::$app->controller->id === 'recon-report');
+
+// Объединяем: страницы без основного Vue-приложения
+$isStandalonePage = $isProfilePage || $isReconPage;
 
 $currentUser = $isGuest ? null : Yii::$app->user->identity;
 $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->company : null;
@@ -51,17 +56,20 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
         if ($isGuest) {
             $menuItems[] = ['label' => 'Вход', 'url' => ['/site/login']];
         } else {
-            // Пункт "Счета" — только если есть компания
             if ($hasCompany) {
                 $menuItems[] = [
                         'label'  => '<i class="fas fa-university me-1"></i>Счета',
                         'encode' => false,
                         'url'    => ['/user/view', 'id' => $currentUser->id, '#' => 'accounts'],
                 ];
-                $menuItems[] = ['label' => 'Баланс', 'url' => ['/nostro-balance']];
+                $menuItems[] = [
+                        'label'  => '<i class="fas fa-file-alt me-1"></i>Раккорд',
+                        'encode' => false,
+                        'url'    => ['/recon-report/index'],
+                        'active' => Yii::$app->controller->id === 'recon-report',
+                ];
             }
 
-            // Меню пользователя
             $userMenuItems = [
                     [
                             'label'  => '<i class="fas fa-user me-1"></i>Профиль',
@@ -70,7 +78,6 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
                     ],
             ];
 
-            // Блок смены компании
             if ($currentComp) {
                 $userMenuItems[] = '<div class="dropdown-divider"></div>';
                 $userMenuItems[] = '<div class="dropdown-header" style="font-size:11px;color:#6b7a99;padding:6px 16px 2px">
@@ -82,9 +89,9 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
                         'url'    => ['/user/view', 'id' => $currentUser->id],
                 ];
                 $userMenuItems[] = [
-                        'label'       => '<i class="fas fa-times me-1" style="color:#ef4444"></i><span style="color:#ef4444">Сбросить компанию</span>',
-                        'encode'      => false,
-                        'url'         => ['/company/reset'],
+                        'label'  => '<i class="fas fa-times me-1" style="color:#ef4444"></i><span style="color:#ef4444">Сбросить компанию</span>',
+                        'encode' => false,
+                        'url'    => ['/company/reset'],
                 ];
             } else {
                 $userMenuItems[] = '<div class="dropdown-divider"></div>';
@@ -102,7 +109,6 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
                     'linkOptions' => ['data-method' => 'post'],
             ];
 
-            // Лейбл с именем + значок компании
             $companyBadge = $currentComp
                     ? '<span style="font-size:10px;background:#4f46e5;color:#fff;border-radius:10px;padding:1px 7px;margin-left:6px;font-weight:600">'
                     . Html::encode($currentComp->code) . '</span>'
@@ -120,8 +126,8 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
         ?>
     </header>
 
-    <?php if ($showApp && !$isProfilePage): ?>
-        <!-- ── Основное приложение (есть компания) ──── -->
+    <?php if ($showApp && !$isStandalonePage): ?>
+        <!-- ── Основное приложение с sidebar (NRE/INV) ──── -->
         <div id="app" class="d-flex">
             <?= $this->render('_sidebar') ?>
             <main id="main" :class="{ 'sidebar-collapsed': isSidebarCollapsed }" role="main">
@@ -132,7 +138,7 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
         </div>
         <?= $this->render('_vue-scripts') ?>
 
-    <?php elseif ($showNoComp && !$isProfilePage): ?>
+    <?php elseif ($showNoComp && !$isStandalonePage): ?>
         <!-- ── Нет компании ─────────────────────────── -->
         <main style="margin-top:52px">
             <div class="company-required">
@@ -141,9 +147,7 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
                         <i class="fas fa-building"></i>
                     </div>
                     <h3>Компания не выбрана</h3>
-                    <p>
-                        Для работы с системой необходимо выбрать компанию.
-                    </p>
+                    <p>Для работы с системой необходимо выбрать компанию.</p>
                     <?= Html::a(
                             '<i class="fas fa-user-cog me-2"></i>Перейти в профиль',
                             ['/user/view', 'id' => Yii::$app->user->id],
@@ -154,9 +158,9 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
         </main>
 
     <?php else: ?>
-        <!-- ── Гость / другие страницы ──────────────── -->
-        <main style="margin-top:52px; padding:32px 24px">
-            <div class="container">
+        <!-- ── Профиль / Раккорд / Гость / прочие страницы ── -->
+        <main style="margin-top:52px; padding:24px 28px">
+            <div class="container-fluid" style="max-width:1400px">
                 <?= Alert::widget() ?>
                 <?= $content ?>
             </div>
