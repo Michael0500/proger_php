@@ -77,6 +77,8 @@ $config = [
                 'recon-report'           => 'recon-report/index',
                 'recon-report/generate'  => 'recon-report/generate',
                 'recon-report/accounts'  => 'recon-report/accounts',
+
+                'archive/<action>' => 'archive/<action>',
             ],
         ],
         'authManager' => [

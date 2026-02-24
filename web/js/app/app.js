@@ -1,11 +1,9 @@
 /**
  * SmartMatch — Vue App entry point
- * ИЗМЕНЕНИЯ: добавлены activeSection, BalanceMixin, switchToBalance, onBalanceScroll
  */
 (function () {
     'use strict';
 
-    // ── axios config ──────────────────────────────────────────────
     var csrfMeta = document.querySelector('meta[name="csrf-token"]');
     if (csrfMeta) {
         axios.defaults.headers.common['X-CSRF-Token'] = csrfMeta.getAttribute('content');
@@ -19,8 +17,7 @@
         new Vue({
             el: '#app',
 
-            // BalanceMixin добавлен к существующим миксинам
-            mixins: [ModalsMixin, GroupsMixin, PoolsMixin, EntriesMixin, MatchingMixin, BalanceMixin],
+            mixins: [ModalsMixin, GroupsMixin, PoolsMixin, EntriesMixin, MatchingMixin, BalanceMixin, ArchiveMixin],
 
             data: {
                 isSidebarCollapsed: false,
@@ -29,14 +26,12 @@
                 selectedGroup:      null,
                 selectedPool:       null,
 
-                // ── Активная секция: 'entries' | 'balance' ────────
+                // Активная секция: 'entries' | 'balance' | 'archive'
                 activeSection: 'entries',
 
-                // Группы
                 newGroup:     { name: '', description: '' },
                 editingGroup: { id: null, name: '', description: '' },
 
-                // Пулы
                 newPool: { group_id: null, name: '', description: '', is_active: true },
                 editingPool: {
                     id: null, name: '', description: '', is_active: true,
@@ -46,16 +41,16 @@
                     }
                 },
 
-                // inline-комментарий (также в EntriesMixin)
                 editingCommentId:    null,
                 editingCommentValue: ''
             },
 
             mounted: function () {
                 this.loadGroups();
-
-                // Загружаем счета для баланса при старте
                 this.loadBalanceAccounts();
+                this.loadArchiveAccounts();
+                // Загружаем статистику архива при старте (для badge в сайдбаре)
+                this.loadArchiveStats();
             },
 
             methods: {
@@ -63,9 +58,6 @@
                     this.isSidebarCollapsed = !this.isSidebarCollapsed;
                 },
 
-                /**
-                 * Переключиться на вкладку Баланс и загрузить данные если ещё нет
-                 */
                 switchToBalance: function () {
                     this.activeSection = 'balance';
                     if (!this.balances.length && !this.balancesLoading) {
@@ -73,14 +65,42 @@
                     }
                 },
 
-                /**
-                 * Infinite scroll для таблицы баланса
-                 */
+                switchToArchive: function () {
+                    this.activeSection = 'archive';
+                    if (!this.archiveRows.length && !this.archiveLoading) {
+                        this.loadArchive(true);
+                    }
+                    if (!this.archiveStats) {
+                        this.loadArchiveStats();
+                    }
+                },
+
                 onBalanceScroll: function (e) {
                     var el = e.target;
                     if (el.scrollTop + el.clientHeight >= el.scrollHeight - 120) {
                         this.loadMoreBalances();
                     }
+                },
+
+                // ── Вспомогательные методы для архива ────────────
+
+                /**
+                 * Истёк ли срок хранения записи
+                 */
+                isExpired: function (expiresAt) {
+                    if (!expiresAt) return false;
+                    return new Date(expiresAt) < new Date();
+                },
+
+                /**
+                 * Истекает ли срок хранения в ближайшие 90 дней
+                 */
+                isExpiringSoon: function (expiresAt) {
+                    if (!expiresAt) return false;
+                    var d = new Date(expiresAt);
+                    var soon = new Date();
+                    soon.setDate(soon.getDate() + 90);
+                    return d < soon && d >= new Date();
                 },
             }
         });

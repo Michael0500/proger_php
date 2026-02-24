@@ -4,7 +4,6 @@ use yii\helpers\Url;
 
 $currentUser = Yii::$app->user->identity;
 $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->company : null;
-// code компании = секция: 'NRE' или 'INV'
 $companySection = $currentComp ? strtoupper($currentComp->code) : '';
 ?>
 <script>
@@ -48,12 +47,18 @@ $companySection = $currentComp ? strtoupper($currentComp->code) : '';
         balanceImportBnd: '<?= Url::to(['/nostro-balance/import-bnd']) ?>',
         balanceImportAsb: '<?= Url::to(['/nostro-balance/import-asb']) ?>',
 
-        // Раккорд
-        reconReportGenerate:  '<?= Url::to(['/recon-report/generate']) ?>',
-        reconReportAccounts:  '<?= Url::to(['/recon-report/accounts']) ?>',
+        // ── Архив ────────────────────────────────────────────────
+        archiveList:         '<?= Url::to(['/archive/list']) ?>',
+        archiveCount:        '<?= Url::to(['/archive/count']) ?>',
+        archiveRunBatch:     '<?= Url::to(['/archive/run-batch']) ?>',
+        archiveRestore:      '<?= Url::to(['/archive/restore']) ?>',
+        archivePurgeExpired: '<?= Url::to(['/archive/purge-expired']) ?>',
+        archiveSettings:     '<?= Url::to(['/archive/settings']) ?>',
+        archiveSaveSettings: '<?= Url::to(['/archive/save-settings']) ?>',
+        archiveStats:        '<?= Url::to(['/archive/stats']) ?>',
+        archiveAccounts:     '<?= Url::to(['/archive/accounts']) ?>',
     };
 
-    // Секция текущей компании пользователя: 'NRE' | 'INV' | ''
     window.AppConfig = {
         companySection: '<?= addslashes($companySection) ?>',
     };

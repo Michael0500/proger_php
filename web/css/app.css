@@ -1613,3 +1613,10 @@ select.form-control-sm-custom {
     border-top: 1px solid #f1f3f7;
     flex-shrink: 0;
 }
+
+.stat-chip { display:inline-flex; align-items:center; gap:6px; padding:5px 12px;
+    border-radius:20px; font-size:12px; font-weight:600; }
+.stat-chip-purple { background:#ede9fe; color:#6d28d9; }
+.stat-chip-orange { background:#fff7ed; color:#c2410c; }
+.stat-chip-red    { background:#fef2f2; color:#dc2626; }
+.stat-chip-gray   { background:#f3f4f6; color:#4b5563; }
