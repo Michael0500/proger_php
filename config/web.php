@@ -61,10 +61,7 @@ $config = [
                 'account-group/delete'     => 'account-group/delete',
 
                 // ── Account Pools ─────────────────────────────────
-                'account-pool/get-accounts' => 'account-pool/get-accounts',
-                'account-pool/create'       => 'account-pool/create',
-                'account-pool/update'       => 'account-pool/update',
-                'account-pool/delete'       => 'account-pool/delete',
+                'account-pool/<action>' => 'account-pool/<action>',
 
                 // ── Nostro entries & Matching (универсальные) ─────
                 'nostro-entry/<action>' => 'nostro-entry/<action>',

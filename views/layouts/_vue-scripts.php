@@ -19,6 +19,8 @@ $companySection = $currentComp ? strtoupper($currentComp->code) : '';
         poolUpdate:      '<?= Url::to(['/account-pool/update']) ?>',
         poolDelete:      '<?= Url::to(['/account-pool/delete']) ?>',
         poolGetAccounts: '<?= Url::to(['/account-pool/get-accounts']) ?>',
+        poolGetFilters: '<?= Url::to(['/account-pool/get-filters']) ?>',
+        poolSaveFilters: '<?= Url::to(['/account-pool/save-filters']) ?>',
 
         // Записи (NostroEntry)
         entryList:           '<?= Url::to(['/nostro-entry/list']) ?>',

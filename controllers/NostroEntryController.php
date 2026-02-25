@@ -53,61 +53,52 @@ class NostroEntryController extends BaseController
         if ($poolId > 0) {
             $pool = \app\models\AccountPool::findOne($poolId);
 
-            if ($pool) {
-                $criteria = $pool->getFilterCriteria(); // ✅ Используем геттер модели
+            if (!$pool) {
+                return ['success' => false, 'message' => 'Пул не найден'];
+            }
 
-                if (!empty($criteria)) {
-                    // Находим счета, соответствующие критериям пула
-                    $accountQuery = Account::find()
-                        ->where(['company_id' => $cid]);
+            // Загружаем строки фильтров пула из отдельной таблицы
+            $poolFilters = \app\models\AccountPoolFilter::find()
+                ->where(['pool_id' => $poolId])
+                ->orderBy(['sort_order' => SORT_ASC])
+                ->all();
 
-                    // Применяем критерии фильтрации (аналогично AccountPool::getFilteredAccounts)
-                    if (!empty($criteria['currency'])) {
-                        $accountQuery->andFilterWhere(['currency' => $criteria['currency']]);
-                    }
-                    if (!empty($criteria['account_type'])) {
-                        $accountQuery->andFilterWhere(['account_type' => $criteria['account_type']]);
-                    }
-                    if (!empty($criteria['bank_code'])) {
-                        $accountQuery->andFilterWhere(['bank_code' => $criteria['bank_code']]);
-                    }
-                    if (!empty($criteria['country'])) {
-                        $accountQuery->andFilterWhere(['country' => $criteria['country']]);
-                    }
-                    if (isset($criteria['is_suspense'])) {
-                        $accountQuery->andFilterWhere(['is_suspense' => $criteria['is_suspense']]);
-                    }
+            if (!empty($poolFilters)) {
+                // Строим subquery счетов, удовлетворяющих фильтрам
+                $accountQuery = Account::find()
+                    ->select('id')
+                    ->where(['company_id' => $cid]);
 
-                    // Получаем ID подходящих счетов
-                    $accountIds = $accountQuery->select('id')->column();
+                $first = true;
+                foreach ($poolFilters as $pf) {
+                    /** @var \app\models\AccountPoolFilter $pf */
+                    $condition = $pf->buildCondition();
 
-                    // Фильтруем записи по найденным счетам
-                    if (!empty($accountIds)) {
-                        $q->andWhere(['ne.account_id' => $accountIds]);
+                    if ($first) {
+                        $accountQuery->andWhere($condition);
+                        $first = false;
+                    } elseif ($pf->logic === 'OR') {
+                        $accountQuery->orWhere($condition);
                     } else {
-                        // Если ни один счёт не подошёл — возвращаем пустой результат
-                        return [
-                            'success' => true,
-                            'data' => [],
-                            'total' => 0,
-                            'page' => $page,
-                            'limit' => $limit,
-                            'pages' => 0,
-                        ];
+                        $accountQuery->andWhere($condition);
                     }
+                }
+
+                $accountIds = $accountQuery->column();
+
+                if (!empty($accountIds)) {
+                    $q->andWhere(['ne.account_id' => $accountIds]);
                 } else {
+                    // Ни один счёт не прошёл фильтры — возвращаем пустой результат
                     return [
                         'success' => true,
-                        'data' => [],
-                        'total' => 0,
-                        'page' => $page,
-                        'limit' => $limit,
-                        'pages' => 0,
+                        'data'    => [],
+                        'total'   => 0,
+                        'page'    => $page,
+                        'limit'   => $limit,
+                        'pages'   => 0,
                     ];
                 }
-            } else {
-                // Пул не найден — возвращаем ошибку
-                return ['success' => false, 'message' => 'Пул не найден'];
             }
         }
 

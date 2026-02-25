@@ -172,4 +172,97 @@ class AccountPoolController extends BaseController
 
         return ['success' => false, 'message' => 'Ошибка при удалении пула', 'errors' => $model->errors];
     }
+
+    /**
+     * Получить все фильтры пула
+     * GET /account-pool/get-filters?pool_id=X
+     */
+    public function actionGetFilters($params)
+    {
+        Yii::$app->response->format = Response::FORMAT_JSON;
+
+        $pool = AccountPool::findOne($params['pool_id']);
+        if (!$pool) {
+            return ['success' => false, 'message' => 'Пул не найден'];
+        }
+
+        $filters = \app\models\AccountPoolFilter::find()
+            ->where(['pool_id' => $params['pool_id']])
+            ->orderBy(['sort_order' => SORT_ASC])
+            ->all();
+
+        $data = array_map(function ($f) {
+            return [
+                'id'         => $f->id,
+                'pool_id'    => $f->pool_id,
+                'field'      => $f->field,
+                'operator'   => $f->operator,
+                'value'      => $f->value,
+                'logic'      => $f->logic,
+                'sort_order' => $f->sort_order,
+            ];
+        }, $filters);
+
+        return [
+            'success'          => true,
+            'data'             => $data,
+            'available_fields' => \app\models\AccountPoolFilter::availableFields(),
+        ];
+    }
+
+    /**
+     * Сохранить фильтры пула (полная замена — удаляем старые, вставляем новые)
+     * POST /account-pool/save-filters
+     * Body: { pool_id: X, filters: [ {field, operator, value, logic, sort_order}, … ] }
+     */
+    public function actionSaveFilters()
+    {
+        Yii::$app->response->format = Response::FORMAT_JSON;
+
+        $pool_id = Yii::$app->request->post('pool_id');
+        $pool    = AccountPool::findOne($pool_id);
+
+        if (!$pool) {
+            return ['success' => false, 'message' => 'Пул не найден'];
+        }
+
+        $filtersRaw = Yii::$app->request->post('filters', []);
+        if (is_string($filtersRaw)) {
+            try {
+                $filtersRaw = \yii\helpers\Json::decode($filtersRaw);
+            } catch (\Exception $e) {
+                return ['success' => false, 'message' => 'Некорректный формат фильтров'];
+            }
+        }
+
+        $transaction = Yii::$app->db->beginTransaction();
+        try {
+            // Удаляем все текущие фильтры пула
+            \app\models\AccountPoolFilter::deleteAll(['pool_id' => $pool_id]);
+
+            // Вставляем новые
+            foreach ((array) $filtersRaw as $i => $row) {
+                $filter             = new \app\models\AccountPoolFilter();
+                $filter->pool_id    = $pool_id;
+                $filter->field      = $row['field']      ?? 'currency';
+                $filter->operator   = $row['operator']   ?? 'eq';
+                $filter->value      = trim($row['value'] ?? '');
+                $filter->logic      = ($i === 0) ? 'AND' : ($row['logic'] ?? 'AND'); // первая строка — всегда AND
+                $filter->sort_order = $i;
+
+                if (!$filter->save()) {
+                    $transaction->rollBack();
+                    return ['success' => false, 'message' => 'Ошибка сохранения фильтра', 'errors' => $filter->errors];
+                }
+            }
+
+            $transaction->commit();
+            return ['success' => true, 'message' => 'Фильтры сохранены'];
+
+        } catch (\Exception $e) {
+            $transaction->rollBack();
+            Yii::error('saveFilters error: ' . $e->getMessage());
+            return ['success' => false, 'message' => 'Ошибка сервера'];
+        }
+    }
 }

@@ -43,7 +43,15 @@ class AccountGroupController extends BaseController
                         'name' => $pool->name,
                         'description' => $pool->description,
                         'is_active' => $pool->is_active,
-                        'filter_criteria' => $pool->filter_criteria,
+                        'filters' => array_map(function ($f) {
+                               return [
+                                   'id'       => $f->id,
+                                   'field'    => $f->field,
+                                   'operator' => $f->operator,
+                                   'value'    => $f->value,
+                                   'logic'    => $f->logic,
+                               ];
+                           }, $pool->filters),
                     ];
                 }, $group->accountPools)
             ];

@@ -4,169 +4,179 @@ namespace app\models;
 
 use Yii;
 use yii\db\ActiveRecord;
-use yii\helpers\Json;
 
 /**
- * Модель группы ностробанков
+ * Модель пула ностробанков
  *
- * @property int $id
- * @property int $company_id
- * @property int $group_id
+ * @property int    $id
+ * @property int    $company_id
+ * @property int    $group_id
  * @property string $name
  * @property string|null $description
- * @property array|null $filter_criteria
- * @property bool $is_active
+ * @property bool   $is_active
  * @property string $created_at
  * @property string $updated_at
  *
- * @property AccountGroup $group
- * @property Account[] $accounts
+ * @property AccountGroup      $group
+ * @property Account[]         $accounts
+ * @property AccountPoolFilter[] $filters
  */
 class AccountPool extends ActiveRecord
 {
-    private $_filterCriteria;
-
-    public static function tableName()
+    public static function tableName(): string
     {
         return '{{%account_pools}}';
     }
 
-    public function rules()
+    public function rules(): array
     {
         return [
-            [['company_id', 'name','group_id'], 'required'],
-            [['group_id'], 'integer'],
-            [['description', 'filter_criteria'], 'safe'],
+            [['company_id', 'name', 'group_id'], 'required'],
+            [['group_id', 'company_id'], 'integer'],
+            [['description'], 'safe'],
             [['is_active'], 'boolean'],
             [['name'], 'string', 'max' => 100],
-            [['group_id'], 'exist', 'skipOnError' => true, 'targetClass' => AccountGroup::className(), 'targetAttribute' => ['group_id' => 'id']],
-
+            [['group_id'], 'exist', 'skipOnError' => true,
+                'targetClass' => AccountGroup::class,
+                'targetAttribute' => ['group_id' => 'id']],
         ];
     }
 
-    public function attributeLabels()
+    public function attributeLabels(): array
     {
         return [
-            'id' => 'ID',
-            'company_id' => 'Компания',
-            'group_id' => 'Группа',
-            'name' => 'Название пула',
+            'id'          => 'ID',
+            'company_id'  => 'Компания',
+            'group_id'    => 'Группа',
+            'name'        => 'Название пула',
             'description' => 'Описание',
-            'filter_criteria' => 'Критерии фильтрации',
-            'is_active' => 'Активен',
-            'created_at' => 'Создано',
-            'updated_at' => 'Обновлено',
+            'is_active'   => 'Активен',
+            'created_at'  => 'Создано',
+            'updated_at'  => 'Обновлено',
         ];
     }
 
-    /**
-     * Связь с компанией
-     */
+    // ─── Связи ───────────────────────────────────────────────────────────
+
     public function getCompany()
     {
         return $this->hasOne(Company::class, ['id' => 'company_id']);
     }
 
-    /**
-     * Получает группу, которой принадлежит пул
-     */
     public function getGroup()
     {
-        return $this->hasOne(AccountGroup::className(), ['id' => 'group_id']);
+        return $this->hasOne(AccountGroup::class, ['id' => 'group_id']);
     }
 
-    /**
-     * Получает счета, входящие в пул
-     */
     public function getAccounts()
     {
-        return $this->hasMany(Account::className(), ['pool_id' => 'id']);
+        return $this->hasMany(Account::class, ['pool_id' => 'id']);
     }
 
-    /**
-     * Получает отфильтрованные счета на основе критериев
-     */
-    public function getFilteredAccounts()
+    /** Условия фильтрации пула, упорядоченные по sort_order */
+    public function getFilters()
     {
-        $query = Account::find()->where(['company_id' => Yii::$app->user->identity->company_id]);
+        return $this->hasMany(AccountPoolFilter::class, ['pool_id' => 'id'])
+            ->orderBy(['sort_order' => SORT_ASC]);
+    }
 
-        if ($this->filter_criteria) {
-            $criteria = Json::decode($this->filter_criteria);
+    // ─── Фильтрация счетов ────────────────────────────────────────────────
 
-            if (!empty($criteria['currency'])) {
-                $query->andFilterWhere(['currency' => $criteria['currency']]);
-            }
-            if (!empty($criteria['account_type'])) {
-                $query->andFilterWhere(['account_type' => $criteria['account_type']]);
-            }
-            if (!empty($criteria['bank_code'])) {
-                $query->andFilterWhere(['bank_code' => $criteria['bank_code']]);
-            }
-            if (!empty($criteria['country'])) {
-                $query->andFilterWhere(['country' => $criteria['country']]);
-            }
-            if (isset($criteria['is_suspense'])) {
-                $query->andFilterWhere(['is_suspense' => $criteria['is_suspense']]);
-            }
+    /**
+     * Возвращает все счета компании, подходящие под критерии фильтров.
+     * Если фильтров нет — возвращает все счета компании.
+     */
+    public function getFilteredAccounts(): array
+    {
+        $query = Account::find()
+            ->where(['company_id' => Yii::$app->user->identity->company_id]);
+
+        $filters = $this->filters; // загружается через связь
+
+        if (empty($filters)) {
+            return $query->all();
         }
+
+        $this->applyFiltersToQuery($query, $filters);
 
         return $query->all();
     }
 
     /**
-     * Устанавливает критерии фильтрации
+     * Применяет набор AccountPoolFilter к ActiveQuery.
+     * Условия с logic=AND добавляются через andWhere,
+     * условия с logic=OR — через orWhere.
+     * Первое условие всегда andWhere (не зависит от его logic).
      */
-    public function setFilterCriteria($criteria)
+    private function applyFiltersToQuery(\yii\db\ActiveQuery $query, array $filters): void
     {
-        $this->_filterCriteria = $criteria;
-        $this->filter_criteria = Json::encode($criteria);
-    }
-
-    /**
-     * Получает критерии фильтрации
-     */
-    public function getFilterCriteria()
-    {
-        if ($this->_filterCriteria === null && $this->filter_criteria) {
-            $this->_filterCriteria = Json::decode($this->filter_criteria);
+        $first = true;
+        foreach ($filters as $filter) {
+            /** @var AccountPoolFilter $filter */
+            $condition = $filter->buildCondition();
+            if ($first) {
+                $query->andWhere($condition);
+                $first = false;
+            } elseif ($filter->logic === 'OR') {
+                $query->orWhere($condition);
+            } else {
+                $query->andWhere($condition);
+            }
         }
-        return $this->_filterCriteria;
     }
 
     /**
-     * Проверяет, соответствует ли счет критериям фильтрации
+     * Проверяет, соответствует ли счёт всем активным фильтрам пула (PHP-сторона).
+     * Используется, если нужна проверка без запроса в БД.
      */
-    public function matchesFilter($account)
+    public function matchesFilter(Account $account): bool
     {
-        if (!$this->filter_criteria) {
+        $filters = $this->filters;
+        if (empty($filters)) {
             return true;
         }
 
-        $criteria = $this->getFilterCriteria();
+        $result = null;
+        foreach ($filters as $filter) {
+            /** @var AccountPoolFilter $filter */
+            $matches = $this->evaluateFilter($filter, $account);
 
-        if (!empty($criteria['currency']) && $account->currency != $criteria['currency']) {
-            return false;
-        }
-        if (!empty($criteria['account_type']) && $account->account_type != $criteria['account_type']) {
-            return false;
-        }
-        if (!empty($criteria['bank_code']) && $account->bank_code != $criteria['bank_code']) {
-            return false;
-        }
-        if (!empty($criteria['country']) && $account->country != $criteria['country']) {
-            return false;
-        }
-        if (isset($criteria['is_suspense']) && $account->is_suspense != $criteria['is_suspense']) {
-            return false;
+            if ($result === null) {
+                $result = $matches;
+            } elseif ($filter->logic === 'OR') {
+                $result = $result || $matches;
+            } else {
+                $result = $result && $matches;
+            }
         }
 
-        return true;
+        return (bool) $result;
     }
 
-    /**
-     * Автоматическое обновление времени
-     */
-    public function beforeSave($insert)
+    private function evaluateFilter(AccountPoolFilter $filter, Account $account): bool
+    {
+        $field    = $filter->field;
+        $value    = $filter->value;
+        $operator = $filter->operator;
+
+        $accountValue = $account->$field ?? null;
+
+        if ($field === 'is_suspense') {
+            $boolValue    = in_array(strtolower($value), ['1', 'true', 'yes']);
+            $accountBool  = (bool) $accountValue;
+            return $operator === 'eq' ? ($accountBool === $boolValue) : ($accountBool !== $boolValue);
+        }
+
+        if ($operator === 'eq') {
+            return (string) $accountValue === (string) $value;
+        } else {
+            return (string) $accountValue !== (string) $value;
+        }
+    }
+
+    // ─── Хуки ────────────────────────────────────────────────────────────
+
+    public function beforeSave($insert): bool
     {
         if (parent::beforeSave($insert)) {
             if ($this->isNewRecord) {

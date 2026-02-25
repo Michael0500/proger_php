@@ -56,14 +56,6 @@ var PoolsMixin = {
             this._showModal('editPoolModal');
         },
 
-        configurePool: function (pool) {
-            var formData = this._poolFormData(pool);
-            Object.keys(formData).forEach(function (key) {
-                this.$set(this.editingPool, key, formData[key]);
-            }, this);
-            this._showModal('configurePoolModal');
-        },
-
         updatePool: function () {
             var self = this;
             if (!self.editingPool.name || !self.editingPool.name.trim()) {
@@ -122,34 +114,126 @@ var PoolsMixin = {
                     .catch(function () { Swal.fire('Ошибка', 'Не удалось удалить пул', 'error'); });
             });
         },
+        // Открываем модалку конфигурации фильтров
+        configurePool: function (pool) {
+            var self = this;
 
-        // Вспомогательный метод: собирает объект формы пула
-        _poolFormData: function (pool) {
-            // Безопасно парсим filter_criteria: проверяем тип перед JSON.parse
-            let filters = { currency: '', account_type: '', bank_code: '', country: '', is_suspense: false };
+            // Сохраняем базовую информацию о пуле
+            var formData = self._poolFormData(pool);
+            Object.keys(formData).forEach(function (key) {
+                self.$set(self.editingPool, key, formData[key]);
+            });
 
-            if (pool.filter_criteria) {
-                if (typeof pool.filter_criteria === 'string') {
-                    try {
-                        var parsed = JSON.parse(pool.filter_criteria);
-                        if (parsed && typeof parsed === 'object') {
-                            filters = Object.assign({}, filters, parsed);
+            // Загружаем фильтры с сервера
+            self.poolFilters = [];
+            SmartMatchApi.pools.getFilters(pool.id)
+                .then(function (response) {
+                    if (response.data.success) {
+                        // Сохраняем доступные поля для выпадашки
+                        self.poolFilterFields = response.data.available_fields || {};
+
+                        if (response.data.data && response.data.data.length > 0) {
+                            self.poolFilters = response.data.data.map(function (f) {
+                                return {
+                                    id:       f.id || null,
+                                    field:    f.field,
+                                    operator: f.operator,
+                                    value:    f.value,
+                                    logic:    f.logic || 'AND',
+                                };
+                            });
+                        } else {
+                            // Добавляем пустую строку, чтобы форма не была пустой
+                            self.poolFilters = [self._emptyFilter(true)];
                         }
-                    } catch (e) {
-                        console.warn('Failed to parse filter_criteria:', e);
                     }
-                } else if (typeof pool.filter_criteria === 'object') {
-                    filters = Object.assign({}, filters, pool.filter_criteria);
+                })
+                .catch(function () {
+                    self.poolFilters = [self._emptyFilter(true)];
+                });
+
+            self._showModal('configurePoolModal');
+        },
+
+        // Добавить новую строку условия
+        addPoolFilter: function (logic) {
+            this.poolFilters.push(this._emptyFilter(false, logic || 'AND'));
+        },
+
+        // Удалить строку условия по индексу
+        removePoolFilter: function (index) {
+            this.poolFilters.splice(index, 1);
+        },
+
+        // Сохранить фильтры через API
+        savePoolFilters: function () {
+            var self = this;
+
+            // Валидация: у каждой строки должно быть поле и значение
+            for (var i = 0; i < self.poolFilters.length; i++) {
+                var f = self.poolFilters[i];
+                if (!f.field) {
+                    Swal.fire('Ошибка', 'Выберите поле для условия #' + (i + 1), 'error');
+                    return;
+                }
+                if (f.value === '' || f.value === null || f.value === undefined) {
+                    Swal.fire('Ошибка', 'Введите значение для условия #' + (i + 1), 'error');
+                    return;
                 }
             }
 
-            return {
-                id: pool.id,
-                name: pool.name,
-                description: pool.description || '',
-                is_active: pool.is_active !== false,
-                filter_criteria: filters
+            var payload = {
+                pool_id: self.editingPool.id,
+                filters: JSON.stringify(self.poolFilters),
             };
-        }
+
+            SmartMatchApi.pools.saveFilters(payload)
+                .then(function (response) {
+                    if (response.data.success) {
+                        Swal.fire('Сохранено', response.data.message, 'success');
+                        self.closeConfigurePoolModal();
+                        self.loadGroups();
+                    } else {
+                        Swal.fire('Ошибка', response.data.message || 'Не удалось сохранить фильтры', 'error');
+                    }
+                })
+                .catch(function () {
+                    Swal.fire('Ошибка', 'Не удалось сохранить фильтры', 'error');
+                });
+        },
+
+        // Пустая строка фильтра
+        _emptyFilter: function (isFirst, logic) {
+            return {
+                id:       null,
+                field:    '',
+                operator: 'eq',
+                value:    '',
+                logic:    isFirst ? 'AND' : (logic || 'AND'),
+            };
+        },
+
+        // Обновлённый _poolFormData — больше не парсит filter_criteria
+        _poolFormData: function (pool) {
+            return {
+                id:          pool.id,
+                name:        pool.name,
+                description: pool.description || '',
+                is_active:   pool.is_active !== false,
+            };
+        },
+
+        filterValuePlaceholder: function (field) {
+            var map = {
+                'currency':       'USD, EUR, RUB…',
+                'account_type':   'NRE, INV…',
+                'bank_code':      'SWIFT/BIC код…',
+                'country':        'US, DE, RU…',
+                'name':           'Название счёта…',
+                'account_number': 'Номер счёта…',
+                'is_suspense':    '',
+            };
+            return map[field] || 'Значение…';
+        },
     }
 };

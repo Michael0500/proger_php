@@ -25,6 +25,8 @@
                 groups:             [],
                 selectedGroup:      null,
                 selectedPool:       null,
+                poolFilters: [],
+                poolFilterFields: {},
 
                 // Активная секция: 'entries' | 'balance' | 'archive'
                 activeSection: 'entries',

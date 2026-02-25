@@ -124,7 +124,7 @@
     </div>
 </div>
 
-<!-- ══════════════════════════ Пул — Фильтры ══════════════════════════ -->
+<!-- ══════════════════════════ Пул — Фильтры (новая версия) ══════════════════════════ -->
 <div class="modal fade" id="configurePoolModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content">
@@ -137,40 +137,99 @@
                 <button type="button" class="btn-close" @click="closeConfigurePoolModal"></button>
             </div>
             <div class="modal-body">
+
+                <!-- Инфо-бар -->
                 <div style="font-size:12.5px;color:#6b7280;margin-bottom:16px;
                             background:#f5f3ff;border-radius:8px;padding:10px 14px;
                             border-left:3px solid #6366f1">
                     <i class="fas fa-info-circle me-1" style="color:#6366f1"></i>
-                    Счета автоматически включаются в пул, если соответствуют критериям.
+                    Счета автоматически включаются в пул, если соответствуют условиям.
+                    Условия выполняются последовательно с учётом операторов <strong>AND / OR</strong>.
                 </div>
-                <div class="row g-3">
-                    <div class="col-md-4">
-                        <label class="form-label">Валюта</label>
-                        <input type="text" class="form-control" v-model="editingPool.filter_criteria.currency" placeholder="USD, EUR...">
+
+                <!-- Строки условий -->
+                <div v-if="poolFilters.length === 0" style="text-align:center;padding:20px;color:#9ca3af;font-size:13px">
+                    Нет условий — нажмите «Добавить условие»
+                </div>
+
+                <div v-for="(filter, index) in poolFilters" :key="index"
+                     style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+
+                    <!-- Логика AND/OR (показываем только начиная со второй строки) -->
+                    <div style="width:70px;flex-shrink:0">
+                        <template v-if="index === 0">
+                            <span style="font-size:11px;color:#9ca3af;display:block;text-align:center;padding-top:6px">ГДЕ</span>
+                        </template>
+                        <template v-else>
+                            <select class="form-select form-select-sm" v-model="filter.logic"
+                                    style="font-size:12px;font-weight:700;text-align:center">
+                                <option value="AND">AND</option>
+                                <option value="OR">OR</option>
+                            </select>
+                        </template>
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Тип счёта</label>
-                        <input type="text" class="form-control" v-model="editingPool.filter_criteria.account_type" placeholder="NRE, INV...">
+
+                    <!-- Поле -->
+                    <div style="flex:2">
+                        <select class="form-select form-select-sm" v-model="filter.field">
+                            <option value="" disabled>— поле —</option>
+                            <option v-for="(label, key) in poolFilterFields" :key="key" :value="key">
+                                {{ label }}
+                            </option>
+                        </select>
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Код банка</label>
-                        <input type="text" class="form-control" v-model="editingPool.filter_criteria.bank_code" placeholder="SWIFT/BIC...">
+
+                    <!-- Оператор -->
+                    <div style="flex:1;min-width:100px">
+                        <select class="form-select form-select-sm" v-model="filter.operator">
+                            <option value="eq">равно</option>
+                            <option value="neq">не равно</option>
+                        </select>
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Страна</label>
-                        <input type="text" class="form-control" v-model="editingPool.filter_criteria.country" placeholder="US, DE...">
+
+                    <!-- Значение -->
+                    <div style="flex:2">
+                        <!-- Для is_suspense — переключатель -->
+                        <template v-if="filter.field === 'is_suspense'">
+                            <select class="form-select form-select-sm" v-model="filter.value">
+                                <option value="1">Да (Suspense)</option>
+                                <option value="0">Нет</option>
+                            </select>
+                        </template>
+                        <template v-else>
+                            <input type="text" class="form-control form-control-sm"
+                                   v-model="filter.value"
+                                   :placeholder="filterValuePlaceholder(filter.field)">
+                        </template>
                     </div>
-                    <div class="col-md-8 d-flex align-items-end" style="padding-bottom:2px">
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="filterSuspenseSwitch" v-model="editingPool.filter_criteria.is_suspense">
-                            <label class="form-check-label" for="filterSuspenseSwitch">Только Suspense счета (INV)</label>
-                        </div>
+
+                    <!-- Удалить строку -->
+                    <div style="flex-shrink:0">
+                        <button class="btn btn-sm btn-outline-danger" @click="removePoolFilter(index)"
+                                title="Удалить условие">
+                            <i class="fas fa-times"></i>
+                        </button>
                     </div>
                 </div>
+
+                <!-- Кнопки добавления -->
+                <div style="margin-top:12px;display:flex;gap:8px">
+                    <button class="btn btn-sm btn-outline-secondary" @click="addPoolFilter('AND')">
+                        <i class="fas fa-plus me-1"></i>+ AND условие
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" @click="addPoolFilter('OR')">
+                        <i class="fas fa-plus me-1"></i>+ OR условие
+                    </button>
+                </div>
+
             </div>
             <div class="modal-footer">
-                <button class="modal-btn cancel" @click="closeConfigurePoolModal"><i class="fas fa-times"></i>Отмена</button>
-                <button class="modal-btn save"   @click="updatePool"><i class="fas fa-save"></i>Сохранить фильтры</button>
+                <button class="modal-btn cancel" @click="closeConfigurePoolModal">
+                    <i class="fas fa-times"></i>Отмена
+                </button>
+                <button class="modal-btn save" @click="savePoolFilters">
+                    <i class="fas fa-save"></i>Сохранить фильтры
+                </button>
             </div>
         </div>
     </div>
