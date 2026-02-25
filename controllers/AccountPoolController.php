@@ -177,17 +177,17 @@ class AccountPoolController extends BaseController
      * Получить все фильтры пула
      * GET /account-pool/get-filters?pool_id=X
      */
-    public function actionGetFilters($params)
+    public function actionGetFilters($pool_id)
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
 
-        $pool = AccountPool::findOne($params['pool_id']);
+        $pool = AccountPool::findOne($pool_id);
         if (!$pool) {
             return ['success' => false, 'message' => 'Пул не найден'];
         }
 
         $filters = \app\models\AccountPoolFilter::find()
-            ->where(['pool_id' => $params['pool_id']])
+            ->where(['pool_id' => $pool_id])
             ->orderBy(['sort_order' => SORT_ASC])
             ->all();
 
@@ -203,10 +203,45 @@ class AccountPoolController extends BaseController
             ];
         }, $filters);
 
+        // Загружаем счета компании для Select2 в поле account_id
+        $user = \app\models\User::findOne(Yii::$app->user->id);
+        $accounts = [];
+        if ($user && $user->company_id) {
+            $accounts = Account::find()
+                ->select(['id', 'name', 'currency'])
+                ->where(['company_id' => $user->company_id])
+                ->orderBy(['name' => SORT_ASC])
+                ->asArray()
+                ->all();
+        }
+
         return [
             'success'          => true,
             'data'             => $data,
+            // Поля сгруппированные по источнику
+            'field_groups' => [
+                ['label' => 'По счёту (accounts)', 'fields' => \app\models\AccountPoolFilter::accountFields()],
+                ['label' => 'По записям (nostro_entries)', 'fields' => \app\models\AccountPoolFilter::entryFields()],
+            ],
             'available_fields' => \app\models\AccountPoolFilter::availableFields(),
+            'date_fields'      => \app\models\AccountPoolFilter::dateFields(),
+            'select_fields'    => \app\models\AccountPoolFilter::selectFields(),
+            'operators_map'    => array_reduce(
+                array_keys(\app\models\AccountPoolFilter::availableFields()),
+                function ($carry, $field) {
+                    $carry[$field] = \app\models\AccountPoolFilter::operatorsForField($field);
+                    return $carry;
+                },
+                []
+            ),
+            // Фиксированные варианты значений для select-полей
+            'field_options' => [
+                'ls'           => ['L' => 'L — Ledger', 'S' => 'S — Statement'],
+                'dc'           => ['Debit' => 'Debit', 'Credit' => 'Credit'],
+                'match_status' => ['U' => 'U — Не сквитовано', 'M' => 'M — Сквитовано', 'I' => 'I — Игнорируется'],
+                'is_suspense'  => ['1' => 'Да (Suspense)', '0' => 'Нет'],
+            ],
+            'accounts' => $accounts, // для Select2 поля account_id
         ];
     }
 

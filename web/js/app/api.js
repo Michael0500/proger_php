@@ -35,7 +35,7 @@ var SmartMatchApi = (function () {
             update:   function (data) { return post(AppRoutes.poolUpdate, data); },
             delete:   function (id)   { return post(AppRoutes.poolDelete, { id: id }); },
             accounts: function (id)   { return get(AppRoutes.poolGetAccounts, { id: id }); },
-            getFilters:  function(poolId) { return get(AppRoutes.poolGetFilters, { params: { pool_id: poolId } }); },
+            getFilters:  function(poolId) { return get(AppRoutes.poolGetFilters, { pool_id: poolId }); },
             saveFilters: function(data)   { return post(AppRoutes.poolSaveFilters, data); },
 
         },

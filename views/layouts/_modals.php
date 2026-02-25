@@ -124,9 +124,9 @@
     </div>
 </div>
 
-<!-- ══════════════════════════ Пул — Фильтры (новая версия) ══════════════════════════ -->
+<!-- ══════════════════════════ Пул — Фильтры ══════════════════════════ -->
 <div class="modal fade" id="configurePoolModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">
@@ -143,91 +143,160 @@
                             background:#f5f3ff;border-radius:8px;padding:10px 14px;
                             border-left:3px solid #6366f1">
                     <i class="fas fa-info-circle me-1" style="color:#6366f1"></i>
-                    Счета автоматически включаются в пул, если соответствуют условиям.
-                    Условия выполняются последовательно с учётом операторов <strong>AND / OR</strong>.
+                    Записи включаются в пул, если соответствуют условиям.
+                    Условия строятся по полям <strong>счёта</strong> (валюта счёта, тип…)
+                    и по полям <strong>самих записей</strong> (L/S, D/C, статус, дата).
                 </div>
 
-                <!-- Строки условий -->
-                <div v-if="poolFilters.length === 0" style="text-align:center;padding:20px;color:#9ca3af;font-size:13px">
-                    Нет условий — нажмите «Добавить условие»
+                <!-- Лоадер -->
+                <div v-if="poolFiltersLoading" style="text-align:center;padding:24px;color:#6b7280">
+                    <i class="fas fa-spinner fa-spin me-2"></i>Загрузка...
                 </div>
 
-                <div v-for="(filter, index) in poolFilters" :key="index"
-                     style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+                <template v-else>
+                    <!-- Заголовок таблицы -->
+                    <div v-if="poolFilters.length > 0"
+                         style="display:grid;grid-template-columns:70px 1fr 140px 1fr 36px;
+                                gap:6px;margin-bottom:4px;padding:0 2px">
+                        <div style="font-size:11px;color:#9ca3af;text-align:center">Логика</div>
+                        <div style="font-size:11px;color:#9ca3af">Поле</div>
+                        <div style="font-size:11px;color:#9ca3af">Оператор</div>
+                        <div style="font-size:11px;color:#9ca3af">Значение</div>
+                        <div></div>
+                    </div>
 
-                    <!-- Логика AND/OR (показываем только начиная со второй строки) -->
-                    <div style="width:70px;flex-shrink:0">
-                        <template v-if="index === 0">
-                            <span style="font-size:11px;color:#9ca3af;display:block;text-align:center;padding-top:6px">ГДЕ</span>
-                        </template>
-                        <template v-else>
-                            <select class="form-select form-select-sm" v-model="filter.logic"
-                                    style="font-size:12px;font-weight:700;text-align:center">
-                                <option value="AND">AND</option>
-                                <option value="OR">OR</option>
+                    <!-- Строки условий -->
+                    <div v-for="(filter, index) in poolFilters" :key="index"
+                         style="display:grid;grid-template-columns:70px 1fr 140px 1fr 36px;
+                                gap:6px;align-items:start;margin-bottom:8px">
+
+                        <!-- Логика AND/OR -->
+                        <div style="padding-top:2px">
+                            <template v-if="index === 0">
+                                <span style="display:block;text-align:center;font-size:11px;
+                                             color:#9ca3af;padding-top:6px;font-weight:600">ГДЕ</span>
+                            </template>
+                            <template v-else>
+                                <select class="form-select form-select-sm"
+                                        v-model="filter.logic"
+                                        style="font-weight:700;text-align:center;font-size:12px">
+                                    <option value="AND">AND</option>
+                                    <option value="OR">OR</option>
+                                </select>
+                            </template>
+                        </div>
+
+                        <!-- Поле — сгруппированный select -->
+                        <div>
+                            <select class="form-select form-select-sm"
+                                    v-model="filter.field"
+                                    @change="onPoolFilterFieldChange(index)">
+                                <option value="" disabled>— выберите поле —</option>
+                                <template v-for="group in (poolFilterMeta.fieldGroups || [])">
+                                    <optgroup :label="group.label">
+                                        <option v-for="(label, key) in group.fields" :key="key" :value="key">
+                                            {{ label }}
+                                        </option>
+                                    </optgroup>
+                                </template>
                             </select>
-                        </template>
-                    </div>
+                        </div>
 
-                    <!-- Поле -->
-                    <div style="flex:2">
-                        <select class="form-select form-select-sm" v-model="filter.field">
-                            <option value="" disabled>— поле —</option>
-                            <option v-for="(label, key) in poolFilterFields" :key="key" :value="key">
-                                {{ label }}
-                            </option>
-                        </select>
-                    </div>
-
-                    <!-- Оператор -->
-                    <div style="flex:1;min-width:100px">
-                        <select class="form-select form-select-sm" v-model="filter.operator">
-                            <option value="eq">равно</option>
-                            <option value="neq">не равно</option>
-                        </select>
-                    </div>
-
-                    <!-- Значение -->
-                    <div style="flex:2">
-                        <!-- Для is_suspense — переключатель -->
-                        <template v-if="filter.field === 'is_suspense'">
-                            <select class="form-select form-select-sm" v-model="filter.value">
-                                <option value="1">Да (Suspense)</option>
-                                <option value="0">Нет</option>
+                        <!-- Оператор -->
+                        <div>
+                            <select class="form-select form-select-sm"
+                                    v-model="filter.operator"
+                                    @change="onPoolFilterOperatorChange(index)"
+                                    :disabled="!filter.field">
+                                <option v-for="(label, op) in poolFilterOperators(filter)" :key="op" :value="op">
+                                    {{ label }}
+                                </option>
                             </select>
-                        </template>
-                        <template v-else>
-                            <input type="text" class="form-control form-control-sm"
-                                   v-model="filter.value"
-                                   :placeholder="filterValuePlaceholder(filter.field)">
-                        </template>
+                        </div>
+
+                        <!-- Значение — зависит от типа поля -->
+                        <div>
+                            <!-- account_id: Select2 -->
+                            <template v-if="filter.field === 'account_id'">
+                                <select :id="'pool-filter-account-' + index"
+                                        class="form-select form-select-sm"
+                                        style="width:100%">
+                                    <option v-if="filter.value" :value="filter.value">
+                                        {{ (poolFilterMeta.accounts || []).find(function(a){ return String(a.id) === String(filter.value); }) ? (poolFilterMeta.accounts.find(function(a){ return String(a.id) === String(filter.value); }).name) : filter.value }}
+                                    </option>
+                                </select>
+                            </template>
+
+                            <!-- select-поля: ls, dc, match_status, is_suspense -->
+                            <template v-else-if="isSelectFilterField(filter) && filter.field !== 'account_id'">
+                                <select class="form-select form-select-sm" v-model="filter.value" :disabled="!filter.field">
+                                    <option value="" disabled>— выберите —</option>
+                                    <option v-for="(label, val) in poolFilterFieldOptions(filter)" :key="val" :value="val">
+                                        {{ label }}
+                                    </option>
+                                </select>
+                            </template>
+
+                            <!-- Дата: between — два поля -->
+                            <template v-else-if="isDateFilterField(filter) && filter.operator === 'between'">
+                                <div style="display:flex;gap:4px;align-items:center">
+                                    <input type="date" class="form-control form-control-sm"
+                                           v-model="filter.value" :disabled="!filter.field"
+                                           style="flex:1">
+                                    <span style="color:#9ca3af;font-size:11px;flex-shrink:0">—</span>
+                                    <input type="date" class="form-control form-control-sm"
+                                           v-model="filter.value2" :disabled="!filter.field"
+                                           style="flex:1">
+                                </div>
+                            </template>
+
+                            <!-- Дата: одна дата -->
+                            <template v-else-if="isDateFilterField(filter)">
+                                <input type="date" class="form-control form-control-sm"
+                                       v-model="filter.value" :disabled="!filter.field">
+                            </template>
+
+                            <!-- Текстовое поле по умолчанию -->
+                            <template v-else>
+                                <input type="text" class="form-control form-control-sm"
+                                       v-model="filter.value"
+                                       :disabled="!filter.field"
+                                       :placeholder="filterValueHint(filter.field)">
+                            </template>
+                        </div>
+
+                        <!-- Удалить строку -->
+                        <div>
+                            <button class="btn btn-sm btn-outline-danger" @click="removePoolFilter(index)"
+                                    style="padding:3px 7px" title="Удалить условие">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
                     </div>
 
-                    <!-- Удалить строку -->
-                    <div style="flex-shrink:0">
-                        <button class="btn btn-sm btn-outline-danger" @click="removePoolFilter(index)"
-                                title="Удалить условие">
-                            <i class="fas fa-times"></i>
+                    <!-- Пусто -->
+                    <div v-if="poolFilters.length === 0"
+                         style="text-align:center;padding:20px 0;color:#9ca3af;font-size:13px">
+                        Условий нет — нажмите «+ AND» или «+ OR», чтобы добавить
+                    </div>
+
+                    <!-- Кнопки добавления -->
+                    <div style="margin-top:14px;display:flex;gap:8px">
+                        <button class="btn btn-sm btn-outline-secondary" @click="addPoolFilter('AND')">
+                            <i class="fas fa-plus me-1"></i>+ AND условие
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" @click="addPoolFilter('OR')">
+                            <i class="fas fa-plus me-1"></i>+ OR условие
                         </button>
                     </div>
-                </div>
-
-                <!-- Кнопки добавления -->
-                <div style="margin-top:12px;display:flex;gap:8px">
-                    <button class="btn btn-sm btn-outline-secondary" @click="addPoolFilter('AND')">
-                        <i class="fas fa-plus me-1"></i>+ AND условие
-                    </button>
-                    <button class="btn btn-sm btn-outline-secondary" @click="addPoolFilter('OR')">
-                        <i class="fas fa-plus me-1"></i>+ OR условие
-                    </button>
-                </div>
+                </template>
 
             </div>
             <div class="modal-footer">
                 <button class="modal-btn cancel" @click="closeConfigurePoolModal">
                     <i class="fas fa-times"></i>Отмена
                 </button>
-                <button class="modal-btn save" @click="savePoolFilters">
+                <button class="modal-btn save" @click="savePoolFilters" :disabled="poolFiltersLoading">
                     <i class="fas fa-save"></i>Сохранить фильтры
                 </button>
             </div>

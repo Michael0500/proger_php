@@ -57,47 +57,59 @@ class NostroEntryController extends BaseController
                 return ['success' => false, 'message' => 'Пул не найден'];
             }
 
-            // Загружаем строки фильтров пула из отдельной таблицы
             $poolFilters = \app\models\AccountPoolFilter::find()
                 ->where(['pool_id' => $poolId])
                 ->orderBy(['sort_order' => SORT_ASC])
                 ->all();
 
             if (!empty($poolFilters)) {
-                // Строим subquery счетов, удовлетворяющих фильтрам
-                $accountQuery = Account::find()
-                    ->select('id')
-                    ->where(['company_id' => $cid]);
+                // ── Шаг 1: account-фильтры → находим подходящие account_id ─────────
+                /** @var \app\models\AccountPoolFilter[] $accountFilters */
+                $accountFilters = array_values(array_filter($poolFilters, function($f) { return $f->isAccountField(); }));
+                /** @var \app\models\AccountPoolFilter[] $entryFilters */
+                $entryFilters   = array_values(array_filter($poolFilters, function($f) { return $f->isEntryField(); }));
 
-                $first = true;
-                foreach ($poolFilters as $pf) {
-                    /** @var \app\models\AccountPoolFilter $pf */
-                    $condition = $pf->buildCondition();
+                if (!empty($accountFilters)) {
+                    $accountQuery = Account::find()
+                        ->select('id')
+                        ->where(['company_id' => $cid]);
 
-                    if ($first) {
-                        $accountQuery->andWhere($condition);
-                        $first = false;
-                    } elseif ($pf->logic === 'OR') {
-                        $accountQuery->orWhere($condition);
-                    } else {
-                        $accountQuery->andWhere($condition);
+                    $firstAcc = true;
+                    foreach ($accountFilters as $pf) {
+                        $condition = $pf->buildAccountCondition();
+                        if ($condition === null) continue;
+                        if ($firstAcc) {
+                            $accountQuery->andWhere($condition);
+                            $firstAcc = false;
+                        } elseif ($pf->logic === 'OR') {
+                            $accountQuery->orWhere($condition);
+                        } else {
+                            $accountQuery->andWhere($condition);
+                        }
                     }
+
+                    $accountIds = $accountQuery->column();
+
+                    if (empty($accountIds)) {
+                        return ['success' => true, 'data' => [], 'total' => 0,
+                            'page' => $page, 'limit' => $limit, 'pages' => 0];
+                    }
+                    $q->andWhere(['ne.account_id' => $accountIds]);
                 }
 
-                $accountIds = $accountQuery->column();
-
-                if (!empty($accountIds)) {
-                    $q->andWhere(['ne.account_id' => $accountIds]);
-                } else {
-                    // Ни один счёт не прошёл фильтры — возвращаем пустой результат
-                    return [
-                        'success' => true,
-                        'data'    => [],
-                        'total'   => 0,
-                        'page'    => $page,
-                        'limit'   => $limit,
-                        'pages'   => 0,
-                    ];
+                // ── Шаг 2: entry-фильтры → применяем к основному запросу ──────────
+                $firstEntry = true;
+                foreach ($entryFilters as $pf) {
+                    $condition = $pf->buildEntryCondition('ne');
+                    if ($condition === null) continue;
+                    if ($firstEntry) {
+                        $q->andWhere($condition);
+                        $firstEntry = false;
+                    } elseif ($pf->logic === 'OR') {
+                        $q->orWhere($condition);
+                    } else {
+                        $q->andWhere($condition);
+                    }
                 }
             }
         }

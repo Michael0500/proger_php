@@ -9,38 +9,68 @@ use yii\db\ActiveRecord;
  *
  * @property int    $id
  * @property int    $pool_id
- * @property string $field       — currency | account_type | bank_code | country | is_suspense | name | account_number
- * @property string $operator    — eq | neq
- * @property string $value
+ * @property string $field
+ * @property string $operator    — eq | neq | between | gte | lte
+ * @property string $value       — значение (для between: "дата1|дата2")
  * @property string $logic       — AND | OR
  * @property int    $sort_order
  * @property string $created_at
- *
- * @property AccountPool $pool
  */
 class AccountPoolFilter extends ActiveRecord
 {
-    /** Доступные поля для фильтрации */
-    public static function availableFields(): array
+    public static function accountFields(): array
     {
         return [
-            'currency'       => 'Валюта',
-            'account_type'   => 'Тип счёта',
-            'bank_code'      => 'Код банка (SWIFT/BIC)',
-            'country'        => 'Страна',
-            'name'           => 'Название счёта',
-            'account_number' => 'Номер счёта',
-            'is_suspense'    => 'Suspense счёт',
+            'account_id'   => 'Счёт (название)',
+            'currency'     => 'Валюта счёта',
+            'account_type' => 'Тип счёта',
+            'country'      => 'Страна',
+            'is_suspense'  => 'Suspense счёт',
         ];
     }
 
-    /** Доступные операторы */
-    public static function availableOperators(): array
+    public static function entryFields(): array
     {
         return [
-            'eq'  => 'равно',
-            'neq' => 'не равно',
+            'ls'             => 'L/S (Ledger/Statement)',
+            'dc'             => 'D/C (Debit/Credit)',
+            'match_status'   => 'Статус квитования',
+            'entry_currency' => 'Валюта записи',
+            'value_date'     => 'Дата валютирования',
+            'post_date'      => 'Дата проводки',
         ];
+    }
+
+    public static function availableFields(): array
+    {
+        return array_merge(self::accountFields(), self::entryFields());
+    }
+
+    /** Поля с выбором из фиксированного списка */
+    public static function selectFields(): array
+    {
+        return ['account_id', 'ls', 'dc', 'match_status', 'is_suspense'];
+    }
+
+    /** Поля с выбором даты / диапазона */
+    public static function dateFields(): array
+    {
+        return ['value_date', 'post_date'];
+    }
+
+    /** Операторы для конкретного поля */
+    public static function operatorsForField(string $field): array
+    {
+        if (in_array($field, self::dateFields(), true)) {
+            return [
+                'eq'      => 'равно (конкретная дата)',
+                'neq'     => 'не равно',
+                'between' => 'диапазон дат',
+                'gte'     => 'с даты (>=)',
+                'lte'     => 'по дату (<=)',
+            ];
+        }
+        return ['eq' => 'равно', 'neq' => 'не равно'];
     }
 
     public static function tableName(): string
@@ -51,12 +81,13 @@ class AccountPoolFilter extends ActiveRecord
     public function rules(): array
     {
         return [
-            [['pool_id', 'field', 'operator', 'value'], 'required'],
+            [['pool_id', 'field', 'operator'], 'required'],
             [['pool_id', 'sort_order'], 'integer'],
             [['field'], 'in', 'range' => array_keys(self::availableFields())],
-            [['operator'], 'in', 'range' => ['eq', 'neq']],
+            [['operator'], 'in', 'range' => ['eq', 'neq', 'between', 'gte', 'lte']],
             [['logic'], 'in', 'range' => ['AND', 'OR']],
             [['value'], 'string', 'max' => 255],
+            [['value'], 'default', 'value' => ''],
             [['logic'], 'default', 'value' => 'AND'],
             [['sort_order'], 'default', 'value' => 0],
         ];
@@ -67,30 +98,79 @@ class AccountPoolFilter extends ActiveRecord
         return $this->hasOne(AccountPool::class, ['id' => 'pool_id']);
     }
 
-    /**
-     * Применяет условие к ActiveQuery на таблицу счетов.
-     * Возвращает массив для andWhere/orWhere.
-     */
-    public function buildCondition(): array
+    public function isAccountField(): bool
     {
+        return array_key_exists($this->field, self::accountFields());
+    }
+
+    public function isEntryField(): bool
+    {
+        return array_key_exists($this->field, self::entryFields());
+    }
+
+    /**
+     * Условие для фильтрации по таблице accounts.
+     * Возвращает null если поле — из nostro_entries.
+     */
+    public function buildAccountCondition(string $alias = ''): ?array
+    {
+        if ($this->isEntryField()) {
+            return null;
+        }
+
+        $p     = $alias ? $alias . '.' : '';
         $field = $this->field;
         $value = $this->value;
 
-        // Для булевых полей
+        if ($field === 'account_id') {
+            $col = $p . 'id';
+            return $this->operator === 'eq' ? [$col => (int)$value] : ['<>', $col, (int)$value];
+        }
+
         if ($field === 'is_suspense') {
-            $boolValue = in_array(strtolower($value), ['1', 'true', 'yes']) ? true : false;
-            if ($this->operator === 'eq') {
-                return [$field => $boolValue];
-            } else {
-                return ['<>', $field, $boolValue];
+            $boolVal = in_array(strtolower($value), ['1', 'true', 'yes']);
+            $col     = $p . 'is_suspense';
+            return $this->operator === 'eq' ? [$col => $boolVal] : ['<>', $col, $boolVal];
+        }
+
+        $col = $p . $field;
+        return $this->operator === 'eq' ? [$col => $value] : ['<>', $col, $value];
+    }
+
+    /**
+     * Условие для фильтрации по таблице nostro_entries.
+     * Возвращает null если поле — из accounts.
+     */
+    public function buildEntryCondition(string $alias = 'ne'): ?array
+    {
+        if ($this->isAccountField()) {
+            return null;
+        }
+
+        $p     = $alias ? $alias . '.' : '';
+        $field = $this->field;
+        $value = $this->value;
+
+        // entry_currency → реальная колонка "currency"
+        $col = $p . ($field === 'entry_currency' ? 'currency' : $field);
+
+        if (in_array($field, self::dateFields(), true)) {
+            switch ($this->operator) {
+                case 'between':
+                    $parts = explode('|', $value, 2);
+                    $from  = trim($parts[0] ?? '');
+                    $to    = trim($parts[1] ?? '');
+                    if ($from && $to)  return ['between', $col, $from, $to];
+                    if ($from)         return ['>=', $col, $from];
+                    if ($to)           return ['<=', $col, $to];
+                    return null;
+                case 'gte':  return ['>=', $col, $value];
+                case 'lte':  return ['<=', $col, $value];
+                case 'neq':  return ['<>', $col, $value];
+                default:     return [$col => $value];
             }
         }
 
-        if ($this->operator === 'eq') {
-            return [$field => $value];
-        } else {
-            // neq
-            return ['<>', $field, $value];
-        }
+        return $this->operator === 'eq' ? [$col => $value] : ['<>', $col, $value];
     }
 }

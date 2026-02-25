@@ -27,6 +27,8 @@
                 selectedPool:       null,
                 poolFilters: [],
                 poolFilterFields: {},
+                poolFilterMeta:     {},
+                poolFiltersLoading: false,
 
                 // Активная секция: 'entries' | 'balance' | 'archive'
                 activeSection: 'entries',
