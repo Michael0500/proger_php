@@ -572,59 +572,246 @@
 </div>
 
 <!-- ══════════════════════════ История изменений записи ══════════════════════════ -->
-<div class="modal fade" id="entryHistoryModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered modal-xl">
+<div class="modal fade" id="entryHistoryModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:1100px">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">
                     <span class="modal-icon indigo"><i class="fas fa-history"></i></span>
                     История изменений записи
                     <span v-if="historyEntry" style="font-weight:400;color:#9ca3af;font-size:13px;margin-left:8px">
-                        #{{ historyEntry.id }} · {{ historyEntry.ls }} · {{ historyEntry.dc === 'Debit' ? 'D' : 'C' }} · {{ formatAmount(historyEntry.amount) }} {{ historyEntry.currency }}
+                        #{{ historyEntry.id }}
+                        · <span style="color:#6366f1;font-weight:600">{{ historyEntry.ls }}</span>
+                        · <span :style="historyEntry.dc==='Debit'?'color:#dc2626;font-weight:600':'color:#059669;font-weight:600'">
+                            {{ historyEntry.dc === 'Debit' ? 'D' : 'C' }}
+                          </span>
+                        · {{ formatAmount(historyEntry.amount) }} {{ historyEntry.currency }}
                     </span>
                 </h5>
-                <button type="button" class="btn-close" @click="closeHistoryModal"></button>
+                <!-- Кнопка закрытия: используем явный стиль, без data-bs-dismiss чтобы избежать конфликтов -->
+                <button type="button"
+                        style="background:none;border:none;padding:4px 8px;cursor:pointer;color:#6b7280;font-size:18px;line-height:1;border-radius:4px"
+                        @click.stop="closeHistoryModal"
+                        title="Закрыть">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
+
             <div class="modal-body" style="padding:0 !important">
-                <div v-if="historyLoading" style="text-align:center;padding:40px">
-                    <div class="spinner-border" style="color:#6366f1"></div>
-                    <div style="margin-top:10px;color:#9ca3af;font-size:13px">Загрузка истории...</div>
+
+                <!-- Загрузка -->
+                <div v-if="historyLoading" style="text-align:center;padding:48px">
+                    <div class="spinner-border" style="color:#6366f1;width:32px;height:32px"></div>
+                    <div style="margin-top:12px;color:#9ca3af;font-size:13px">Загрузка истории...</div>
                 </div>
-                <div v-else-if="!historyItems || historyItems.length === 0" class="empty-pool" style="padding:48px">
-                    <i class="fas fa-inbox" style="font-size:48px;color:#d1d5db"></i>
-                    <p style="margin-top:12px;color:#9ca3af">История изменений пуста</p>
+
+                <!-- Пусто -->
+                <div v-else-if="!historyItems || historyItems.length === 0" class="empty-pool" style="padding:56px">
+                    <i class="fas fa-clock" style="font-size:48px;color:#d1d5db"></i>
+                    <p style="margin-top:12px;color:#9ca3af;font-size:14px">История изменений пуста</p>
                 </div>
-                <div v-else class="history-timeline" style="padding:16px;max-height:600px;overflow-y:auto">
-                    <div v-for="(item, idx) in historyItems" :key="item.id" class="history-item">
-                        <div class="history-item-header">
-                            <div class="history-badge" :class="'badge-' + item.action">
-                                <i :class="getHistoryIcon(item.action)"></i>
-                                {{ getHistoryActionLabel(item.action) }}
-                            </div>
-                            <div class="history-meta">
-                                <span class="history-date">{{ formatDate(item.created_at) }}</span>
-                                <span v-if="item.reason" class="history-reason">{{ item.reason }}</span>
-                            </div>
-                        </div>
-                        <div v-if="item.changed_field" class="history-field-badge">
-                            <i class="fas fa-tag"></i> {{ getFieldLabel(item.changed_field) }}
-                        </div>
-                        <div v-if="item.old_values || item.new_values" class="history-values">
-                            <div v-if="item.old_values" class="history-old">
-                                <span class="history-label">Было:</span>
-                                <div class="history-value-content">{{ formatValue(item.old_values, item.changed_field) }}</div>
-                            </div>
-                            <div v-if="item.new_values" class="history-new">
-                                <span class="history-label">Стало:</span>
-                                <div class="history-value-content">{{ formatValue(item.new_values, item.changed_field) }}</div>
-                            </div>
-                        </div>
-                        <div v-if="idx < historyItems.length - 1" class="history-connector"></div>
-                    </div>
+
+                <!-- Таблица истории -->
+                <div v-else class="hist-table-wrap">
+                    <table class="hist-table">
+                        <thead>
+                        <tr>
+                            <th class="hist-th-meta" style="min-width:140px">Дата / Действие</th>
+                            <th class="hist-th-meta" style="min-width:80px">Польз.</th>
+                            <!-- Колонки полей записи -->
+                            <th>Счёт</th>
+                            <th>L/S</th>
+                            <th>D/C</th>
+                            <th style="text-align:right">Сумма</th>
+                            <th>Валюта</th>
+                            <th>Value Date</th>
+                            <th>Post Date</th>
+                            <th>Instr. ID</th>
+                            <th>E2E ID</th>
+                            <th>Txn ID</th>
+                            <th>Msg ID</th>
+                            <th>Комментарий</th>
+                            <th>Статус</th>
+                            <th>Match ID</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <!--
+                            Каждая строка = одна запись аудита.
+                            Показываем НОВОЕ состояние полей (new_values), подсвечивая изменённое поле.
+                            Если action = 'create' — показываем new_values как есть (первоначальное создание).
+                            Если action = 'delete' — показываем old_values.
+                        -->
+                        <tr v-for="item in historyItems" :key="item.id"
+                            :class="'hist-row hist-row-' + item.action">
+
+                            <!-- Мета: дата + действие -->
+                            <td class="hist-td-meta">
+                                <div class="hist-action-badge" :class="'hist-badge-' + item.action">
+                                    <i :class="getHistoryIcon(item.action)"></i>
+                                    {{ getHistoryActionLabel(item.action) }}
+                                </div>
+                                <div class="hist-date">{{ formatDate(item.created_at) }}</div>
+                                <div v-if="item.reason" class="hist-reason" :title="item.reason">
+                                    <i class="fas fa-comment-alt" style="font-size:9px"></i>
+                                    {{ item.reason }}
+                                </div>
+                            </td>
+
+                            <!-- Пользователь -->
+                            <td class="hist-td-meta">
+                                <div class="hist-user">
+                                    <i class="fas fa-user-circle" style="color:#9ca3af;font-size:14px"></i>
+                                    <span>#{{ item.user_id || '—' }}</span>
+                                </div>
+                            </td>
+
+                            <!-- account_id / account_name -->
+                            <td :class="histCellClass(item, 'account_id')">
+                                <div class="hist-cell-inner">
+                                    <div v-if="isChanged(item, 'account_id')" class="hist-old-val">
+                                        {{ getOldVal(item, 'account_id') || '—' }}
+                                    </div>
+                                    <div class="hist-new-val">{{ getNewVal(item, 'account_id') || '—' }}</div>
+                                </div>
+                            </td>
+
+                            <!-- ls -->
+                            <td :class="histCellClass(item, 'ls')">
+                                <div class="hist-cell-inner">
+                                    <div v-if="isChanged(item, 'ls')" class="hist-old-val">
+                                        {{ getOldVal(item, 'ls') || '—' }}
+                                    </div>
+                                    <span class="hist-new-val" style="font-weight:700;color:#6366f1">
+                                            {{ getNewVal(item, 'ls') || '—' }}
+                                        </span>
+                                </div>
+                            </td>
+
+                            <!-- dc -->
+                            <td :class="histCellClass(item, 'dc')">
+                                <div class="hist-cell-inner">
+                                    <div v-if="isChanged(item, 'dc')" class="hist-old-val">
+                                        {{ getOldVal(item, 'dc') === 'Debit' ? 'D' : (getOldVal(item,'dc') === 'Credit' ? 'C' : '—') }}
+                                    </div>
+                                    <span class="hist-new-val" style="font-weight:700"
+                                          :style="getNewVal(item,'dc')==='Debit'?'color:#dc2626':'color:#059669'">
+                                            {{ getNewVal(item, 'dc') === 'Debit' ? 'D' : (getNewVal(item,'dc') === 'Credit' ? 'C' : '—') }}
+                                        </span>
+                                </div>
+                            </td>
+
+                            <!-- amount -->
+                            <td :class="histCellClass(item, 'amount')" style="text-align:right">
+                                <div class="hist-cell-inner" style="align-items:flex-end">
+                                    <div v-if="isChanged(item, 'amount')" class="hist-old-val" style="font-family:monospace">
+                                        {{ formatAmount(getOldVal(item, 'amount')) }}
+                                    </div>
+                                    <div class="hist-new-val" style="font-family:monospace;font-weight:600">
+                                        {{ formatAmount(getNewVal(item, 'amount')) }}
+                                    </div>
+                                </div>
+                            </td>
+
+                            <!-- currency -->
+                            <td :class="histCellClass(item, 'currency')">
+                                <div class="hist-cell-inner">
+                                    <div v-if="isChanged(item, 'currency')" class="hist-old-val">{{ getOldVal(item,'currency')||'—' }}</div>
+                                    <div class="hist-new-val" style="font-weight:600">{{ getNewVal(item,'currency')||'—' }}</div>
+                                </div>
+                            </td>
+
+                            <!-- value_date -->
+                            <td :class="histCellClass(item, 'value_date')">
+                                <div class="hist-cell-inner">
+                                    <div v-if="isChanged(item, 'value_date')" class="hist-old-val">{{ getOldVal(item,'value_date')||'—' }}</div>
+                                    <div class="hist-new-val">{{ getNewVal(item,'value_date')||'—' }}</div>
+                                </div>
+                            </td>
+
+                            <!-- post_date -->
+                            <td :class="histCellClass(item, 'post_date')">
+                                <div class="hist-cell-inner">
+                                    <div v-if="isChanged(item, 'post_date')" class="hist-old-val">{{ getOldVal(item,'post_date')||'—' }}</div>
+                                    <div class="hist-new-val">{{ getNewVal(item,'post_date')||'—' }}</div>
+                                </div>
+                            </td>
+
+                            <!-- instruction_id -->
+                            <td :class="histCellClass(item, 'instruction_id')">
+                                <div class="hist-cell-inner">
+                                    <div v-if="isChanged(item, 'instruction_id')" class="hist-old-val hist-mono">{{ getOldVal(item,'instruction_id')||'—' }}</div>
+                                    <div class="hist-new-val hist-mono">{{ getNewVal(item,'instruction_id')||'—' }}</div>
+                                </div>
+                            </td>
+
+                            <!-- end_to_end_id -->
+                            <td :class="histCellClass(item, 'end_to_end_id')">
+                                <div class="hist-cell-inner">
+                                    <div v-if="isChanged(item, 'end_to_end_id')" class="hist-old-val hist-mono">{{ getOldVal(item,'end_to_end_id')||'—' }}</div>
+                                    <div class="hist-new-val hist-mono">{{ getNewVal(item,'end_to_end_id')||'—' }}</div>
+                                </div>
+                            </td>
+
+                            <!-- transaction_id -->
+                            <td :class="histCellClass(item, 'transaction_id')">
+                                <div class="hist-cell-inner">
+                                    <div v-if="isChanged(item, 'transaction_id')" class="hist-old-val hist-mono">{{ getOldVal(item,'transaction_id')||'—' }}</div>
+                                    <div class="hist-new-val hist-mono">{{ getNewVal(item,'transaction_id')||'—' }}</div>
+                                </div>
+                            </td>
+
+                            <!-- message_id -->
+                            <td :class="histCellClass(item, 'message_id')">
+                                <div class="hist-cell-inner">
+                                    <div v-if="isChanged(item, 'message_id')" class="hist-old-val hist-mono">{{ getOldVal(item,'message_id')||'—' }}</div>
+                                    <div class="hist-new-val hist-mono">{{ getNewVal(item,'message_id')||'—' }}</div>
+                                </div>
+                            </td>
+
+                            <!-- comment -->
+                            <td :class="histCellClass(item, 'comment')">
+                                <div class="hist-cell-inner">
+                                    <div v-if="isChanged(item, 'comment')" class="hist-old-val" style="font-style:italic">{{ getOldVal(item,'comment')||'—' }}</div>
+                                    <div class="hist-new-val" style="font-style:italic">{{ getNewVal(item,'comment')||'—' }}</div>
+                                </div>
+                            </td>
+
+                            <!-- match_status -->
+                            <td :class="histCellClass(item, 'match_status')">
+                                <div class="hist-cell-inner">
+                                    <div v-if="isChanged(item, 'match_status')" class="hist-old-val">
+                                        {{ histStatusLabel(getOldVal(item,'match_status')) }}
+                                    </div>
+                                    <div class="hist-new-val">
+                                        {{ histStatusLabel(getNewVal(item,'match_status')) }}
+                                    </div>
+                                </div>
+                            </td>
+
+                            <!-- match_id -->
+                            <td :class="histCellClass(item, 'match_id')">
+                                <div class="hist-cell-inner">
+                                    <div v-if="isChanged(item, 'match_id')" class="hist-old-val hist-mono">{{ getOldVal(item,'match_id')||'—' }}</div>
+                                    <div class="hist-new-val hist-mono">{{ getNewVal(item,'match_id')||'—' }}</div>
+                                </div>
+                            </td>
+
+                        </tr>
+                        </tbody>
+                    </table>
                 </div>
-            </div>
+
+            </div><!-- /modal-body -->
+
             <div class="modal-footer">
-                <button class="modal-btn cancel" @click="closeHistoryModal">
+                <div v-if="historyItems && historyItems.length > 0"
+                     style="font-size:12px;color:#9ca3af;margin-right:auto">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Изменённые поля <span class="hist-legend-changed"></span> подсвечены.
+                    Зачёркнутое — прежнее значение, жирное — новое.
+                </div>
+                <button class="modal-btn cancel" @click.stop="closeHistoryModal">
                     <i class="fas fa-times"></i>Закрыть
                 </button>
             </div>

@@ -135,6 +135,83 @@ var ModalsMixin = {
                 lines.push(label + ': ' + (formatted === null || formatted === '' ? '—' : formatted));
             });
             return lines.join('\n');
-        }
+        },
+        /**
+         * Получить значение поля из new_values или old_values в зависимости от action.
+         * Для 'delete' — показываем old_values; для остальных — new_values.
+         */
+        _histGetValues: function (item) {
+            if (!item) return {};
+            if (item.action === 'delete') {
+                return item.old_values || {};
+            }
+            return item.new_values || {};
+        },
+
+        /**
+         * Вернуть новое (текущее) значение поля
+         */
+        getNewVal: function (item, field) {
+            var vals = this._histGetValues(item);
+            var v = vals[field];
+            return (v === undefined || v === null) ? null : v;
+        },
+
+        /**
+         * Вернуть старое значение поля (из old_values)
+         */
+        getOldVal: function (item, field) {
+            if (!item || !item.old_values) return null;
+            var v = item.old_values[field];
+            return (v === undefined || v === null) ? null : v;
+        },
+
+        /**
+         * Проверить, изменилось ли данное поле в этой записи аудита.
+         * Поле изменилось если:
+         *  - changed_field совпадает с field (точное поле)
+         *  - ИЛИ old_values содержит это поле (и оно отличается от new_values)
+         */
+        isChanged: function (item, field) {
+            if (!item) return false;
+            // Если changed_field явно указан
+            if (item.changed_field === field) return true;
+            // Если нет changed_field — сравниваем old и new
+            if (!item.changed_field && item.old_values && item.new_values) {
+                var oldV = item.old_values[field];
+                var newV = item.new_values[field];
+                if (oldV !== undefined || newV !== undefined) {
+                    return String(oldV) !== String(newV);
+                }
+            }
+            return false;
+        },
+
+        /**
+         * CSS-класс ячейки: подсвечиваем изменённые колонки
+         */
+        histCellClass: function (item, field) {
+            var base = 'hist-td';
+            if (this.isChanged(item, field)) {
+                return base + ' hist-td-changed';
+            }
+            // Если action = create — все поля "новые", мягкая подсветка
+            if (item && item.action === 'create') {
+                var vals = item.new_values || {};
+                if (vals[field] !== undefined && vals[field] !== null && vals[field] !== '') {
+                    return base + ' hist-td-created';
+                }
+            }
+            return base;
+        },
+
+        /**
+         * Читаемый статус квитования
+         */
+        histStatusLabel: function (code) {
+            if (!code) return '—';
+            var map = { 'U': 'Ожидает', 'M': 'Сквит.', 'I': 'Игнор', 'A': 'Архив' };
+            return map[code] || code;
+        },
     }
 };
