@@ -213,15 +213,41 @@ class NostroBalanceController extends BaseController
         $m  = NostroBalance::findOne(['id' => $id, 'company_id' => $cid]);
         if (!$m) return ['success' => false, 'message' => 'Запись не найдена'];
 
-        $logs = NostroBalanceAudit::find()
+        $audits = NostroBalanceAudit::find()
             ->where(['balance_id' => $id])
             ->orderBy(['created_at' => SORT_DESC])
+            ->asArray()
             ->all();
 
-        return [
-            'success' => true,
-            'data'    => array_map(fn($l) => $l->toApiArray(), $logs),
-        ];
+        // Кэш пользователей
+        $userIds = array_unique(array_filter(array_column($audits, 'user_id')));
+        $users   = [];
+        if (!empty($userIds)) {
+            $userRows = \app\models\User::find()
+                ->select(['id', 'username', 'email'])
+                ->where(['id' => $userIds])
+                ->asArray()
+                ->all();
+            foreach ($userRows as $u) {
+                $users[$u['id']] = $u['username'] ?: $u['email'];
+            }
+        }
+
+        $rows = [];
+        foreach ($audits as $audit) {
+            $rows[] = [
+                'id'         => $audit['id'],
+                'action'     => $audit['action'],
+                'user_id'    => $audit['user_id'],
+                'username'   => $users[$audit['user_id']] ?? ('User #' . $audit['user_id']),
+                'old_values' => $audit['old_values'] ? json_decode($audit['old_values'], true) : null,
+                'new_values' => $audit['new_values'] ? json_decode($audit['new_values'], true) : null,
+                'reason'     => $audit['reason'],
+                'created_at' => $audit['created_at'],
+            ];
+        }
+
+        return ['success' => true, 'data' => $rows];
     }
 
     // ─────────────────────────────────────────────────────────────

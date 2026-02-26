@@ -433,8 +433,8 @@
 </div>
 
 <!-- ════════════════ МОДАЛ ДОБАВЛЕНИЯ/РЕДАКТИРОВАНИЯ ЗАПИСИ ════════════════ -->
-<div class="modal fade" id="entryModal" tabindex="-1" aria-labelledby="entryModalLabel" style="max-width: 1000px">
-    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+<div class="modal fade" id="entryModal" tabindex="-1" aria-labelledby="entryModalLabel">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable" style="max-width: 1000px">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="entryModalLabel">

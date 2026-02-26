@@ -573,9 +573,7 @@
                                         title="Подтвердить" @click="openConfirmModal(row)">
                                     <i class="fas fa-check"></i>
                                 </button>
-                                <button v-if="row.status==='confirmed'" class="row-btn"
-                                        style="color:#374151;background:#f3f4f6;border-color:#e5e7eb"
-                                        title="История" @click="openHistoryModal(row)">
+                                <button class="row-btn history" title="История изменений" @click="openHistoryModal(row)">
                                     <i class="fas fa-history"></i>
                                 </button>
                                 <button class="row-btn edit" title="Редактировать" @click="openEditBalanceModal(row)">
@@ -729,32 +727,160 @@
             </div>
         </div>
 
-        <!-- МОДАЛ: История -->
+        <!-- МОДАЛ: История баланса -->
         <div v-if="historyModalOpen" class="modal-backdrop-custom" @click.self="closeHistoryModal">
-            <div class="modal-card" style="max-width:680px">
+            <div class="modal-card" style="max-width:900px">
                 <div class="modal-card-header">
-                    <span>⚫ История изменений</span>
+                    <span>
+                        <i class="fas fa-history me-2" style="color:#6366f1"></i>
+                        История изменений баланса
+                        <span v-if="historyBalance"
+                              style="font-weight:400;color:#9ca3af;font-size:12px;margin-left:8px">
+                            {{ historyBalance.account_name }} · {{ historyBalance.ls_type }} · {{ historyBalance.currency }} · {{ historyBalance.value_date_fmt || historyBalance.value_date }}
+                        </span>
+                    </span>
                     <button class="btn-close" @click="closeHistoryModal"></button>
                 </div>
-                <div class="modal-card-body">
-                    <div v-if="historyLoading" style="text-align:center;padding:30px">
+
+                <div class="modal-card-body" style="padding:0">
+                    <!-- Загрузка -->
+                    <div v-if="historyLoading" style="text-align:center;padding:40px">
                         <div class="spinner-border spinner-border-sm" style="color:#6366f1"></div>
+                        <div style="margin-top:8px;color:#9ca3af;font-size:13px">Загрузка истории...</div>
                     </div>
-                    <div v-else-if="!historyLogs.length" style="text-align:center;padding:30px;color:#9ca3af;font-size:13px">Нет записей</div>
-                    <table v-else class="entries-table" style="font-size:12px">
-                        <thead><tr><th>Дата</th><th>Действие</th><th>Пользователь</th><th>Причина</th></tr></thead>
-                        <tbody>
-                        <tr v-for="log in historyLogs" :key="log.id">
-                            <td style="white-space:nowrap">{{ log.created_at }}</td>
-                            <td>{{ log.action }}</td>
-                            <td>{{ log.user_id }}</td>
-                            <td>{{ log.reason||'—' }}</td>
-                        </tr>
-                        </tbody>
-                    </table>
+
+                    <!-- Пусто -->
+                    <div v-else-if="!historyLogs.length"
+                         style="text-align:center;padding:48px;color:#9ca3af;font-size:13px">
+                        <i class="fas fa-clock" style="font-size:36px;color:#d1d5db;display:block;margin-bottom:12px"></i>
+                        История изменений пуста
+                    </div>
+
+                    <!-- Таблица -->
+                    <div v-else style="overflow-x:auto;max-height:500px;overflow-y:auto">
+                        <table style="width:100%;border-collapse:collapse;font-size:12px">
+                            <thead>
+                            <tr style="background:#f8f9fb;position:sticky;top:0;z-index:2">
+                                <th style="padding:9px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;border-bottom:2px solid #e5e7eb;white-space:nowrap;background:#f0f1f5">Дата / Действие</th>
+                                <th style="padding:9px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;border-bottom:2px solid #e5e7eb;white-space:nowrap;background:#f0f1f5">Пользователь</th>
+                                <th style="padding:9px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;border-bottom:2px solid #e5e7eb;white-space:nowrap">Причина / Комментарий</th>
+                                <th style="padding:9px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;border-bottom:2px solid #e5e7eb;white-space:nowrap">Было</th>
+                                <th style="padding:9px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;border-bottom:2px solid #e5e7eb;white-space:nowrap">Стало</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr v-for="log in historyLogs" :key="log.id"
+                                style="border-bottom:1px solid #f3f4f6"
+                                :style="log.action==='confirm'?'background:#f0fdf4':log.action==='edit'?'background:#fefce8':''">
+
+                                <!-- Дата + действие -->
+                                <td style="padding:8px 12px;vertical-align:top;white-space:nowrap;background:#fafafa;border-right:1px solid #e5e7eb">
+                                    <div style="display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px"
+                                         :style="log.action==='confirm'?'background:#d1fae5;color:#059669':log.action==='edit'?'background:#dbeafe;color:#2563eb':'background:#ede9fe;color:#7c3aed'">
+                                        <i :class="log.action==='confirm'?'fas fa-check-circle':log.action==='edit'?'fas fa-pen':'fas fa-file-import'"></i>
+                                        {{ log.action==='confirm'?'Подтверждено':log.action==='edit'?'Изменено':'Импорт' }}
+                                    </div>
+                                    <div style="font-size:11px;font-weight:600;color:#374151">{{ formatDate(log.created_at) }}</div>
+                                </td>
+
+                                <!-- Пользователь -->
+                                <td style="padding:8px 12px;vertical-align:top;white-space:nowrap;background:#fafafa;border-right:1px solid #e5e7eb">
+                                    <div style="display:flex;align-items:center;gap:5px;font-size:12px;color:#4b5563">
+                                        <i class="fas fa-user-circle" style="color:#9ca3af;font-size:14px"></i>
+                                        {{ log.username || ('User #' + log.user_id) }}
+                                    </div>
+                                </td>
+
+                                <!-- Причина -->
+                                <td style="padding:8px 12px;vertical-align:top;max-width:200px">
+                                        <span style="font-size:12px;color:#6b7280;font-style:italic">
+                                            {{ log.reason || '—' }}
+                                        </span>
+                                </td>
+
+                                <!-- Было (old_values) -->
+                                <td style="padding:8px 12px;vertical-align:top;max-width:220px">
+                                    <div v-if="log.old_values" style="font-size:11px;line-height:1.6">
+                                        <div v-if="log.old_values.opening_balance !== undefined"
+                                             style="display:flex;gap:4px;align-items:center">
+                                            <span style="color:#9ca3af;font-size:10px;text-transform:uppercase">Open:</span>
+                                            <span style="font-family:monospace;text-decoration:line-through;color:#b91c1c">
+                                                    {{ formatAmount(log.old_values.opening_balance) }}
+                                                    {{ log.old_values.opening_dc }}
+                                                </span>
+                                        </div>
+                                        <div v-if="log.old_values.closing_balance !== undefined"
+                                             style="display:flex;gap:4px;align-items:center">
+                                            <span style="color:#9ca3af;font-size:10px;text-transform:uppercase">Close:</span>
+                                            <span style="font-family:monospace;text-decoration:line-through;color:#b91c1c">
+                                                    {{ formatAmount(log.old_values.closing_balance) }}
+                                                    {{ log.old_values.closing_dc }}
+                                                </span>
+                                        </div>
+                                        <div v-if="log.old_values.status"
+                                             style="display:flex;gap:4px;align-items:center">
+                                            <span style="color:#9ca3af;font-size:10px;text-transform:uppercase">Статус:</span>
+                                            <span style="text-decoration:line-through;color:#b91c1c">
+                                                    {{ log.old_values.status }}
+                                                </span>
+                                        </div>
+                                        <div v-if="log.old_values.comment"
+                                             style="display:flex;gap:4px;align-items:center">
+                                            <span style="color:#9ca3af;font-size:10px;text-transform:uppercase">Коммент:</span>
+                                            <span style="text-decoration:line-through;color:#b91c1c;font-style:italic">
+                                                    {{ log.old_values.comment }}
+                                                </span>
+                                        </div>
+                                    </div>
+                                    <span v-else style="color:#d1d5db;font-size:11px">—</span>
+                                </td>
+
+                                <!-- Стало (new_values) -->
+                                <td style="padding:8px 12px;vertical-align:top;max-width:220px">
+                                    <div v-if="log.new_values" style="font-size:11px;line-height:1.6">
+                                        <div v-if="log.new_values.opening_balance !== undefined"
+                                             style="display:flex;gap:4px;align-items:center">
+                                            <span style="color:#9ca3af;font-size:10px;text-transform:uppercase">Open:</span>
+                                            <span style="font-family:monospace;font-weight:600;color:#059669">
+                                                    {{ formatAmount(log.new_values.opening_balance) }}
+                                                    {{ log.new_values.opening_dc }}
+                                                </span>
+                                        </div>
+                                        <div v-if="log.new_values.closing_balance !== undefined"
+                                             style="display:flex;gap:4px;align-items:center">
+                                            <span style="color:#9ca3af;font-size:10px;text-transform:uppercase">Close:</span>
+                                            <span style="font-family:monospace;font-weight:600;color:#059669">
+                                                    {{ formatAmount(log.new_values.closing_balance) }}
+                                                    {{ log.new_values.closing_dc }}
+                                                </span>
+                                        </div>
+                                        <div v-if="log.new_values.status"
+                                             style="display:flex;gap:4px;align-items:center">
+                                            <span style="color:#9ca3af;font-size:10px;text-transform:uppercase">Статус:</span>
+                                            <span style="font-weight:600;color:#059669">
+                                                    {{ log.new_values.status }}
+                                                </span>
+                                        </div>
+                                        <div v-if="log.new_values.comment"
+                                             style="display:flex;gap:4px;align-items:center">
+                                            <span style="color:#9ca3af;font-size:10px;text-transform:uppercase">Коммент:</span>
+                                            <span style="font-weight:600;color:#059669;font-style:italic">
+                                                    {{ log.new_values.comment }}
+                                                </span>
+                                        </div>
+                                    </div>
+                                    <span v-else style="color:#d1d5db;font-size:11px">—</span>
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
+
                 <div class="modal-card-footer" style="display:flex;justify-content:flex-end">
-                    <button class="toolbar-btn outline" @click="closeHistoryModal">Закрыть</button>
+                    <button class="toolbar-btn outline" @click="closeHistoryModal">
+                        <i class="fas fa-times me-1"></i>Закрыть
+                    </button>
                 </div>
             </div>
         </div>
