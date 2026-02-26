@@ -60,6 +60,12 @@
                 this.loadArchiveAccounts();
                 // Загружаем статистику архива при старте (для badge в сайдбаре)
                 this.loadArchiveStats();
+
+                if (this.activeSection === 'balance') {
+                    this.loadBalances(true);
+                } else if (this.activeSection === 'archive') {
+                    this.loadArchive(true);
+                }
             },
 
             methods: {
