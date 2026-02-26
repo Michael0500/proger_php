@@ -65,5 +65,6 @@ $companySection = $currentComp ? strtoupper($currentComp->code) : '';
 
     window.AppConfig = {
         companySection: '<?= addslashes($companySection) ?>',
+        userId: <?= Yii::$app->user->isGuest ? 'null' : (int)Yii::$app->user->id ?>,
     };
 </script>

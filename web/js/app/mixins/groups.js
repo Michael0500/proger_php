@@ -11,9 +11,40 @@ var GroupsMixin = {
             SmartMatchApi.groups.list()
                 .then(function (response) {
                     if (response.data.success) {
+                        // ── ДОБАВИТЬ: читаем сохранённые expanded ──────────
+                        var savedExpanded  = StateStorage.get('groupsExpanded', {});
+                        var savedGroupId   = StateStorage.get('selectedGroupId', null);
+                        var savedPoolId    = StateStorage.get('selectedPoolId', null);
+                        // ───────────────────────────────────────────────────
+
                         self.groups = response.data.data.map(function (group) {
-                            return Object.assign({}, group, { expanded: false });
+                            // ── ДОБАВИТЬ: восстанавливаем expanded из сохранения ──
+                            var isExpanded = !!savedExpanded[group.id];
+                            return Object.assign({}, group, { expanded: isExpanded });
+                            // ─────────────────────────────────────────────────────
                         });
+
+                        // ── ДОБАВИТЬ: восстанавливаем выбор группы и пула ──
+                        if (savedGroupId) {
+                            var foundGroup = self.groups.find(function (g) {
+                                return g.id === parseInt(savedGroupId, 10);
+                            });
+                            if (foundGroup) {
+                                self.selectedGroup = foundGroup;
+
+                                if (savedPoolId && foundGroup.pools) {
+                                    var foundPool = foundGroup.pools.find(function (p) {
+                                        return p.id === parseInt(savedPoolId, 10);
+                                    });
+                                    if (foundPool) {
+                                        self.selectedPool = foundPool;
+                                        self.loadEntries && self.loadEntries(true);
+                                    }
+                                }
+                            }
+                        }
+                        // ───────────────────────────────────────────────────
+
                     } else {
                         Swal.fire('Ошибка', response.data.message || 'Не удалось загрузить группы', 'error');
                     }
@@ -37,6 +68,14 @@ var GroupsMixin = {
                 self.accounts = [];
                 if (index !== -1) self.groups[index].expanded = true;
             }
+
+            // ── ДОБАВИТЬ: сохраняем состояние expanded всех групп ──
+            var expandedMap = {};
+            self.groups.forEach(function (g) { expandedMap[g.id] = !!g.expanded; });
+            StateStorage.set('groupsExpanded', expandedMap);
+            StateStorage.set('selectedGroupId', self.selectedGroup ? self.selectedGroup.id : null);
+            if (!self.selectedPool) StateStorage.set('selectedPoolId', null);
+            // ───────────────────────────────────────────────────────
         },
 
         // Добавление

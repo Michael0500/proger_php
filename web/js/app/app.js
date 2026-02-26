@@ -14,10 +14,12 @@
     document.addEventListener('DOMContentLoaded', function () {
         if (!document.getElementById('app')) return;
 
+        StateStorage.init(window.AppConfig.userId || 'guest');
+
         new Vue({
             el: '#app',
 
-            mixins: [ModalsMixin, GroupsMixin, PoolsMixin, EntriesMixin, MatchingMixin, BalanceMixin, ArchiveMixin],
+            mixins: [ModalsMixin, GroupsMixin, PoolsMixin, EntriesMixin, MatchingMixin, BalanceMixin, ArchiveMixin, StatePersistenceMixin],
 
             data: {
                 isSidebarCollapsed: false,
@@ -46,7 +48,10 @@
                 },
 
                 editingCommentId:    null,
-                editingCommentValue: ''
+                editingCommentValue: '',
+                collapsedGroups: {},
+                _pendingGroupId: null,
+                _pendingPoolId:  null,
             },
 
             mounted: function () {

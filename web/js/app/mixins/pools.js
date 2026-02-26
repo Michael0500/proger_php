@@ -8,7 +8,12 @@ var PoolsMixin = {
         selectPool: function (pool, group) {
             this.selectedPool  = pool;
             this.selectedGroup = group;
-            // Загружаем записи через EntriesMixin (таблица entries)
+
+            // ── ДОБАВИТЬ ──
+            StateStorage.set('selectedPoolId',  pool  ? pool.id  : null);
+            StateStorage.set('selectedGroupId', group ? group.id : null);
+            // ─────────────
+
             this.loadEntries(true);
         },
 

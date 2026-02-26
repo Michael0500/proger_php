@@ -35,6 +35,7 @@ class AppAsset extends AssetBundle
         'js/axios.min.js',
         // 7. Приложение
         'js/app/api.js',
+        'js/app/state-storage.js',
         'js/app/mixins/modals.js',
         'js/app/mixins/groups.js',
         'js/app/mixins/pools.js',
@@ -42,6 +43,7 @@ class AppAsset extends AssetBundle
         'js/app/mixins/matching.js',
         'js/app/mixins/balance.js',
         'js/app/mixins/archive.js',
+        'js/app/mixins/state-persistence.js',
         'js/app/app.js',
     ];
 
