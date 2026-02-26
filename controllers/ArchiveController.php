@@ -492,4 +492,43 @@ class ArchiveController extends BaseController
             ], $rows),
         ];
     }
+
+    /**
+     * GET /archive/history?id=
+     * Получить историю изменений архивной записи (по original_id)
+     */
+    public function actionHistory(): array
+    {
+        Yii::$app->response->format = Response::FORMAT_JSON;
+        $cid = $this->cid();
+        $id  = (int)Yii::$app->request->get('id', 0);
+
+        $archived = NostroEntryArchive::findOne(['id' => $id, 'company_id' => $cid]);
+        if (!$archived) {
+            return ['success' => false, 'message' => 'Архивная запись не найдена'];
+        }
+
+        // История хранится по original_id
+        $audits = \app\models\NostroEntryAudit::find()
+            ->where(['entry_id' => $archived->original_id])
+            ->orderBy(['created_at' => SORT_DESC])
+            ->asArray()
+            ->all();
+
+        $rows = [];
+        foreach ($audits as $audit) {
+            $rows[] = [
+                'id'            => $audit['id'],
+                'action'        => $audit['action'],
+                'user_id'       => $audit['user_id'],
+                'old_values'    => $audit['old_values'] ? json_decode($audit['old_values'], true) : null,
+                'new_values'    => $audit['new_values'] ? json_decode($audit['new_values'], true) : null,
+                'changed_field' => $audit['changed_field'],
+                'reason'        => $audit['reason'],
+                'created_at'    => $audit['created_at'],
+            ];
+        }
+
+        return ['success' => true, 'data' => $rows];
+    }
 }

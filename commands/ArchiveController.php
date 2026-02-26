@@ -7,6 +7,7 @@ use yii\console\Controller;
 use yii\console\ExitCode;
 use app\models\NostroEntry;
 use app\models\NostroEntryArchive;
+use app\models\NostroEntryAudit;
 use app\models\ArchiveSettings;
 use app\models\Company;
 
@@ -116,7 +117,23 @@ class ArchiveController extends Controller
 
                 $transaction = $db->beginTransaction();
                 try {
+                    // Вставляем записи в архив
                     $db->createCommand()->batchInsert($archiveTable, $archiveCols, $rows)->execute();
+                    
+                    // Логируем архивирование для каждой записи
+                    foreach ($ids as $entryId) {
+                        NostroEntryAudit::log(
+                            $entryId,
+                            NostroEntryAudit::ACTION_ARCHIVE,
+                            null,
+                            null,
+                            null,
+                            null,
+                            'Запись заархивирована автоматически'
+                        );
+                    }
+                    
+                    // Удаляем из основной таблицы
                     $db->createCommand(
                         'DELETE FROM {{%nostro_entries}} WHERE id = ANY(:ids)',
                         [':ids' => '{' . implode(',', $ids) . '}']

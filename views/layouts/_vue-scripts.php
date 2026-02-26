@@ -29,6 +29,7 @@ $companySection = $currentComp ? strtoupper($currentComp->code) : '';
         entryUpdate:         '<?= Url::to(['/nostro-entry/update']) ?>',
         entryDelete:         '<?= Url::to(['/nostro-entry/delete']) ?>',
         entryUpdateComment:  '<?= Url::to(['/nostro-entry/update-comment']) ?>',
+        entryHistory:        '<?= Url::to(['/nostro-entry/history']) ?>',
 
         // Квитование
         matchManual: '<?= Url::to(['/matching/match-manual']) ?>',
@@ -59,6 +60,7 @@ $companySection = $currentComp ? strtoupper($currentComp->code) : '';
         archiveSaveSettings: '<?= Url::to(['/archive/save-settings']) ?>',
         archiveStats:        '<?= Url::to(['/archive/stats']) ?>',
         archiveAccounts:     '<?= Url::to(['/archive/accounts']) ?>',
+        archiveHistory:      '<?= Url::to(['/archive/history']) ?>',
     };
 
     window.AppConfig = {

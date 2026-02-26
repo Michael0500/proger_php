@@ -570,3 +570,64 @@
         </div>
     </div>
 </div>
+
+<!-- ══════════════════════════ История изменений записи ══════════════════════════ -->
+<div class="modal fade" id="entryHistoryModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <span class="modal-icon indigo"><i class="fas fa-history"></i></span>
+                    История изменений записи
+                    <span v-if="historyEntry" style="font-weight:400;color:#9ca3af;font-size:13px;margin-left:8px">
+                        #{{ historyEntry.id }} · {{ historyEntry.ls }} · {{ historyEntry.dc === 'Debit' ? 'D' : 'C' }} · {{ formatAmount(historyEntry.amount) }} {{ historyEntry.currency }}
+                    </span>
+                </h5>
+                <button type="button" class="btn-close" @click="closeHistoryModal"></button>
+            </div>
+            <div class="modal-body" style="padding:0 !important">
+                <div v-if="historyLoading" style="text-align:center;padding:40px">
+                    <div class="spinner-border" style="color:#6366f1"></div>
+                    <div style="margin-top:10px;color:#9ca3af;font-size:13px">Загрузка истории...</div>
+                </div>
+                <div v-else-if="!historyItems || historyItems.length === 0" class="empty-pool" style="padding:48px">
+                    <i class="fas fa-inbox" style="font-size:48px;color:#d1d5db"></i>
+                    <p style="margin-top:12px;color:#9ca3af">История изменений пуста</p>
+                </div>
+                <div v-else class="history-timeline" style="padding:16px;max-height:600px;overflow-y:auto">
+                    <div v-for="(item, idx) in historyItems" :key="item.id" class="history-item">
+                        <div class="history-item-header">
+                            <div class="history-badge" :class="'badge-' + item.action">
+                                <i :class="getHistoryIcon(item.action)"></i>
+                                {{ getHistoryActionLabel(item.action) }}
+                            </div>
+                            <div class="history-meta">
+                                <span class="history-date">{{ formatDate(item.created_at) }}</span>
+                                <span v-if="item.reason" class="history-reason">{{ item.reason }}</span>
+                            </div>
+                        </div>
+                        <div v-if="item.changed_field" class="history-field-badge">
+                            <i class="fas fa-tag"></i> {{ getFieldLabel(item.changed_field) }}
+                        </div>
+                        <div v-if="item.old_values || item.new_values" class="history-values">
+                            <div v-if="item.old_values" class="history-old">
+                                <span class="history-label">Было:</span>
+                                <div class="history-value-content">{{ formatValue(item.old_values, item.changed_field) }}</div>
+                            </div>
+                            <div v-if="item.new_values" class="history-new">
+                                <span class="history-label">Стало:</span>
+                                <div class="history-value-content">{{ formatValue(item.new_values, item.changed_field) }}</div>
+                            </div>
+                        </div>
+                        <div v-if="idx < historyItems.length - 1" class="history-connector"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn cancel" @click="closeHistoryModal">
+                    <i class="fas fa-times"></i>Закрыть
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

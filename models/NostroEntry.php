@@ -32,6 +32,7 @@ use yii\db\ActiveRecord;
  *
  * @property Account     $account
  * @property Company     $company
+ * @property NostroEntryAudit[] $audits
  */
 class NostroEntry extends ActiveRecord
 {
@@ -164,5 +165,100 @@ class NostroEntry extends ActiveRecord
         $this->updated_by = Yii::$app->user->id ?? null;
 
         return true;
+    }
+
+    public function afterSave($insert, $changedAttributes)
+    {
+        parent::afterSave($insert, $changedAttributes);
+
+        if ($insert) {
+            // Логирование создания
+            NostroEntryAudit::log(
+                $this->id,
+                NostroEntryAudit::ACTION_CREATE,
+                null,
+                $this->getAttributesForAudit()
+            );
+        } else {
+            // Логирование обновлений (только изменённые поля)
+            foreach ($changedAttributes as $field => $oldValue) {
+                // Пропускаем служебные поля.updated_at и updated_by
+                if (in_array($field, ['updated_at', 'updated_by'])) {
+                    continue;
+                }
+
+                $newValue = $this->$field;
+                if ($oldValue !== $newValue) {
+                    NostroEntryAudit::log(
+                        $this->id,
+                        NostroEntryAudit::ACTION_UPDATE,
+                        [$field => $oldValue],
+                        [$field => $newValue],
+                        $field
+                    );
+                }
+            }
+        }
+    }
+
+    public function beforeDelete()
+    {
+        // Логирование удаления (ДО фактического удаления, чтобы entry_id ещё существовал)
+        NostroEntryAudit::log(
+            $this->id,
+            NostroEntryAudit::ACTION_DELETE,
+            $this->getAttributesForAudit(),
+            null,
+            null,
+            null,
+            'Запись удалена'
+        );
+
+        return parent::beforeDelete();
+    }
+
+    public function afterDelete()
+    {
+        parent::afterDelete();
+    }
+
+    /**
+     * Получить историю изменений записи.
+     *
+     * @return NostroEntryAudit[]
+     */
+    public function getAudits(): \yii\db\ActiveQuery
+    {
+        return $this->hasMany(NostroEntryAudit::class, ['entry_id' => 'id'])
+            ->orderBy(['created_at' => SORT_DESC]);
+    }
+
+    /**
+     * Логирование архивирования записи.
+     * Вызывается при переносе в архив.
+     *
+     * @param int $archivedId ID созданной архивной записи
+     */
+    public function logArchive(int $archivedId): void
+    {
+        NostroEntryAudit::log(
+            $this->id,
+            NostroEntryAudit::ACTION_ARCHIVE,
+            $this->getAttributesForAudit(),
+            null,
+            null,
+            $archivedId,
+            'Запись заархивирована'
+        );
+    }
+
+    /**
+     * Получить атрибуты для аудита (без служебных полей).
+     */
+    private function getAttributesForAudit(): array
+    {
+        $attrs = $this->getAttributes();
+        // Можно исключить служебные поля при необходимости
+        return $attrs;
     }
 }

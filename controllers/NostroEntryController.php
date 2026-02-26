@@ -272,4 +272,42 @@ class NostroEntryController extends BaseController
         $m->save(false);
         return ['success' => true];
     }
+
+    /**
+     * GET /nostro-entry/history?id=
+     * Получить историю изменений записи
+     */
+    public function actionHistory(): array
+    {
+        Yii::$app->response->format = Response::FORMAT_JSON;
+        $cid = $this->cid();
+        $id  = (int)Yii::$app->request->get('id', 0);
+
+        $entry = NostroEntry::findOne(['id' => $id, 'company_id' => $cid]);
+        if (!$entry) {
+            return ['success' => false, 'message' => 'Запись не найдена'];
+        }
+
+        $audits = \app\models\NostroEntryAudit::find()
+            ->where(['entry_id' => $id])
+            ->orderBy(['created_at' => SORT_DESC])
+            ->asArray()
+            ->all();
+
+        $rows = [];
+        foreach ($audits as $audit) {
+            $rows[] = [
+                'id'            => $audit['id'],
+                'action'        => $audit['action'],
+                'user_id'       => $audit['user_id'],
+                'old_values'    => $audit['old_values'] ? json_decode($audit['old_values'], true) : null,
+                'new_values'    => $audit['new_values'] ? json_decode($audit['new_values'], true) : null,
+                'changed_field' => $audit['changed_field'],
+                'reason'        => $audit['reason'],
+                'created_at'    => $audit['created_at'],
+            ];
+        }
+
+        return ['success' => true, 'data' => $rows];
+    }
 }

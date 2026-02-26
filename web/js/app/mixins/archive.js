@@ -380,5 +380,43 @@ var ArchiveMixin = {
                 this.loadArchiveStats();
             }
         },
+
+        // ══════════════════════════════════════════════════
+        // ИСТОРИЯ ИЗМЕНЕНИЙ
+        // ══════════════════════════════════════════════════
+
+        /**
+         * Открыть модальное окно истории для архивной записи
+         */
+        showArchiveHistory: function (row) {
+            var self = this;
+            // Создаём объект entry для отображения в заголовке
+            self.historyEntry = {
+                id: row.original_id,
+                ls: row.ls,
+                dc: row.dc,
+                amount: row.amount,
+                currency: row.currency,
+            };
+            self.historyItems = [];
+            self.historyLoading = true;
+            self._showModal('entryHistoryModal');
+
+            SmartMatchApi.get(AppRoutes.archiveHistory, { id: row.id })
+                .then(function (r) {
+                    let response = r.data
+                    if (response.success) {
+                        self.historyItems = response.data || [];
+                    } else {
+                        self.historyItems = [];
+                    }
+                })
+                .catch(function () {
+                    self.historyItems = [];
+                })
+                .finally(function () {
+                    self.historyLoading = false;
+                });
+        }
     },
 };

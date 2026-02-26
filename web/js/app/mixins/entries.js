@@ -45,6 +45,11 @@ var EntriesMixin = {
 
             // debounce timer
             _filterDebounceTimer: null,
+
+            // ── История ────────────────────────────────────
+            historyLoading: false,
+            historyItems:   [],
+            historyEntry:   null,
         };
     },
 
@@ -495,6 +500,37 @@ var EntriesMixin = {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2
             });
+        },
+
+        // ══════════════════════════════════════════════════
+        // ИСТОРИЯ ИЗМЕНЕНИЙ
+        // ══════════════════════════════════════════════════
+
+        /**
+         * Открыть модальное окно истории для записи
+         */
+        showHistory: function (entry) {
+            var self = this;
+            self.historyEntry = entry;
+            self.historyItems = [];
+            self.historyLoading = true;
+            self._showModal('entryHistoryModal');
+
+            SmartMatchApi.get(window.AppRoutes.entryHistory, { id: entry.id })
+                .then(function (r) {
+                    let response = r.data
+                    if (response.success) {
+                        self.historyItems = response.data || [];
+                    } else {
+                        self.historyItems = [];
+                    }
+                })
+                .catch(function () {
+                    self.historyItems = [];
+                })
+                .finally(function () {
+                    self.historyLoading = false;
+                });
         }
     }
 };

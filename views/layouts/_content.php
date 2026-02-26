@@ -351,6 +351,9 @@
 
                             <td style="text-align:right;padding-right:14px">
                                 <div style="display:flex;gap:3px;justify-content:flex-end">
+                                    <button class="row-btn history" @click="showHistory(entry)" title="История изменений">
+                                        <i class="fas fa-history"></i>
+                                    </button>
                                     <button class="row-btn edit" @click="editEntry(entry)" title="Редактировать">
                                         <i class="fas fa-pen"></i>
                                     </button>
@@ -1165,6 +1168,10 @@
                             {{ row.expires_at_fmt||'—' }}
                         </td>
                         <td style="text-align:right;padding-right:12px">
+                            <button class="row-btn history" @click="showArchiveHistory(row)"
+                                    title="История изменений">
+                                <i class="fas fa-history"></i>
+                            </button>
                             <button class="row-btn edit" @click="restoreFromArchive(row)"
                                     title="Восстановить в активные записи">
                                 <i class="fas fa-undo"></i>

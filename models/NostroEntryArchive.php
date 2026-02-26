@@ -34,6 +34,7 @@ use yii\db\ActiveRecord;
  *
  * @property Account     $account
  * @property Company     $company
+ * @property NostroEntryAudit[] $audits
  */
 class NostroEntryArchive extends ActiveRecord
 {
@@ -100,6 +101,18 @@ class NostroEntryArchive extends ActiveRecord
     public function getCompany(): \yii\db\ActiveQuery
     {
         return $this->hasOne(Company::class, ['id' => 'company_id']);
+    }
+
+    /**
+     * Получить историю изменений записи (по original_id).
+     * История доступна и после переноса в архив.
+     *
+     * @return NostroEntryAudit[]
+     */
+    public function getAudits(): \yii\db\ActiveQuery
+    {
+        return $this->hasMany(NostroEntryAudit::class, ['entry_id' => 'original_id'])
+            ->orderBy(['created_at' => SORT_DESC]);
     }
 
     // ─── Статический хелпер: перенести NostroEntry в архив ─────
