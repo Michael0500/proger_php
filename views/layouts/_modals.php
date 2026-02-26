@@ -433,7 +433,7 @@
 </div>
 
 <!-- ════════════════ МОДАЛ ДОБАВЛЕНИЯ/РЕДАКТИРОВАНИЯ ЗАПИСИ ════════════════ -->
-<div class="modal fade" id="entryModal" tabindex="-1" aria-labelledby="entryModalLabel">
+<div class="modal fade" id="entryModal" tabindex="-1" aria-labelledby="entryModalLabel" style="max-width: 1000px">
     <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
@@ -572,8 +572,8 @@
 </div>
 
 <!-- ══════════════════════════ История изменений записи ══════════════════════════ -->
-<div class="modal fade" id="entryHistoryModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered" style="max-width:1100px">
+<div class="modal fade" id="entryHistoryModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:1400px">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">
@@ -588,13 +588,8 @@
                         · {{ formatAmount(historyEntry.amount) }} {{ historyEntry.currency }}
                     </span>
                 </h5>
-                <!-- Кнопка закрытия: используем явный стиль, без data-bs-dismiss чтобы избежать конфликтов -->
-                <button type="button"
-                        style="background:none;border:none;padding:4px 8px;cursor:pointer;color:#6b7280;font-size:18px;line-height:1;border-radius:4px"
-                        @click.stop="closeHistoryModal"
-                        title="Закрыть">
-                    <i class="fas fa-times"></i>
-                </button>
+                <button type="button" class="btn-close" @click="closeEntryHistoryModal"></button>
+
             </div>
 
             <div class="modal-body" style="padding:0 !important">
@@ -662,7 +657,7 @@
                             <td class="hist-td-meta">
                                 <div class="hist-user">
                                     <i class="fas fa-user-circle" style="color:#9ca3af;font-size:14px"></i>
-                                    <span>#{{ item.user_id || '—' }}</span>
+                                    <span>{{ item.username || ('User #' + item.user_id) }}</span>
                                 </div>
                             </td>
 
@@ -672,7 +667,7 @@
                                     <div v-if="isChanged(item, 'account_id')" class="hist-old-val">
                                         {{ getOldVal(item, 'account_id') || '—' }}
                                     </div>
-                                    <div class="hist-new-val">{{ getNewVal(item, 'account_id') || '—' }}</div>
+                                    <div class="hist-new-val">{{ getSnapVal(item, 'account_name') || getSnapVal(item, 'account_id') || '—' }}</div>
                                 </div>
                             </td>
 
@@ -683,7 +678,7 @@
                                         {{ getOldVal(item, 'ls') || '—' }}
                                     </div>
                                     <span class="hist-new-val" style="font-weight:700;color:#6366f1">
-                                            {{ getNewVal(item, 'ls') || '—' }}
+                                            {{ getSnapVal(item, 'ls') || '—' }}
                                         </span>
                                 </div>
                             </td>
@@ -695,8 +690,8 @@
                                         {{ getOldVal(item, 'dc') === 'Debit' ? 'D' : (getOldVal(item,'dc') === 'Credit' ? 'C' : '—') }}
                                     </div>
                                     <span class="hist-new-val" style="font-weight:700"
-                                          :style="getNewVal(item,'dc')==='Debit'?'color:#dc2626':'color:#059669'">
-                                            {{ getNewVal(item, 'dc') === 'Debit' ? 'D' : (getNewVal(item,'dc') === 'Credit' ? 'C' : '—') }}
+                                          :style="getSnapVal(item,'dc')==='Debit'?'color:#dc2626':'color:#059669'">
+                                            {{ getSnapVal(item, 'dc') === 'Debit' ? 'D' : (getSnapVal(item,'dc') === 'Credit' ? 'C' : '—') }}
                                         </span>
                                 </div>
                             </td>
@@ -708,7 +703,7 @@
                                         {{ formatAmount(getOldVal(item, 'amount')) }}
                                     </div>
                                     <div class="hist-new-val" style="font-family:monospace;font-weight:600">
-                                        {{ formatAmount(getNewVal(item, 'amount')) }}
+                                        {{ formatAmount(getSnapVal(item, 'amount')) }}
                                     </div>
                                 </div>
                             </td>
@@ -717,7 +712,7 @@
                             <td :class="histCellClass(item, 'currency')">
                                 <div class="hist-cell-inner">
                                     <div v-if="isChanged(item, 'currency')" class="hist-old-val">{{ getOldVal(item,'currency')||'—' }}</div>
-                                    <div class="hist-new-val" style="font-weight:600">{{ getNewVal(item,'currency')||'—' }}</div>
+                                    <div class="hist-new-val" style="font-weight:600">{{ getSnapVal(item,'currency')||'—' }}</div>
                                 </div>
                             </td>
 
@@ -725,7 +720,7 @@
                             <td :class="histCellClass(item, 'value_date')">
                                 <div class="hist-cell-inner">
                                     <div v-if="isChanged(item, 'value_date')" class="hist-old-val">{{ getOldVal(item,'value_date')||'—' }}</div>
-                                    <div class="hist-new-val">{{ getNewVal(item,'value_date')||'—' }}</div>
+                                    <div class="hist-new-val">{{ getSnapVal(item,'value_date')||'—' }}</div>
                                 </div>
                             </td>
 
@@ -733,7 +728,7 @@
                             <td :class="histCellClass(item, 'post_date')">
                                 <div class="hist-cell-inner">
                                     <div v-if="isChanged(item, 'post_date')" class="hist-old-val">{{ getOldVal(item,'post_date')||'—' }}</div>
-                                    <div class="hist-new-val">{{ getNewVal(item,'post_date')||'—' }}</div>
+                                    <div class="hist-new-val">{{ getSnapVal(item,'post_date')||'—' }}</div>
                                 </div>
                             </td>
 
@@ -741,7 +736,7 @@
                             <td :class="histCellClass(item, 'instruction_id')">
                                 <div class="hist-cell-inner">
                                     <div v-if="isChanged(item, 'instruction_id')" class="hist-old-val hist-mono">{{ getOldVal(item,'instruction_id')||'—' }}</div>
-                                    <div class="hist-new-val hist-mono">{{ getNewVal(item,'instruction_id')||'—' }}</div>
+                                    <div class="hist-new-val hist-mono">{{ getSnapVal(item,'instruction_id')||'—' }}</div>
                                 </div>
                             </td>
 
@@ -749,7 +744,7 @@
                             <td :class="histCellClass(item, 'end_to_end_id')">
                                 <div class="hist-cell-inner">
                                     <div v-if="isChanged(item, 'end_to_end_id')" class="hist-old-val hist-mono">{{ getOldVal(item,'end_to_end_id')||'—' }}</div>
-                                    <div class="hist-new-val hist-mono">{{ getNewVal(item,'end_to_end_id')||'—' }}</div>
+                                    <div class="hist-new-val hist-mono">{{ getSnapVal(item,'end_to_end_id')||'—' }}</div>
                                 </div>
                             </td>
 
@@ -757,7 +752,7 @@
                             <td :class="histCellClass(item, 'transaction_id')">
                                 <div class="hist-cell-inner">
                                     <div v-if="isChanged(item, 'transaction_id')" class="hist-old-val hist-mono">{{ getOldVal(item,'transaction_id')||'—' }}</div>
-                                    <div class="hist-new-val hist-mono">{{ getNewVal(item,'transaction_id')||'—' }}</div>
+                                    <div class="hist-new-val hist-mono">{{ getSnapVal(item,'transaction_id')||'—' }}</div>
                                 </div>
                             </td>
 
@@ -765,7 +760,7 @@
                             <td :class="histCellClass(item, 'message_id')">
                                 <div class="hist-cell-inner">
                                     <div v-if="isChanged(item, 'message_id')" class="hist-old-val hist-mono">{{ getOldVal(item,'message_id')||'—' }}</div>
-                                    <div class="hist-new-val hist-mono">{{ getNewVal(item,'message_id')||'—' }}</div>
+                                    <div class="hist-new-val hist-mono">{{ getSnapVal(item,'message_id')||'—' }}</div>
                                 </div>
                             </td>
 
@@ -773,7 +768,7 @@
                             <td :class="histCellClass(item, 'comment')">
                                 <div class="hist-cell-inner">
                                     <div v-if="isChanged(item, 'comment')" class="hist-old-val" style="font-style:italic">{{ getOldVal(item,'comment')||'—' }}</div>
-                                    <div class="hist-new-val" style="font-style:italic">{{ getNewVal(item,'comment')||'—' }}</div>
+                                    <div class="hist-new-val" style="font-style:italic">{{ getSnapVal(item,'comment')||'—' }}</div>
                                 </div>
                             </td>
 
@@ -784,7 +779,7 @@
                                         {{ histStatusLabel(getOldVal(item,'match_status')) }}
                                     </div>
                                     <div class="hist-new-val">
-                                        {{ histStatusLabel(getNewVal(item,'match_status')) }}
+                                        {{ histStatusLabel(getSnapVal(item,'match_status')) }}
                                     </div>
                                 </div>
                             </td>
@@ -793,7 +788,7 @@
                             <td :class="histCellClass(item, 'match_id')">
                                 <div class="hist-cell-inner">
                                     <div v-if="isChanged(item, 'match_id')" class="hist-old-val hist-mono">{{ getOldVal(item,'match_id')||'—' }}</div>
-                                    <div class="hist-new-val hist-mono">{{ getNewVal(item,'match_id')||'—' }}</div>
+                                    <div class="hist-new-val hist-mono">{{ getSnapVal(item,'match_id')||'—' }}</div>
                                 </div>
                             </td>
 
@@ -811,7 +806,7 @@
                     Изменённые поля <span class="hist-legend-changed"></span> подсвечены.
                     Зачёркнутое — прежнее значение, жирное — новое.
                 </div>
-                <button class="modal-btn cancel" @click.stop="closeHistoryModal">
+                <button class="modal-btn cancel" @click="closeEntryHistoryModal">
                     <i class="fas fa-times"></i>Закрыть
                 </button>
             </div>

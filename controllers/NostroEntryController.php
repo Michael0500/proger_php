@@ -275,7 +275,15 @@ class NostroEntryController extends BaseController
 
     /**
      * GET /nostro-entry/history?id=
-     * Получить историю изменений записи
+     * Получить историю изменений записи.
+     *
+     * Логика:
+     *  1. Загружаем все аудит-записи (ASC — от старых к новым).
+     *  2. Группируем по (created_at до секунды + user_id + action):
+     *     одно редактирование может создавать несколько строк (по одной на поле).
+     *  3. Реконструируем полный снапшот записи на момент каждого изменения:
+     *     идём снизу вверх, накапливая текущее состояние.
+     *  4. Возвращаем результат в DESC-порядке (новые сверху).
      */
     public function actionHistory(): array
     {
@@ -288,23 +296,193 @@ class NostroEntryController extends BaseController
             return ['success' => false, 'message' => 'Запись не найдена'];
         }
 
+        // Загружаем от старых к новым (ASC) — нужно для реконструкции снапшотов
         $audits = \app\models\NostroEntryAudit::find()
             ->where(['entry_id' => $id])
-            ->orderBy(['created_at' => SORT_DESC])
+            ->orderBy(['created_at' => SORT_ASC, 'id' => SORT_ASC])
             ->asArray()
             ->all();
 
-        $rows = [];
+        if (empty($audits)) {
+            return ['success' => true, 'data' => []];
+        }
+
+        // ── Кэш пользователей (username / email) ─────────────────────────
+        $userIds = array_unique(array_column($audits, 'user_id'));
+        $users   = [];
+        if (!empty($userIds)) {
+            $userRows = \app\models\User::find()
+                ->select(['id', 'username', 'email'])
+                ->where(['id' => $userIds])
+                ->asArray()
+                ->all();
+            foreach ($userRows as $u) {
+                $users[$u['id']] = $u['username'] ?: $u['email'];
+            }
+        }
+
+        // ── Группировка аудитов (по created_at до секунды + user_id + action) ─
+        // Ключ группы: "YYYY-MM-DD HH:MM:SS|user_id|action"
+        $groups = [];   // ['key' => ['meta' => ..., 'changes' => [field => [old, new]]]]
+        $groupOrder = [];
+
         foreach ($audits as $audit) {
+            // Приводим created_at к точности до секунды (обрезаем дробную часть если есть)
+            $ts  = substr($audit['created_at'], 0, 19);
+            $key = $ts . '|' . $audit['user_id'] . '|' . $audit['action'];
+
+            if (!isset($groups[$key])) {
+                $groups[$key] = [
+                    'key'        => $key,
+                    'action'     => $audit['action'],
+                    'user_id'    => $audit['user_id'],
+                    'username'   => $users[$audit['user_id']] ?? ('User #' . $audit['user_id']),
+                    'reason'     => $audit['reason'],
+                    'created_at' => $ts,
+                    'changes'    => [],   // field => ['old' => ..., 'new' => ...]
+                    // Снапшот всей записи будет добавлен ниже
+                    'snapshot'      => [],
+                    'changed_fields' => [],
+                ];
+                $groupOrder[] = $key;
+            }
+
+            // Накапливаем изменения в группе
+            $field   = $audit['changed_field'];
+            $oldVals = $audit['old_values'] ? json_decode($audit['old_values'], true) : null;
+            $newVals = $audit['new_values'] ? json_decode($audit['new_values'], true) : null;
+
+            if ($field) {
+                $oldV = is_array($oldVals) ? ($oldVals[$field] ?? null) : null;
+                $newV = is_array($newVals) ? ($newVals[$field] ?? null) : null;
+                $groups[$key]['changes'][$field] = ['old' => $oldV, 'new' => $newV];
+                $groups[$key]['changed_fields'][] = $field;
+            } elseif ($oldVals || $newVals) {
+                // create / delete — берём весь объект
+                $groups[$key]['changes'] = array_merge(
+                    $groups[$key]['changes'],
+                    array_map(function($k) use ($oldVals, $newVals) {
+                        return [
+                            'old' => is_array($oldVals) ? ($oldVals[$k] ?? null) : null,
+                            'new' => is_array($newVals) ? ($newVals[$k] ?? null) : null,
+                        ];
+                    }, array_unique(array_merge(
+                        is_array($oldVals) ? array_keys($oldVals) : [],
+                        is_array($newVals) ? array_keys($newVals) : []
+                    )))
+                );
+            }
+        }
+
+        // ── Реконструкция снапшотов (от старых к новым) ──────────────────
+        // Поля, которые показываем в таблице
+        $fields = ['account_id', 'ls', 'dc', 'amount', 'currency',
+            'value_date', 'post_date', 'instruction_id', 'end_to_end_id',
+            'transaction_id', 'message_id', 'comment', 'match_status', 'match_id'];
+
+        // Стартовое состояние — текущие данные записи (самое актуальное)
+        // Идём от новых к старым, чтобы вычислить снапшоты в обратном порядке.
+        // Проще: идём ASC (groupOrder уже ASC), строим «живое» состояние нарастающим итогом.
+        $current = [];
+        foreach ($fields as $f) {
+            $current[$f] = null;
+        }
+
+        // Инициализируем из первого события (create) если есть, иначе берём текущую запись
+        $firstGroup = $groups[$groupOrder[0]];
+        if ($firstGroup['action'] === 'create') {
+            foreach ($fields as $f) {
+                $v = $firstGroup['changes'][$f]['new'] ?? null;
+                $current[$f] = $v;
+            }
+        } else {
+            // Нет события создания — берём данные живой записи и "откатываемся" назад
+            // Проще: просто используем current entry как базу, идём ASC, применяем изменения
+            foreach ($fields as $f) {
+                $current[$f] = $entry->$f ?? null;
+            }
+            // Откатываем к начальному состоянию: идём по всем аудитам и инвертируем
+            foreach (array_reverse($groupOrder) as $key) {
+                foreach ($groups[$key]['changes'] as $field => $change) {
+                    if (array_key_exists($field, array_flip($fields))) {
+                        $current[$field] = $change['old'];
+                    }
+                }
+            }
+        }
+
+        // Теперь идём ASC и для каждой группы записываем снапшот ПОСЛЕ применения изменений
+        foreach ($groupOrder as $key) {
+            $group  = &$groups[$key];
+            $action = $group['action'];
+
+            if ($action === 'create') {
+                // Снапшот = new_values из create
+                foreach ($fields as $f) {
+                    $current[$f] = $group['changes'][$f]['new'] ?? $current[$f];
+                }
+                $group['snapshot'] = $current;
+            } elseif ($action === 'delete') {
+                // Снапшот = состояние до удаления (old_values)
+                $snap = $current;
+                foreach ($group['changes'] as $field => $change) {
+                    if (in_array($field, $fields, true)) {
+                        $snap[$field] = $change['old'];
+                    }
+                }
+                $group['snapshot'] = $snap;
+            } else {
+                // update / archive — применяем new_values к текущему состоянию
+                foreach ($group['changes'] as $field => $change) {
+                    if (in_array($field, $fields, true)) {
+                        $current[$field] = $change['new'];
+                    }
+                }
+                $group['snapshot'] = $current;
+            }
+            unset($group);
+        }
+
+        // ── Кэш имён счетов ──────────────────────────────────────────────
+        $accountIds = [];
+        foreach ($groups as $g) {
+            if (!empty($g['snapshot']['account_id'])) {
+                $accountIds[] = (int)$g['snapshot']['account_id'];
+            }
+        }
+        $accountIds = array_unique($accountIds);
+        $accountNames = [];
+        if (!empty($accountIds)) {
+            $accRows = \app\models\Account::find()
+                ->select(['id', 'name'])
+                ->where(['id' => $accountIds])
+                ->asArray()
+                ->all();
+            foreach ($accRows as $a) {
+                $accountNames[$a['id']] = $a['name'];
+            }
+        }
+
+        // ── Формируем результат (DESC — новые сверху) ─────────────────────
+        $rows = [];
+        foreach (array_reverse($groupOrder) as $key) {
+            $g = $groups[$key];
+            $snap = $g['snapshot'];
+            // Добавляем удобочитаемое имя счёта
+            if (!empty($snap['account_id'])) {
+                $snap['account_name'] = $accountNames[$snap['account_id']] ?? ('ID: ' . $snap['account_id']);
+            } else {
+                $snap['account_name'] = '—';
+            }
             $rows[] = [
-                'id'            => $audit['id'],
-                'action'        => $audit['action'],
-                'user_id'       => $audit['user_id'],
-                'old_values'    => $audit['old_values'] ? json_decode($audit['old_values'], true) : null,
-                'new_values'    => $audit['new_values'] ? json_decode($audit['new_values'], true) : null,
-                'changed_field' => $audit['changed_field'],
-                'reason'        => $audit['reason'],
-                'created_at'    => $audit['created_at'],
+                'action'         => $g['action'],
+                'user_id'        => $g['user_id'],
+                'username'       => $g['username'],
+                'reason'         => $g['reason'],
+                'created_at'     => $g['created_at'],
+                'changed_fields' => array_values(array_unique($g['changed_fields'])),
+                'snapshot'       => $snap,
+                'changes'        => $g['changes'],
             ];
         }
 

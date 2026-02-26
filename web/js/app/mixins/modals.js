@@ -36,10 +36,11 @@ var ModalsMixin = {
         closeEntryModal: function () { this._hideModal('entryModal'); },
 
         // История
-        closeHistoryModal: function () {
+        closeEntryHistoryModal: function (e) {
+            if (e && e.stopPropagation) e.stopPropagation();
             this._hideModal('entryHistoryModal');
-            if (this.historyEntry) this.historyEntry = null;
-            if (this.historyItems) this.historyItems = [];
+            this.historyEntry = null;
+            this.historyItems = [];
         },
 
         // ── Методы для отображения истории ───────────────────
@@ -137,68 +138,43 @@ var ModalsMixin = {
             return lines.join('\n');
         },
         /**
-         * Получить значение поля из new_values или old_values в зависимости от action.
-         * Для 'delete' — показываем old_values; для остальных — new_values.
+         * Получить значение поля из снапшота записи аудита
          */
-        _histGetValues: function (item) {
-            if (!item) return {};
-            if (item.action === 'delete') {
-                return item.old_values || {};
-            }
-            return item.new_values || {};
-        },
-
-        /**
-         * Вернуть новое (текущее) значение поля
-         */
-        getNewVal: function (item, field) {
-            var vals = this._histGetValues(item);
-            var v = vals[field];
+        getSnapVal: function (item, field) {
+            if (!item || !item.snapshot) return null;
+            var v = item.snapshot[field];
             return (v === undefined || v === null) ? null : v;
         },
 
         /**
-         * Вернуть старое значение поля (из old_values)
+         * Получить старое значение поля (до изменения)
          */
         getOldVal: function (item, field) {
-            if (!item || !item.old_values) return null;
-            var v = item.old_values[field];
+            if (!item || !item.changes || !item.changes[field]) return null;
+            var v = item.changes[field]['old'];
             return (v === undefined || v === null) ? null : v;
         },
 
         /**
-         * Проверить, изменилось ли данное поле в этой записи аудита.
-         * Поле изменилось если:
-         *  - changed_field совпадает с field (точное поле)
-         *  - ИЛИ old_values содержит это поле (и оно отличается от new_values)
+         * Проверить, было ли данное поле изменено в этой записи аудита
          */
         isChanged: function (item, field) {
             if (!item) return false;
-            // Если changed_field явно указан
-            if (item.changed_field === field) return true;
-            // Если нет changed_field — сравниваем old и new
-            if (!item.changed_field && item.old_values && item.new_values) {
-                var oldV = item.old_values[field];
-                var newV = item.new_values[field];
-                if (oldV !== undefined || newV !== undefined) {
-                    return String(oldV) !== String(newV);
-                }
-            }
-            return false;
+            if (!item.changed_fields || !item.changed_fields.length) return false;
+            return item.changed_fields.indexOf(field) !== -1;
         },
 
         /**
-         * CSS-класс ячейки: подсвечиваем изменённые колонки
+         * CSS-класс ячейки: подсветка изменённых и созданных полей
          */
         histCellClass: function (item, field) {
             var base = 'hist-td';
             if (this.isChanged(item, field)) {
                 return base + ' hist-td-changed';
             }
-            // Если action = create — все поля "новые", мягкая подсветка
             if (item && item.action === 'create') {
-                var vals = item.new_values || {};
-                if (vals[field] !== undefined && vals[field] !== null && vals[field] !== '') {
+                var snap = item.snapshot || {};
+                if (snap[field] !== undefined && snap[field] !== null && snap[field] !== '') {
                     return base + ' hist-td-created';
                 }
             }
