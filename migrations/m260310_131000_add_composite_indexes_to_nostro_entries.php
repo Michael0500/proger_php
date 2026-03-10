@@ -37,7 +37,7 @@ use yii\db\Migration;
 class m260310_131000_add_composite_indexes_to_nostro_entries extends Migration
 {
     /**
-     * Имена индексов — чтобы не дублировать при повторных запусках и для safeDown().
+     * Имена индексов — чтобы не дублировать при повторных запусках и для down().
      */
     private const IDX_FULL    = 'idx_ne_cid_status_currency_account_id';
     private const IDX_NO_CUR  = 'idx_ne_cid_status_account_id';
@@ -45,7 +45,13 @@ class m260310_131000_add_composite_indexes_to_nostro_entries extends Migration
 
     private const TABLE = '{{%nostro_entries}}';
 
-    public function safeUp(): void
+    /** Отключаем транзакцию: CREATE INDEX CONCURRENTLY запрещён в транзакционном блоке */
+    public function transaction(): ?string
+    {
+        return null;
+    }
+
+    public function up(): bool
     {
         // ── 1. Основной индекс: company_id + match_status + currency + account_id ──
         // Используется когда в запросе есть все три equality-фильтра + IN по account_id.
@@ -90,12 +96,16 @@ class m260310_131000_add_composite_indexes_to_nostro_entries extends Migration
         // ── Подсказка для планировщика (необязательно, но помогает) ────────────
         // Обновляем статистику таблицы, чтобы планировщик сразу «увидел» индексы.
         $this->execute('ANALYZE ' . $this->db->quoteTableName('nostro_entries'));
+
+        return true;
     }
 
-    public function safeDown(): void
+    public function down(): bool
     {
         $this->execute('DROP INDEX CONCURRENTLY IF EXISTS "' . self::IDX_FULL    . '"');
         $this->execute('DROP INDEX CONCURRENTLY IF EXISTS "' . self::IDX_NO_CUR  . '"');
         $this->execute('DROP INDEX CONCURRENTLY IF EXISTS "' . self::IDX_MINIMAL . '"');
+
+        return true;
     }
 }
