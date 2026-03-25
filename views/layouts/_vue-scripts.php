@@ -8,19 +8,19 @@ $companySection = $currentComp ? strtoupper($currentComp->code) : '';
 ?>
 <script>
     window.AppRoutes = {
-        // Группы
-        groupGetGroups: '<?= Url::to(['/account-group/get-groups']) ?>',
-        groupCreate:    '<?= Url::to(['/account-group/create']) ?>',
-        groupUpdate:    '<?= Url::to(['/account-group/update']) ?>',
-        groupDelete:    '<?= Url::to(['/account-group/delete']) ?>',
+        // Категории
+        categoryGetCategories: '<?= Url::to(['/category/get-categories']) ?>',
+        categoryCreate:        '<?= Url::to(['/category/create']) ?>',
+        categoryUpdate:        '<?= Url::to(['/category/update']) ?>',
+        categoryDelete:        '<?= Url::to(['/category/delete']) ?>',
 
-        // Пулы
-        poolCreate:      '<?= Url::to(['/account-pool/create']) ?>',
-        poolUpdate:      '<?= Url::to(['/account-pool/update']) ?>',
-        poolDelete:      '<?= Url::to(['/account-pool/delete']) ?>',
-        poolGetAccounts: '<?= Url::to(['/account-pool/get-accounts']) ?>',
-        poolGetFilters: '<?= Url::to(['/account-pool/get-filters']) ?>',
-        poolSaveFilters: '<?= Url::to(['/account-pool/save-filters']) ?>',
+        // Группы
+        groupCreate:      '<?= Url::to(['/group/create']) ?>',
+        groupUpdate:      '<?= Url::to(['/group/update']) ?>',
+        groupDelete:      '<?= Url::to(['/group/delete']) ?>',
+        groupGetAccounts: '<?= Url::to(['/group/get-accounts']) ?>',
+        groupGetFilters:  '<?= Url::to(['/group/get-filters']) ?>',
+        groupSaveFilters: '<?= Url::to(['/group/save-filters']) ?>',
 
         // Записи (NostroEntry)
         entryList:           '<?= Url::to(['/nostro-entry/list']) ?>',

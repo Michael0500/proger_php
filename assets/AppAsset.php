@@ -24,7 +24,6 @@ class AppAsset extends AssetBundle
         // 1. jQuery (нужен для Select2)
         'js/jquery.min.js',
         // 2. Bootstrap bundle (нужен для модалок)
-        'js/bootstrap.bundle.min.js',
         // 3. Select2 (зависит от jQuery)
         'js/select2.min.js',
         // 4. SweetAlert2
@@ -37,8 +36,8 @@ class AppAsset extends AssetBundle
         'js/app/api.js',
         'js/app/state-storage.js',
         'js/app/mixins/modals.js',
+        'js/app/mixins/categories.js',
         'js/app/mixins/groups.js',
-        'js/app/mixins/pools.js',
         'js/app/mixins/entries.js',
         'js/app/mixins/matching.js',
         'js/app/mixins/balance.js',

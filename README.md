@@ -1,233 +1,184 @@
-<p align="center">
-    <a href="https://github.com/yiisoft" target="_blank">
-        <img src="https://avatars0.githubusercontent.com/u/993323" height="100px">
-    </a>
-    <h1 align="center">Yii 2 Basic Project Template</h1>
-    <br>
-</p>
+# SmartMatch
 
-Yii 2 Basic Project Template is a skeleton [Yii 2](https://www.yiiframework.com/) application best for
-rapidly creating small projects.
+Система квитования (reconciliation) ностро-счетов. Позволяет загружать банковские выписки и данные из бухгалтерской книги, сопоставлять транзакции вручную и автоматически, вести аудит изменений и формировать отчёты о расхождениях.
 
-The template contains the basic features including user login/logout and a contact page.
-It includes all commonly used configurations that would allow you to focus on adding new
-features to your application.
+## Стек технологий
 
-[![Latest Stable Version](https://img.shields.io/packagist/v/yiisoft/yii2-app-basic.svg)](https://packagist.org/packages/yiisoft/yii2-app-basic)
-[![Total Downloads](https://img.shields.io/packagist/dt/yiisoft/yii2-app-basic.svg)](https://packagist.org/packages/yiisoft/yii2-app-basic)
-[![build](https://github.com/yiisoft/yii2-app-basic/workflows/build/badge.svg)](https://github.com/yiisoft/yii2-app-basic/actions?query=workflow%3Abuild)
+| Компонент | Технология |
+|---|---|
+| Backend | PHP 7.4+, Yii 2 Framework (Basic template) |
+| База данных | PostgreSQL 17 |
+| Frontend | Vue.js 2 (встроен в PHP-шаблоны), Bootstrap 5 |
+| Тестирование | Codeception (unit, functional) |
+| Веб-сервер | Open Server Panel (Windows) |
 
-DIRECTORY STRUCTURE
--------------------
+## Основные возможности
 
-      assets/             contains assets definition
-      commands/           contains console commands (controllers)
-      config/             contains application configurations
-      controllers/        contains Web controller classes
-      mail/               contains view files for e-mails
-      models/             contains model classes
-      runtime/            contains files generated during runtime
-      tests/              contains various tests for the basic application
-      vendor/             contains dependent 3rd-party packages
-      views/              contains view files for the Web application
-      web/                contains the entry script and Web resources
+### Управление транзакциями (Nostro Entries)
+- Загрузка и просмотр записей из двух источников: **Ledger** (бухгалтерская книга) и **Statement** (банковская выписка)
+- Фильтрация по типу (Debit/Credit), статусу сопоставления, датам, суммам и произвольным полям
+- Полнотекстовый поиск по идентификаторам транзакций
+- Постраничная навигация с настраиваемым количеством записей на странице
 
+### Квитование (Matching)
+- **Ручное квитование**: выбор записей вручную с автоматической проверкой баланса (сумма Ledger = сумма Statement)
+- **Автоматическое квитование**: настраиваемые правила сопоставления с приоритетами
+  - Поддержка типов пар: Ledger-Statement (LS), Ledger-Ledger (LL), Statement-Statement (SS)
+  - Критерии: совпадение суммы, даты валютирования, перекрёстный поиск по ID-полям (`cross_id_search`)
+  - Оптимизированные SQL-запросы с CTE и оконными функциями для поиска уникальных пар
+- **Расквитование** (Unmatch): отмена ранее выполненного сопоставления
 
+### Иерархия навигации: Категории → Группы → Фильтры
+- **Категории** — верхний уровень организации в боковой панели
+- **Группы** — наборы динамических фильтров внутри категории для гибкой выборки записей
+- **Фильтры групп** — условия фильтрации (поле, оператор, значение) на уровне счетов и записей
+- Двухэтапная фильтрация: сначала по полям счетов, затем по полям транзакций
 
-REQUIREMENTS
-------------
+### Ностро-банки (Account Pools)
+- Отдельный раздел для управления техническими пулами банковских счетов
+- CRUD-операции: создание, редактирование, удаление пулов
+- Привязка и отвязка счетов к пулам
 
-The minimum requirement by this project template that your Web server supports PHP 7.4.
+### Счета (Accounts)
+- Управление ностро-счетами с привязкой к ностро-банкам
+- Поддержка suspense-счетов (используются в разделе INV — расследования)
+- Привязка к пулам (nullable `pool_id`)
 
+### Отчёт о реконсиляции (Recon Report)
+- Формирование отчёта по расхождениям между Ledger и Statement
+- Использование данных об остатках (`NostroBalance`) по счетам и датам
 
-INSTALLATION
-------------
+### Архивация
+- Пакетная архивация сквитованных записей (300 записей за запрос)
+- Настраиваемые параметры: количество дней до архивации (`archive_after_days`), срок хранения (`retention_years`)
+- Перемещение в архивную таблицу с сохранением `original_id` и временных меток
 
-### Install via Composer
+### Аудит
+- Полный журнал изменений всех транзакций (создание, обновление, удаление, архивация)
+- Восстановление состояния записи на любой момент времени через воспроизведение событий аудита
+- Автоматическая запись через хуки модели (`afterSave`, `beforeDelete`)
 
-If you do not have [Composer](https://getcomposer.org/), you may install it by following the instructions
-at [getcomposer.org](https://getcomposer.org/doc/00-intro.md#installation-nix).
+### Мультитенантность
+- Каждый пользователь привязан к компании (`Company`)
+- Все данные строго изолированы по `company_id`
+- Глобальная фильтрация через хелпер `cid()`
 
-You can then install this project template using the following command:
+### Управление пользователями
+- Регистрация и аутентификация
+- Профиль пользователя
+- RBAC (Role-Based Access Control) на базе `yii\rbac\DbManager`
 
-~~~
-composer create-project --prefer-dist yiisoft/yii2-app-basic basic
-~~~
-
-Now you should be able to access the application through the following URL, assuming `basic` is the directory
-directly under the Web root.
-
-~~~
-http://localhost/basic/web/
-~~~
-
-### Install from an Archive File
-
-Extract the archive file downloaded from [yiiframework.com](https://www.yiiframework.com/download/) to
-a directory named `basic` that is directly under the Web root.
-
-Set cookie validation key in `config/web.php` file to some random secret string:
-
-```php
-'request' => [
-    // !!! insert a secret key in the following (if it is empty) - this is required by cookie validation
-    'cookieValidationKey' => '<secret random string goes here>',
-],
-```
-
-You can then access the application through the following URL:
-
-~~~
-http://localhost/basic/web/
-~~~
-
-
-### Install with Docker
-
-Update your vendor packages
-
-    docker-compose run --rm php composer update --prefer-dist
-    
-Run the installation triggers (creating cookie validation code)
-
-    docker-compose run --rm php composer install    
-    
-Start the container
-
-    docker-compose up -d
-    
-You can then access the application through the following URL:
-
-    http://127.0.0.1:8000
-
-**NOTES:** 
-- Minimum required Docker engine version `17.04` for development (see [Performance tuning for volume mounts](https://docs.docker.com/docker-for-mac/osxfs-caching/))
-- The default configuration uses a host-volume in your home directory `.docker-composer` for composer caches
-
-
-CONFIGURATION
--------------
-
-### Database
-
-Edit the file `config/db.php` with real data, for example:
-
-```php
-return [
-    'class' => 'yii\db\Connection',
-    'dsn' => 'mysql:host=localhost;dbname=yii2basic',
-    'username' => 'root',
-    'password' => '1234',
-    'charset' => 'utf8',
-];
-```
-
-**NOTES:**
-- Yii won't create the database for you, this has to be done manually before you can access it.
-- Check and edit the other files in the `config/` directory to customize your application as required.
-- Refer to the README in the `tests` directory for information specific to basic application tests.
-
-
-TESTING
--------
-
-Tests are located in `tests` directory. They are developed with [Codeception PHP Testing Framework](https://codeception.com/).
-By default, there are 3 test suites:
-
-- `unit`
-- `functional`
-- `acceptance`
-
-Tests can be executed by running
+## Структура проекта
 
 ```
-vendor/bin/codecept run
+smartmatch/
+├── assets/              # Определения ассетов (CSS/JS бандлы)
+├── commands/            # Консольные команды (SeedController и др.)
+├── components/          # Компоненты приложения (AccessControl)
+├── config/              # Конфигурация (web, db, params, test)
+├── controllers/         # Контроллеры
+│   ├── BaseController.php         # Базовый контроллер с авторизацией
+│   ├── NostroEntryController.php  # Транзакции (основной API)
+│   ├── CategoryController.php     # Категории
+│   ├── GroupController.php        # Группы
+│   ├── AccountController.php      # Счета
+│   ├── AccountPoolController.php  # Ностро-банки
+│   ├── NostroBalanceController.php # Остатки
+│   ├── ReconReportController.php  # Отчёт о реконсиляции
+│   └── UserController.php         # Пользователи
+├── migrations/          # Миграции базы данных
+├── models/              # Модели ActiveRecord
+│   ├── NostroEntry.php
+│   ├── MatchingRule.php
+│   ├── Account.php
+│   ├── Category.php
+│   ├── Group.php
+│   ├── GroupFilter.php
+│   ├── AccountPool.php
+│   ├── NostroBalance.php
+│   ├── NostroEntryAudit.php
+│   ├── NostroEntryArchive.php
+│   └── ArchiveSettings.php
+├── services/            # Сервисный слой
+│   └── MatchingService.php  # Логика квитования
+├── views/               # PHP-шаблоны
+│   ├── layouts/         # Основной layout + Vue-скрипты
+│   └── ...              # Шаблоны страниц
+├── web/                 # Публичная директория
+│   ├── css/app.css      # Стили приложения
+│   └── js/app/          # Vue.js код
+│       ├── api.js       # API-клиент
+│       ├── app.js       # Главный Vue-инстанс
+│       └── mixins/      # Vue-миксины
+│           ├── categories.js
+│           ├── groups.js
+│           ├── entries.js
+│           ├── matching.js
+│           ├── balance.js
+│           ├── modals.js
+│           └── state-persistence.js
+└── tests/               # Тесты (Codeception)
 ```
 
-The command above will execute unit and functional tests. Unit tests are testing the system components, while functional
-tests are for testing user interaction. Acceptance tests are disabled by default as they require additional setup since
-they perform testing in real browser. 
+## Установка и запуск
 
+### Требования
+- PHP 7.4+
+- PostgreSQL 17
+- Composer
 
-### Running  acceptance tests
+### Установка
 
-To execute acceptance tests do the following:  
+```bash
+# Установка зависимостей
+composer install
 
-1. Rename `tests/acceptance.suite.yml.example` to `tests/acceptance.suite.yml` to enable suite configuration
+# Настройка базы данных — отредактируйте config/db.php
+# Создайте базу данных smartmatch в PostgreSQL
 
-2. Replace `codeception/base` package in `composer.json` with `codeception/codeception` to install full-featured
-   version of Codeception
+# Применение миграций
+php yii migrate
 
-3. Update dependencies with Composer 
-
-    ```
-    composer update  
-    ```
-
-4. Download [Selenium Server](https://www.seleniumhq.org/download/) and launch it:
-
-    ```
-    java -jar ~/selenium-server-standalone-x.xx.x.jar
-    ```
-
-    In case of using Selenium Server 3.0 with Firefox browser since v48 or Google Chrome since v53 you must download [GeckoDriver](https://github.com/mozilla/geckodriver/releases) or [ChromeDriver](https://sites.google.com/a/chromium.org/chromedriver/downloads) and launch Selenium with it:
-
-    ```
-    # for Firefox
-    java -jar -Dwebdriver.gecko.driver=~/geckodriver ~/selenium-server-standalone-3.xx.x.jar
-    
-    # for Google Chrome
-    java -jar -Dwebdriver.chrome.driver=~/chromedriver ~/selenium-server-standalone-3.xx.x.jar
-    ``` 
-    
-    As an alternative way you can use already configured Docker container with older versions of Selenium and Firefox:
-    
-    ```
-    docker run --net=host selenium/standalone-firefox:2.53.0
-    ```
-
-5. (Optional) Create `yii2basic_test` database and update it by applying migrations if you have them.
-
-   ```
-   tests/bin/yii migrate
-   ```
-
-   The database configuration can be found at `config/test_db.php`.
-
-
-6. Start web server:
-
-    ```
-    tests/bin/yii serve
-    ```
-
-7. Now you can run all available tests
-
-   ```
-   # run all available tests
-   vendor/bin/codecept run
-
-   # run acceptance tests
-   vendor/bin/codecept run acceptance
-
-   # run only unit and functional tests
-   vendor/bin/codecept run unit,functional
-   ```
-
-### Code coverage support
-
-By default, code coverage is disabled in `codeception.yml` configuration file, you should uncomment needed rows to be able
-to collect code coverage. You can run your tests and collect coverage with the following command:
-
-```
-#collect coverage for all tests
-vendor/bin/codecept run --coverage --coverage-html --coverage-xml
-
-#collect coverage only for unit tests
-vendor/bin/codecept run unit --coverage --coverage-html --coverage-xml
-
-#collect coverage for unit and functional tests
-vendor/bin/codecept run functional,unit --coverage --coverage-html --coverage-xml
+# Заполнение тестовыми данными (опционально)
+php yii seed
 ```
 
-You can see code coverage output under the `tests/_output` directory.
+### Запуск
+
+Приложение работает через веб-сервер (например, Open Server Panel). Точка входа: `web/index.php`.
+
+```
+http://localhost/smartmatch/web/
+```
+
+## Команды
+
+```bash
+# Миграции
+php yii migrate              # Применить все миграции
+php yii migrate/down         # Откатить последнюю миграцию
+php yii migrate/create name  # Создать новую миграцию
+
+# Тесты
+vendor/bin/codecept run                        # Все тесты
+vendor/bin/codecept run unit                   # Только unit-тесты
+vendor/bin/codecept run functional             # Только функциональные
+vendor/bin/codecept run --coverage --coverage-html  # С покрытием
+
+# Консольные команды
+php yii <command>/<action>
+```
+
+## Конфигурация
+
+| Файл | Описание |
+|---|---|
+| `config/db.php` | Подключение к PostgreSQL (хост, порт, имя БД, логин/пароль) |
+| `config/web.php` | Конфигурация веб-приложения, компоненты, модули |
+| `config/params.php` | Параметры приложения |
+| `config/test.php` | Конфигурация для тестов |
+| `config/test_db.php` | Тестовая база данных |
+
+## Лицензия
+
+Проприетарное ПО. Все права защищены.

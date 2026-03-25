@@ -35,16 +35,20 @@ class Account extends ActiveRecord
     public function rules()
     {
         return [
-            [['company_id', 'pool_id', 'name'], 'required'],
+            [['company_id', 'name'], 'required'],
+            [['pool_id'], 'integer', 'skipOnEmpty' => true],
             [['company_id', 'pool_id', 'created_by', 'updated_by'], 'integer'],
             [['is_suspense', 'load_barsgl'], 'boolean'],
             [['date_open', 'date_close', 'created_at', 'updated_at'], 'safe'],
             [['name'], 'string', 'max' => 55],
+            [['currency'], 'string', 'max' => 3],
+            [['account_type'], 'string', 'max' => 50],
+            [['country'], 'string', 'max' => 50],
             [['load_status'], 'string', 'max' => 1],
             [['load_status'], 'default', 'value' => 'L'],
             [['is_suspense'], 'default', 'value' => false],
             [['load_barsgl'], 'default', 'value' => false],
-            [['pool_id'], 'exist', 'skipOnError' => true, 'targetClass' => AccountPool::class, 'targetAttribute' => ['pool_id' => 'id']],
+            [['pool_id'], 'exist', 'skipOnError' => true, 'skipOnEmpty' => true, 'targetClass' => AccountPool::class, 'targetAttribute' => ['pool_id' => 'id']],
             [['company_id'], 'exist', 'skipOnError' => true, 'targetClass' => Company::class, 'targetAttribute' => ['company_id' => 'id']],
         ];
     }
@@ -69,7 +73,7 @@ class Account extends ActiveRecord
     }
 
     /**
-     * Связь с группой
+     * Связь с пулом (ностробанком)
      */
     public function getPool()
     {

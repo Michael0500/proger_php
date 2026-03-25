@@ -1,12 +1,70 @@
 <?php /** @var yii\web\View $this */ ?>
 
+<!-- ══════════════════════════ Категория — Создать ══════════════════════════ -->
+<div class="modal fade" id="addCategoryModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:420px">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <span class="modal-icon indigo"><i class="fas fa-folder-plus"></i></span>
+                    Новая категория
+                </h5>
+                <button type="button" class="btn-close" @click="closeAddCategoryModal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Название <span style="color:#ef4444">*</span></label>
+                    <input type="text" class="form-control" v-model="newCategory.name" placeholder="Например: NRE банки Европы">
+                </div>
+                <div>
+                    <label class="form-label">Описание</label>
+                    <textarea class="form-control" v-model="newCategory.description" rows="2" placeholder="Необязательно..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn cancel" @click="closeAddCategoryModal"><i class="fas fa-times"></i>Отмена</button>
+                <button class="modal-btn save"   @click="createCategory"><i class="fas fa-plus"></i>Создать</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════ Категория — Редактировать ══════════════════════════ -->
+<div class="modal fade" id="editCategoryModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:420px">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <span class="modal-icon blue"><i class="fas fa-pen"></i></span>
+                    Редактировать категорию
+                </h5>
+                <button type="button" class="btn-close" @click="closeEditCategoryModal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Название <span style="color:#ef4444">*</span></label>
+                    <input type="text" class="form-control" v-model="editingCategory.name">
+                </div>
+                <div>
+                    <label class="form-label">Описание</label>
+                    <textarea class="form-control" v-model="editingCategory.description" rows="2"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn cancel" @click="closeEditCategoryModal"><i class="fas fa-times"></i>Отмена</button>
+                <button class="modal-btn save"   @click="updateCategory"><i class="fas fa-save"></i>Сохранить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- ══════════════════════════ Группа — Создать ══════════════════════════ -->
 <div class="modal fade" id="addGroupModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered" style="max-width:420px">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">
-                    <span class="modal-icon indigo"><i class="fas fa-folder-plus"></i></span>
+                    <span class="modal-icon green"><i class="fas fa-plus-circle"></i></span>
                     Новая группа
                 </h5>
                 <button type="button" class="btn-close" @click="closeAddGroupModal"></button>
@@ -14,16 +72,20 @@
             <div class="modal-body">
                 <div class="mb-3">
                     <label class="form-label">Название <span style="color:#ef4444">*</span></label>
-                    <input type="text" class="form-control" v-model="newGroup.name" placeholder="Например: NRE банки Европы">
+                    <input type="text" class="form-control" v-model="newGroup.name" placeholder="Название группы">
                 </div>
-                <div>
+                <div class="mb-3">
                     <label class="form-label">Описание</label>
                     <textarea class="form-control" v-model="newGroup.description" rows="2" placeholder="Необязательно..."></textarea>
                 </div>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="groupActiveNew" v-model="newGroup.is_active">
+                    <label class="form-check-label" for="groupActiveNew">Активна</label>
+                </div>
             </div>
             <div class="modal-footer">
-                <button class="modal-btn cancel" @click="closeAddGroupModal"><i class="fas fa-times"></i>Отмена</button>
-                <button class="modal-btn save"   @click="createGroup"><i class="fas fa-plus"></i>Создать</button>
+                <button class="modal-btn cancel"     @click="closeAddGroupModal"><i class="fas fa-times"></i>Отмена</button>
+                <button class="modal-btn save-green" @click="createGroup"><i class="fas fa-plus"></i>Создать</button>
             </div>
         </div>
     </div>
@@ -45,9 +107,13 @@
                     <label class="form-label">Название <span style="color:#ef4444">*</span></label>
                     <input type="text" class="form-control" v-model="editingGroup.name">
                 </div>
-                <div>
+                <div class="mb-3">
                     <label class="form-label">Описание</label>
                     <textarea class="form-control" v-model="editingGroup.description" rows="2"></textarea>
+                </div>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="editGroupActiveSwitch" v-model="editingGroup.is_active">
+                    <label class="form-check-label" for="editGroupActiveSwitch">Активна</label>
                 </div>
             </div>
             <div class="modal-footer">
@@ -58,83 +124,17 @@
     </div>
 </div>
 
-<!-- ══════════════════════════ Пул — Создать ══════════════════════════ -->
-<div class="modal fade" id="addPoolModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered" style="max-width:420px">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <span class="modal-icon green"><i class="fas fa-plus-circle"></i></span>
-                    Новый пул
-                </h5>
-                <button type="button" class="btn-close" @click="closeAddPoolModal"></button>
-            </div>
-            <div class="modal-body">
-                <div class="mb-3">
-                    <label class="form-label">Название <span style="color:#ef4444">*</span></label>
-                    <input type="text" class="form-control" v-model="newPool.name" placeholder="Название пула">
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Описание</label>
-                    <textarea class="form-control" v-model="newPool.description" rows="2" placeholder="Необязательно..."></textarea>
-                </div>
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="poolActiveNew" v-model="newPool.is_active">
-                    <label class="form-check-label" for="poolActiveNew">Активен</label>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="modal-btn cancel"     @click="closeAddPoolModal"><i class="fas fa-times"></i>Отмена</button>
-                <button class="modal-btn save-green" @click="createPool"><i class="fas fa-plus"></i>Создать</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- ══════════════════════════ Пул — Редактировать ══════════════════════════ -->
-<div class="modal fade" id="editPoolModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered" style="max-width:420px">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <span class="modal-icon blue"><i class="fas fa-pen"></i></span>
-                    Редактировать пул
-                </h5>
-                <button type="button" class="btn-close" @click="closeEditPoolModal"></button>
-            </div>
-            <div class="modal-body">
-                <div class="mb-3">
-                    <label class="form-label">Название <span style="color:#ef4444">*</span></label>
-                    <input type="text" class="form-control" v-model="editingPool.name">
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Описание</label>
-                    <textarea class="form-control" v-model="editingPool.description" rows="2"></textarea>
-                </div>
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="editPoolActiveSwitch" v-model="editingPool.is_active">
-                    <label class="form-check-label" for="editPoolActiveSwitch">Активен</label>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="modal-btn cancel" @click="closeEditPoolModal"><i class="fas fa-times"></i>Отмена</button>
-                <button class="modal-btn save"   @click="updatePool"><i class="fas fa-save"></i>Сохранить</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- ══════════════════════════ Пул — Фильтры ══════════════════════════ -->
-<div class="modal fade" id="configurePoolModal" tabindex="-1">
+<!-- ══════════════════════════ Группа — Фильтры ══════════════════════════ -->
+<div class="modal fade" id="configureGroupModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-xl">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">
                     <span class="modal-icon gray"><i class="fas fa-sliders-h"></i></span>
-                    Фильтры пула
-                    <span style="font-weight:400;color:#9ca3af;font-size:13px">— {{ editingPool.name }}</span>
+                    Фильтры группы
+                    <span style="font-weight:400;color:#9ca3af;font-size:13px">— {{ editingGroup.name }}</span>
                 </h5>
-                <button type="button" class="btn-close" @click="closeConfigurePoolModal"></button>
+                <button type="button" class="btn-close" @click="closeConfigureGroupModal"></button>
             </div>
             <div class="modal-body">
 
@@ -143,19 +143,19 @@
                             background:#f5f3ff;border-radius:8px;padding:10px 14px;
                             border-left:3px solid #6366f1">
                     <i class="fas fa-info-circle me-1" style="color:#6366f1"></i>
-                    Записи включаются в пул, если соответствуют условиям.
-                    Условия строятся по полям <strong>счёта</strong> (валюта счёта, тип…)
+                    Записи включаются в группу, если соответствуют условиям.
+                    Условия строятся по полям <strong>счёта</strong> (валюта счёта, тип, ностро банк…)
                     и по полям <strong>самих записей</strong> (L/S, D/C, статус, дата).
                 </div>
 
                 <!-- Лоадер -->
-                <div v-if="poolFiltersLoading" style="text-align:center;padding:24px;color:#6b7280">
+                <div v-if="groupFiltersLoading" style="text-align:center;padding:24px;color:#6b7280">
                     <i class="fas fa-spinner fa-spin me-2"></i>Загрузка...
                 </div>
 
                 <template v-else>
                     <!-- Заголовок таблицы -->
-                    <div v-if="poolFilters.length > 0"
+                    <div v-if="groupFilters.length > 0"
                          style="display:grid;grid-template-columns:70px 1fr 140px 1fr 36px;
                                 gap:6px;margin-bottom:4px;padding:0 2px">
                         <div style="font-size:11px;color:#9ca3af;text-align:center">Логика</div>
@@ -166,7 +166,7 @@
                     </div>
 
                     <!-- Строки условий -->
-                    <div v-for="(filter, index) in poolFilters" :key="index"
+                    <div v-for="(filter, index) in groupFilters" :key="index"
                          style="display:grid;grid-template-columns:70px 1fr 140px 1fr 36px;
                                 gap:6px;align-items:start;margin-bottom:8px">
 
@@ -190,11 +190,11 @@
                         <div>
                             <select class="form-select form-select-sm"
                                     v-model="filter.field"
-                                    @change="onPoolFilterFieldChange(index)">
+                                    @change="onGroupFilterFieldChange(index)">
                                 <option value="" disabled>— выберите поле —</option>
-                                <template v-for="group in (poolFilterMeta.fieldGroups || [])">
-                                    <optgroup :label="group.label">
-                                        <option v-for="(label, key) in group.fields" :key="key" :value="key">
+                                <template v-for="fg in (groupFilterMeta.fieldGroups || [])">
+                                    <optgroup :label="fg.label">
+                                        <option v-for="(label, key) in fg.fields" :key="key" :value="key">
                                             {{ label }}
                                         </option>
                                     </optgroup>
@@ -206,9 +206,9 @@
                         <div>
                             <select class="form-select form-select-sm"
                                     v-model="filter.operator"
-                                    @change="onPoolFilterOperatorChange(index)"
+                                    @change="onGroupFilterOperatorChange(index)"
                                     :disabled="!filter.field">
-                                <option v-for="(label, op) in poolFilterOperators(filter)" :key="op" :value="op">
+                                <option v-for="(label, op) in groupFilterOperators(filter)" :key="op" :value="op">
                                     {{ label }}
                                 </option>
                             </select>
@@ -218,20 +218,31 @@
                         <div>
                             <!-- account_id: Select2 -->
                             <template v-if="filter.field === 'account_id'">
-                                <select :id="'pool-filter-account-' + index"
+                                <select :id="'group-filter-account-' + index"
                                         class="form-select form-select-sm"
                                         style="width:100%">
                                     <option v-if="filter.value" :value="filter.value">
-                                        {{ (poolFilterMeta.accounts || []).find(function(a){ return String(a.id) === String(filter.value); }) ? (poolFilterMeta.accounts.find(function(a){ return String(a.id) === String(filter.value); }).name) : filter.value }}
+                                        {{ (groupFilterMeta.accounts || []).find(function(a){ return String(a.id) === String(filter.value); }) ? (groupFilterMeta.accounts.find(function(a){ return String(a.id) === String(filter.value); }).name) : filter.value }}
+                                    </option>
+                                </select>
+                            </template>
+
+                            <!-- account_pool_id: Select2 -->
+                            <template v-else-if="filter.field === 'account_pool_id'">
+                                <select :id="'group-filter-pool-' + index"
+                                        class="form-select form-select-sm"
+                                        style="width:100%">
+                                    <option v-if="filter.value" :value="filter.value">
+                                        {{ (groupFilterMeta.accountPools || []).find(function(p){ return String(p.id) === String(filter.value); }) ? (groupFilterMeta.accountPools.find(function(p){ return String(p.id) === String(filter.value); }).name) : filter.value }}
                                     </option>
                                 </select>
                             </template>
 
                             <!-- select-поля: ls, dc, match_status, is_suspense -->
-                            <template v-else-if="isSelectFilterField(filter) && filter.field !== 'account_id'">
+                            <template v-else-if="isSelectFilterField(filter) && filter.field !== 'account_id' && filter.field !== 'account_pool_id'">
                                 <select class="form-select form-select-sm" v-model="filter.value" :disabled="!filter.field">
                                     <option value="" disabled>— выберите —</option>
-                                    <option v-for="(label, val) in poolFilterFieldOptions(filter)" :key="val" :value="val">
+                                    <option v-for="(label, val) in groupFilterFieldOptions(filter)" :key="val" :value="val">
                                         {{ label }}
                                     </option>
                                 </select>
@@ -267,7 +278,7 @@
 
                         <!-- Удалить строку -->
                         <div>
-                            <button class="btn btn-sm btn-outline-danger" @click="removePoolFilter(index)"
+                            <button class="btn btn-sm btn-outline-danger" @click="removeGroupFilter(index)"
                                     style="padding:3px 7px" title="Удалить условие">
                                 <i class="fas fa-times"></i>
                             </button>
@@ -275,17 +286,17 @@
                     </div>
 
                     <!-- Пусто -->
-                    <div v-if="poolFilters.length === 0"
+                    <div v-if="groupFilters.length === 0"
                          style="text-align:center;padding:20px 0;color:#9ca3af;font-size:13px">
                         Условий нет — нажмите «+ AND» или «+ OR», чтобы добавить
                     </div>
 
                     <!-- Кнопки добавления -->
                     <div style="margin-top:14px;display:flex;gap:8px">
-                        <button class="btn btn-sm btn-outline-secondary" @click="addPoolFilter('AND')">
+                        <button class="btn btn-sm btn-outline-secondary" @click="addGroupFilter('AND')">
                             <i class="fas fa-plus me-1"></i>+ AND условие
                         </button>
-                        <button class="btn btn-sm btn-outline-secondary" @click="addPoolFilter('OR')">
+                        <button class="btn btn-sm btn-outline-secondary" @click="addGroupFilter('OR')">
                             <i class="fas fa-plus me-1"></i>+ OR условие
                         </button>
                     </div>
@@ -293,10 +304,10 @@
 
             </div>
             <div class="modal-footer">
-                <button class="modal-btn cancel" @click="closeConfigurePoolModal">
+                <button class="modal-btn cancel" @click="closeConfigureGroupModal">
                     <i class="fas fa-times"></i>Отмена
                 </button>
-                <button class="modal-btn save" @click="savePoolFilters" :disabled="poolFiltersLoading">
+                <button class="modal-btn save" @click="saveGroupFilters" :disabled="groupFiltersLoading">
                     <i class="fas fa-save"></i>Сохранить фильтры
                 </button>
             </div>

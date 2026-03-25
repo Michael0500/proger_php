@@ -84,7 +84,7 @@ var EntriesMixin = {
         // ══════════════════════════════════════════════════
 
         loadEntries: function (reset) {
-            if (!this.selectedPool) return;
+            if (!this.selectedGroup) return;
             if (reset) {
                 this.entries          = [];
                 this.entriesPage      = 1;
@@ -97,7 +97,7 @@ var EntriesMixin = {
             else         self.entriesLoadingMore = true;
 
             SmartMatchApi.get(window.AppRoutes.entryList, {
-                pool_id: self.selectedPool.id,
+                pool_id: self.selectedGroup.id,
                 page:    self.entriesPage,
                 limit:   self.entriesLimit,
                 sort:    self.sortCol,
@@ -215,7 +215,7 @@ var EntriesMixin = {
                 ajax: {
                     url: function () {
                         return window.AppRoutes.entrySearchAccounts +
-                            '?pool_id=' + (self.selectedPool ? self.selectedPool.id : 0);
+                            '?pool_id=' + (self.selectedGroup ? self.selectedGroup.id : 0);
                     },
                     dataType: 'json', delay: 200,
                     data:     function (p) { return { q: p.term || '' }; },
@@ -260,7 +260,7 @@ var EntriesMixin = {
                 ajax: {
                     url: function () {
                         return window.AppRoutes.entrySearchAccounts +
-                            '?pool_id=' + (self.selectedPool ? self.selectedPool.id : 0);
+                            '?pool_id=' + (self.selectedGroup ? self.selectedGroup.id : 0);
                     },
                     dataType: 'json', delay: 200,
                     data:     function (p) { return { q: p.term || '' }; },

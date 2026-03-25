@@ -1,0 +1,424 @@
+<?php
+/** @var yii\web\View $this */
+/** @var array $initData */
+
+use yii\helpers\Url;
+
+$this->title = 'Ностро-банки — SmartMatch';
+$initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
+?>
+
+<div id="nostro-banks-app">
+
+    <!-- ══ TOOLBAR ══════════════════════════════════════════════ -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px">
+            <div style="width:36px;height:36px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border-radius:10px;display:flex;align-items:center;justify-content:center">
+                <i class="fas fa-landmark" style="color:#fff;font-size:16px"></i>
+            </div>
+            <div>
+                <div style="font-size:18px;font-weight:800;color:#1a1f36;letter-spacing:-.3px">Ностро-банки</div>
+                <div style="font-size:11px;color:#9ca3af;font-weight:500">Управление ностро-банками и привязанными счетами</div>
+            </div>
+        </div>
+        <button class="btn-action btn-primary-violet" @click="showCreateModal">
+            <i class="fas fa-plus me-1"></i> Добавить ностро-банк
+        </button>
+    </div>
+
+    <!-- ══ СПИСОК НОСТРО-БАНКОВ ═══════════════════════════════ -->
+    <div v-if="loading" style="text-align:center;padding:60px">
+        <i class="fas fa-spinner fa-spin" style="font-size:24px;color:#9ca3af"></i>
+    </div>
+
+    <div v-else-if="pools.length === 0" class="sm-card" style="text-align:center;padding:60px">
+        <i class="fas fa-landmark" style="font-size:48px;color:#d1d5db;margin-bottom:16px"></i>
+        <p style="color:#9ca3af;font-size:14px">Ностро-банки ещё не созданы</p>
+        <button class="btn-action btn-primary-violet" @click="showCreateModal" style="margin-top:8px">
+            <i class="fas fa-plus me-1"></i> Создать первый
+        </button>
+    </div>
+
+    <div v-else>
+        <div v-for="pool in pools" :key="pool.id" class="sm-card" style="margin-bottom:16px">
+            <!-- Заголовок ностро-банка (кликабельный для сворачивания) -->
+            <div class="sm-card-header nb-pool-header" @click="togglePool(pool.id)" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none">
+                <div style="display:flex;align-items:center;gap:8px">
+                    <i class="fas fa-chevron-right nb-chevron" :class="{ 'nb-chevron-open': expandedPools[pool.id] }"></i>
+                    <i class="fas fa-landmark" style="color:#4f46e5"></i>
+                    <span style="font-weight:700;font-size:15px">{{ pool.name }}</span>
+                    <span style="font-size:11px;color:#9ca3af;background:#f3f4f6;padding:1px 8px;border-radius:10px">
+                        {{ pool.accounts.length }} {{ accountWord(pool.accounts.length) }}
+                    </span>
+                </div>
+                <div style="display:flex;gap:6px" @click.stop>
+                    <button class="btn-icon" @click="showAssignModal(pool)" title="Добавить счёт">
+                        <i class="fas fa-plus-circle" style="color:#059669"></i>
+                    </button>
+                    <button class="btn-icon" @click="editPool(pool)" title="Редактировать">
+                        <i class="fas fa-pen" style="color:#6366f1"></i>
+                    </button>
+                    <button class="btn-icon" @click="deletePool(pool)" title="Удалить">
+                        <i class="fas fa-trash-alt" style="color:#ef4444"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Описание (видно всегда) -->
+            <div v-if="pool.description && !expandedPools[pool.id]" style="padding:6px 16px 10px;font-size:12px;color:#6b7280">
+                {{ pool.description }}
+            </div>
+
+            <!-- Развёрнутое содержимое -->
+            <div v-if="expandedPools[pool.id]">
+                <div v-if="pool.description" style="padding:6px 16px 0;font-size:12px;color:#6b7280">
+                    {{ pool.description }}
+                </div>
+
+                <!-- Таблица счетов -->
+                <div class="sm-card-body" style="padding:8px 0 0">
+                    <div v-if="pool.accounts.length === 0" style="text-align:center;padding:20px;color:#9ca3af;font-size:13px">
+                        <i class="fas fa-inbox me-1"></i> Нет привязанных счетов
+                    </div>
+                    <table v-else class="nb-accounts-table">
+                        <thead>
+                            <tr>
+                                <th>Название счёта</th>
+                                <th style="width:100px">Валюта</th>
+                                <th style="width:100px">Suspense</th>
+                                <th style="width:120px">Дата открытия</th>
+                                <th style="width:120px">Дата закрытия</th>
+                                <th style="width:60px"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="acc in pool.accounts" :key="acc.id">
+                                <td style="font-weight:600">{{ acc.name }}</td>
+                                <td><span class="currency-badge">{{ acc.currency || '—' }}</span></td>
+                                <td>
+                                    <span v-if="acc.is_suspense" class="badge-yes">Да</span>
+                                    <span v-else style="color:#9ca3af">Нет</span>
+                                </td>
+                                <td>{{ acc.date_open || '—' }}</td>
+                                <td>{{ acc.date_close || '—' }}</td>
+                                <td style="text-align:center">
+                                    <button class="btn-icon" @click="unassignAccount(pool, acc)" title="Отвязать счёт">
+                                        <i class="fas fa-unlink" style="color:#ef4444;font-size:12px"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══ МОДАЛКА: Создать / Редактировать ностро-банк ═══════ -->
+    <div class="modal fade" id="poolModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-landmark me-2" style="color:#4f46e5"></i>
+                        {{ formPool.id ? 'Редактировать' : 'Создать' }} ностро-банк
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Название <span style="color:#ef4444">*</span></label>
+                        <input type="text" class="form-control" v-model="formPool.name" placeholder="Например: Deutsche Bank AG" maxlength="100">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Описание</label>
+                        <textarea class="form-control" v-model="formPool.description" rows="2" placeholder="Необязательное описание"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-primary" @click="savePool" :disabled="!formPool.name || saving">
+                        <i v-if="saving" class="fas fa-spinner fa-spin me-1"></i>
+                        {{ formPool.id ? 'Сохранить' : 'Создать' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══ МОДАЛКА: Привязать счёт ════════════════════════════ -->
+    <div class="modal fade" id="assignModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-link me-2" style="color:#059669"></i>
+                        Привязать счёт к «{{ assignTarget ? assignTarget.name : '' }}»
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div v-if="loadingAvailable" style="text-align:center;padding:20px">
+                        <i class="fas fa-spinner fa-spin"></i> Загрузка...
+                    </div>
+                    <div v-else-if="availableAccounts.length === 0" style="text-align:center;padding:20px;color:#9ca3af">
+                        <i class="fas fa-check-circle me-1"></i> Все счета уже привязаны к ностро-банкам
+                    </div>
+                    <div v-else>
+                        <label class="form-label">Выберите счёт</label>
+                        <select class="form-select" v-model="selectedAccountId">
+                            <option value="">— Выберите —</option>
+                            <option v-for="a in availableAccounts" :key="a.id" :value="a.id">
+                                {{ a.name }} {{ a.currency ? '(' + a.currency + ')' : '' }}
+                            </option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-success" @click="assignAccount" :disabled="!selectedAccountId || saving">
+                        <i v-if="saving" class="fas fa-spinner fa-spin me-1"></i>
+                        <i v-else class="fas fa-link me-1"></i> Привязать
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<style>
+.nb-accounts-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.nb-accounts-table th {
+    padding: 8px 16px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: .3px;
+    border-bottom: 1px solid #e5e7eb;
+    background: #f9fafb;
+}
+.nb-accounts-table td {
+    padding: 8px 16px;
+    border-bottom: 1px solid #f3f4f6;
+    color: #374151;
+}
+.nb-accounts-table tr:last-child td {
+    border-bottom: none;
+}
+.nb-accounts-table tr:hover td {
+    background: #f9fafb;
+}
+.currency-badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 10px;
+    background: #ede9fe;
+    color: #6d28d9;
+    font-size: 11px;
+    font-weight: 700;
+}
+.badge-yes {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 10px;
+    background: #fef3c7;
+    color: #b45309;
+    font-size: 11px;
+    font-weight: 600;
+}
+.btn-icon {
+    border: none;
+    background: none;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 6px;
+    transition: background .15s;
+}
+.btn-icon:hover {
+    background: #f3f4f6;
+}
+.nb-chevron {
+    font-size: 11px;
+    color: #9ca3af;
+    transition: transform .2s ease;
+}
+.nb-chevron-open {
+    transform: rotate(90deg);
+}
+.nb-pool-header:hover {
+    background: #f9fafb;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+new Vue({
+    el: '#nostro-banks-app',
+    data: function () {
+        var init = <?= $initJson ?>;
+        return {
+            pools: init.pools || [],
+            loading: false,
+            saving: false,
+
+            // Форма создания/редактирования
+            formPool: { id: null, name: '', description: '' },
+
+            // Свёрнутые/развёрнутые банки
+            expandedPools: {},
+
+            // Привязка счёта
+            assignTarget: null,
+            availableAccounts: [],
+            loadingAvailable: false,
+            selectedAccountId: '',
+        };
+    },
+
+    methods: {
+        // ── Свернуть/развернуть ─────────────────────────
+        togglePool: function (poolId) {
+            this.$set(this.expandedPools, poolId, !this.expandedPools[poolId]);
+        },
+
+        // ── Helpers ──────────────────────────────────────
+        accountWord: function (n) {
+            if (n % 10 === 1 && n % 100 !== 11) return 'счёт';
+            if (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14)) return 'счёта';
+            return 'счетов';
+        },
+
+        _modal: function (id, action) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            var inst = bootstrap.Modal.getInstance(el);
+            if (action === 'show') {
+                inst ? inst.show() : new bootstrap.Modal(el).show();
+            } else if (inst) {
+                inst.hide();
+            }
+        },
+
+        reload: function () {
+            var self = this;
+            self.loading = true;
+            axios.get('<?= Url::to(['/account-pool/list']) ?>').then(function (r) {
+                if (r.data.success) self.pools = r.data.data;
+            }).finally(function () { self.loading = false; });
+        },
+
+        // ── CRUD ностро-банков ───────────────────────────
+        showCreateModal: function () {
+            this.formPool = { id: null, name: '', description: '' };
+            this._modal('poolModal', 'show');
+        },
+
+        editPool: function (pool) {
+            this.formPool = { id: pool.id, name: pool.name, description: pool.description || '' };
+            this._modal('poolModal', 'show');
+        },
+
+        savePool: function () {
+            var self = this;
+            self.saving = true;
+            var url = self.formPool.id
+                ? '<?= Url::to(['/account-pool/update']) ?>'
+                : '<?= Url::to(['/account-pool/create']) ?>';
+            var data = self.formPool.id
+                ? { id: self.formPool.id, name: self.formPool.name, description: self.formPool.description }
+                : { name: self.formPool.name, description: self.formPool.description };
+
+            axios.post(url, data).then(function (r) {
+                if (r.data.success) {
+                    self._modal('poolModal', 'hide');
+                    self.reload();
+                } else {
+                    Swal.fire({ icon: 'error', title: 'Ошибка', text: r.data.message });
+                }
+            }).catch(function () {
+                Swal.fire({ icon: 'error', title: 'Ошибка', text: 'Сетевая ошибка' });
+            }).finally(function () { self.saving = false; });
+        },
+
+        deletePool: function (pool) {
+            var self = this;
+            Swal.fire({
+                title: 'Удалить «' + pool.name + '»?',
+                html: pool.accounts.length > 0
+                    ? 'У этого ностро-банка <b>' + pool.accounts.length + '</b> привязанных счетов. Они будут отвязаны.'
+                    : 'Ностро-банк будет удалён безвозвратно.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Удалить',
+                cancelButtonText: 'Отмена',
+                confirmButtonColor: '#ef4444',
+            }).then(function (r) {
+                if (!r.isConfirmed) return;
+                axios.post('<?= Url::to(['/account-pool/delete']) ?>', { id: pool.id }).then(function (res) {
+                    if (res.data.success) self.reload();
+                    else Swal.fire({ icon: 'error', title: 'Ошибка', text: res.data.message });
+                });
+            });
+        },
+
+        // ── Привязка/отвязка счетов ─────────────────────
+        showAssignModal: function (pool) {
+            var self = this;
+            self.assignTarget = pool;
+            self.selectedAccountId = '';
+            self.loadingAvailable = true;
+            self._modal('assignModal', 'show');
+
+            axios.get('<?= Url::to(['/account-pool/available-accounts']) ?>').then(function (r) {
+                self.availableAccounts = r.data.success ? r.data.data : [];
+            }).finally(function () { self.loadingAvailable = false; });
+        },
+
+        assignAccount: function () {
+            var self = this;
+            if (!self.selectedAccountId || !self.assignTarget) return;
+            self.saving = true;
+
+            axios.post('<?= Url::to(['/account-pool/assign-account']) ?>', {
+                pool_id: self.assignTarget.id,
+                account_id: self.selectedAccountId
+            }).then(function (r) {
+                if (r.data.success) {
+                    self._modal('assignModal', 'hide');
+                    self.reload();
+                } else {
+                    Swal.fire({ icon: 'error', title: 'Ошибка', text: r.data.message });
+                }
+            }).finally(function () { self.saving = false; });
+        },
+
+        unassignAccount: function (pool, acc) {
+            var self = this;
+            Swal.fire({
+                title: 'Отвязать счёт?',
+                html: 'Счёт <b>' + acc.name + '</b> будет отвязан от «' + pool.name + '».',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Отвязать',
+                cancelButtonText: 'Отмена',
+                confirmButtonColor: '#ef4444',
+            }).then(function (r) {
+                if (!r.isConfirmed) return;
+                axios.post('<?= Url::to(['/account-pool/unassign-account']) ?>', {
+                    account_id: acc.id
+                }).then(function (res) {
+                    if (res.data.success) self.reload();
+                    else Swal.fire({ icon: 'error', title: 'Ошибка', text: res.data.message });
+                });
+            });
+        },
+    }
+});
+});
+</script>

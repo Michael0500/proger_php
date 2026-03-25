@@ -23,14 +23,14 @@ var ModalsMixin = {
             }
         },
 
-        // Группы
-        closeAddGroupModal:  function () { this._hideModal('addGroupModal'); },
-        closeEditGroupModal: function () { this._hideModal('editGroupModal'); },
+        // Категории
+        closeAddCategoryModal:  function () { this._hideModal('addCategoryModal'); },
+        closeEditCategoryModal: function () { this._hideModal('editCategoryModal'); },
 
-        // Пулы
-        closeAddPoolModal:      function () { this._hideModal('addPoolModal'); },
-        closeEditPoolModal:     function () { this._hideModal('editPoolModal'); },
-        closeConfigurePoolModal: function () { this._hideModal('configurePoolModal'); },
+        // Группы
+        closeAddGroupModal:       function () { this._hideModal('addGroupModal'); },
+        closeEditGroupModal:      function () { this._hideModal('editGroupModal'); },
+        closeConfigureGroupModal: function () { this._hideModal('configureGroupModal'); },
 
         // Записи
         closeEntryModal: function () { this._hideModal('entryModal'); },

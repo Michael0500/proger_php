@@ -31,9 +31,9 @@
     <div v-show="activeSection==='entries'">
 
         <!-- ─────────── Пул не выбран ─────────── -->
-        <div v-if="!selectedPool" class="empty-pool">
+        <div v-if="!selectedGroup" class="empty-pool">
             <i class="fas fa-hand-point-left"></i>
-            <p>Выберите пул в панели слева</p>
+            <p>Выберите группу в панели слева</p>
         </div>
 
         <div v-else>
@@ -41,8 +41,8 @@
             <!-- ТУЛБАР -->
             <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
                 <div style="display:flex;align-items:center;gap:8px">
-                    <span class="pool-title">{{ selectedPool.name }}</span>
-                    <span class="pool-tag">{{ selectedGroup ? selectedGroup.name : '' }}</span>
+                    <span class="pool-title">{{ selectedGroup.name }}</span>
+                    <span class="pool-tag">{{ selectedCategory ? selectedCategory.name : '' }}</span>
                     <span v-if="entriesTotal > 0" style="font-size:11px;color:#9ca3af;margin-left:2px">
                     {{ entriesTotal.toLocaleString() }} записей
                 </span>
@@ -422,6 +422,20 @@
                     <i class="fas fa-plus"></i>Добавить
                 </button>
             </div>
+        </div>
+
+        <!-- ФИЛЬТР ПО НОСТРО-БАНКУ (Select2) -->
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+            <label style="font-size:12px;font-weight:600;color:#6b7280;white-space:nowrap">
+                <i class="fas fa-landmark me-1" style="color:#4f46e5"></i>Ностро-банк:
+            </label>
+            <select id="balancePoolSelect" class="form-select" style="width:300px">
+                <option value="">— Все ностро-банки —</option>
+            </select>
+            <span v-if="_getGroupPoolId() && !balancePoolId"
+                  style="font-size:11px;color:#6366f1;background:#ede9fe;padding:2px 10px;border-radius:10px;white-space:nowrap">
+                <i class="fas fa-filter me-1"></i>авто из группы
+            </span>
         </div>
 
         <!-- ФИЛЬТРЫ -->

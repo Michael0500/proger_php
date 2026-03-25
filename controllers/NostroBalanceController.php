@@ -62,6 +62,9 @@ class NostroBalanceController extends BaseController
                     : ['nb.' . $f => $filters[$f]]);
             }
         }
+        if (!empty($filters['pool_id'])) {
+            $q->andWhere(['a.pool_id' => (int)$filters['pool_id']]);
+        }
         if (!empty($filters['account_id'])) {
             $q->andWhere(['nb.account_id' => (int)$filters['account_id']]);
         }
@@ -322,12 +325,20 @@ class NostroBalanceController extends BaseController
 
         $accounts = Account::find()
             ->where(['company_id' => $cid])
+            ->select(['id', 'name', 'pool_id'])
+            ->orderBy(['name' => SORT_ASC])
+            ->asArray()
+            ->all();
+
+        // Список ностро-банков
+        $pools = \app\models\AccountPool::find()
+            ->where(['company_id' => $cid])
             ->select(['id', 'name'])
             ->orderBy(['name' => SORT_ASC])
             ->asArray()
             ->all();
 
-        return ['success' => true, 'data' => $accounts];
+        return ['success' => true, 'data' => $accounts, 'pools' => $pools];
     }
 
     // ─────────────────────────────────────────────────────────────

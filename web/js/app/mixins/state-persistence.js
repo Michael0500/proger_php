@@ -1,7 +1,7 @@
 /**
  * StatePersistenceMixin
  * Сохраняет/восстанавливает: активную вкладку и состояние сайдбара.
- * Группы/пулы сохраняются напрямую в GroupsMixin и PoolsMixin.
+ * Категории/группы сохраняются напрямую в CategoriesMixin и GroupsMixin.
  */
 var StatePersistenceMixin = {
 

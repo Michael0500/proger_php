@@ -19,6 +19,7 @@ body {
     box-shadow: 0 2px 12px rgba(0,0,0,.25);
     padding: 0 24px;
     height: 52px;
+    overflow: visible;
 }
 #header .navbar-brand {
     font-weight: 700;
@@ -1966,4 +1967,64 @@ select.form-control-sm-custom {
     border-radius: 2px;
     vertical-align: middle;
     margin: 0 2px;
+}
+
+/* ── Карточки (аналог sm-card из проекта) ── */
+.sm-card { background:#fff; border-radius:12px; border:1px solid #e5e9f2; box-shadow:0 1px 4px rgba(0,0,0,.06); overflow:hidden; }
+.sm-card-header { padding:12px 18px; font-size:13px; font-weight:700; color:#1a1f36; border-bottom:1px solid #f1f3f9; background:#fafbff; display:flex; align-items:center; }
+.sm-card-body { padding:16px 18px; }
+
+/* ── Кнопки ── */
+.btn-action { border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; padding:7px 14px; display:inline-flex; align-items:center; gap:6px; transition:all .15s; }
+.btn-primary-violet { background:linear-gradient(135deg,#4f46e5,#7c3aed); color:#fff; }
+.btn-primary-violet:hover:not(:disabled) { opacity:.88; box-shadow:0 3px 10px rgba(79,70,229,.35); }
+.btn-primary-violet:disabled { opacity:.5; cursor:not-allowed; }
+.btn-outline-secondary { background:#fff; border:1.5px solid #d1d5db; color:#374151; }
+.btn-outline-secondary:hover { background:#f9fafb; }
+
+/* ── Badge L/S ── */
+.badge-ls { display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:5px; font-size:11px; font-weight:800; margin-right:5px; }
+.badge-l { background:#dbeafe; color:#1e40af; }
+.badge-s { background:#fef3c7; color:#92400e; }
+
+/* ── D/C метки ── */
+.dc-d { background:#fee2e2; color:#dc2626; border-radius:4px; padding:1px 6px; font-size:11px; font-weight:800; }
+.dc-c { background:#dcfce7; color:#16a34a; border-radius:4px; padding:1px 6px; font-size:11px; font-weight:800; }
+
+/* ── Таблица итогов ── */
+.recon-summary-table { width:100%; border-collapse:collapse; font-size:13px; }
+.recon-summary-table th { padding:8px 16px; background:#f9fafb; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#9ca3af; border-bottom:1px solid #f1f3f9; }
+.recon-summary-table td { padding:9px 16px; border-bottom:1px solid #f1f3f9; color:#1a1f36; }
+.recon-summary-table tbody tr:last-child td { border-bottom:none; }
+.recon-diff-row td { font-size:13px; }
+.diff-zero td { background:#f0fdf4; color:#15803d !important; }
+.diff-nonzero td { background:#fef2f2; color:#dc2626 !important; }
+
+/* ── Таблица записей ── */
+.oi-table-wrap { overflow-x:auto; }
+.recon-entries-table { width:100%; border-collapse:collapse; font-size:12px; }
+.recon-entries-table th { padding:6px 12px; background:#f9fafb; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#9ca3af; border-bottom:1px solid #f1f3f9; white-space:nowrap; }
+.recon-entries-table td { padding:6px 12px; border-bottom:1px solid #f8f9fb; color:#374151; }
+.recon-entries-table tbody tr:hover td { background:#f9fafb; }
+.recon-entries-table tfoot .oi-net-row td { background:#f0f4ff; font-size:12px; color:#1a1f36; border-top:1.5px solid #e5e9f2; }
+
+/* ── Outstanding Items секции ── */
+.oi-section-header { padding:8px 16px; font-size:12px; font-weight:700; display:flex; align-items:center; gap:8px; border-bottom:1px solid #f1f3f9; }
+.oi-ledger-debit  { background:#eff6ff; color:#1e40af; border-left:4px solid #3b82f6; }
+.oi-ledger-credit { background:#f0fdf4; color:#166534; border-left:4px solid #22c55e; }
+.oi-stmt-debit    { background:#fff7ed; color:#9a3412; border-left:4px solid #f97316; }
+.oi-stmt-credit   { background:#fdf4ff; color:#6b21a8; border-left:4px solid #a855f7; }
+.oi-count { margin-left:auto; font-size:10px; font-weight:500; opacity:.7; }
+.oi-empty { padding:10px 16px; font-size:12px; color:#9ca3af; font-style:italic; }
+
+/* ── Монospace мелкий ── */
+.td-mono-sm { font-family:monospace; font-size:11px; color:#6b7280; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* ── Печать ── */
+@media print {
+    body * { visibility:hidden; }
+    #recon-report-printable, #recon-report-printable * { visibility:visible; }
+    #recon-report-printable { position:absolute; left:0; top:0; width:100%; }
+    .btn-action, .sm-card-header i { display:none !important; }
+    .sm-card { box-shadow:none !important; border:1px solid #ccc !important; }
 }

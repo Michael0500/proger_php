@@ -50,24 +50,25 @@ class NostroEntryController extends BaseController
             ->leftJoin(['a' => 'accounts'], 'a.id = ne.account_id')
             ->where(['ne.company_id' => $cid]);
 
+        // pool_id теперь означает group_id (группа с фильтрами)
         if ($poolId > 0) {
-            $pool = \app\models\AccountPool::findOne($poolId);
+            $group = \app\models\Group::findOne($poolId);
 
-            if (!$pool) {
-                return ['success' => false, 'message' => 'Пул не найден'];
+            if (!$group) {
+                return ['success' => false, 'message' => 'Группа не найдена'];
             }
 
-            $poolFilters = \app\models\AccountPoolFilter::find()
-                ->where(['pool_id' => $poolId])
+            $groupFilters = \app\models\GroupFilter::find()
+                ->where(['group_id' => $poolId])
                 ->orderBy(['sort_order' => SORT_ASC])
                 ->all();
 
-            if (!empty($poolFilters)) {
+            if (!empty($groupFilters)) {
                 // ── Шаг 1: account-фильтры → находим подходящие account_id ─────────
-                /** @var \app\models\AccountPoolFilter[] $accountFilters */
-                $accountFilters = array_values(array_filter($poolFilters, function($f) { return $f->isAccountField(); }));
-                /** @var \app\models\AccountPoolFilter[] $entryFilters */
-                $entryFilters   = array_values(array_filter($poolFilters, function($f) { return $f->isEntryField(); }));
+                /** @var \app\models\GroupFilter[] $accountFilters */
+                $accountFilters = array_values(array_filter($groupFilters, function($f) { return $f->isAccountField(); }));
+                /** @var \app\models\GroupFilter[] $entryFilters */
+                $entryFilters   = array_values(array_filter($groupFilters, function($f) { return $f->isEntryField(); }));
 
                 if (!empty($accountFilters)) {
                     $accountQuery = Account::find()

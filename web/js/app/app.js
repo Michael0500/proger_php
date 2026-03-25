@@ -19,46 +19,41 @@
         new Vue({
             el: '#app',
 
-            mixins: [ModalsMixin, GroupsMixin, PoolsMixin, EntriesMixin, MatchingMixin, BalanceMixin, ArchiveMixin, StatePersistenceMixin],
+            mixins: [ModalsMixin, CategoriesMixin, GroupsMixin, EntriesMixin, MatchingMixin, BalanceMixin, ArchiveMixin, StatePersistenceMixin],
 
             data: {
                 isSidebarCollapsed: false,
-                loadingGroups:      false,
-                groups:             [],
+                loadingCategories:  false,
+                categories:         [],
+                selectedCategory:   null,
                 selectedGroup:      null,
-                selectedPool:       null,
-                poolFilters: [],
-                poolFilterFields: {},
-                poolFilterMeta:     {},
-                poolFiltersLoading: false,
+                groupFilters: [],
+                groupFilterFields: {},
+                groupFilterMeta:     {},
+                groupFiltersLoading: false,
 
                 // Активная секция: 'entries' | 'balance' | 'archive'
                 activeSection: 'entries',
 
-                newGroup:     { name: '', description: '' },
-                editingGroup: { id: null, name: '', description: '' },
+                newCategory:     { name: '', description: '' },
+                editingCategory: { id: null, name: '', description: '' },
 
-                newPool: { group_id: null, name: '', description: '', is_active: true },
-                editingPool: {
+                newGroup: { category_id: null, name: '', description: '', is_active: true },
+                editingGroup: {
                     id: null, name: '', description: '', is_active: true,
-                    filter_criteria: {
-                        currency: '', account_type: '', bank_code: '',
-                        country: '', is_suspense: false
-                    }
                 },
 
                 editingCommentId:    null,
                 editingCommentValue: '',
-                collapsedGroups: {},
-                _pendingGroupId: null,
-                _pendingPoolId:  null,
+                collapsedCategories: {},
+                _pendingCategoryId: null,
+                _pendingGroupId:    null,
             },
 
             mounted: function () {
-                this.loadGroups();
+                this.loadCategories();
                 this.loadBalanceAccounts();
                 this.loadArchiveAccounts();
-                // Загружаем статистику архива при старте (для badge в сайдбаре)
                 this.loadArchiveStats();
 
                 if (this.activeSection === 'balance') {
@@ -99,17 +94,11 @@
 
                 // ── Вспомогательные методы для архива ────────────
 
-                /**
-                 * Истёк ли срок хранения записи
-                 */
                 isExpired: function (expiresAt) {
                     if (!expiresAt) return false;
                     return new Date(expiresAt) < new Date();
                 },
 
-                /**
-                 * Истекает ли срок хранения в ближайшие 90 дней
-                 */
                 isExpiringSoon: function (expiresAt) {
                     if (!expiresAt) return false;
                     var d = new Date(expiresAt);

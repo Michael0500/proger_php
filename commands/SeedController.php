@@ -5,8 +5,9 @@ use Yii;
 use yii\console\Controller;
 use yii\console\ExitCode;
 use app\models\Account;
-use app\models\AccountGroup;
 use app\models\AccountPool;
+use app\models\Category;
+use app\models\Group;
 use app\models\Company;
 
 /**
@@ -262,29 +263,41 @@ class SeedController extends Controller
      */
     private function ensureTestStructure(int $companyId): void
     {
+        // Категория
+        $category = Category::find()
+            ->where(['company_id' => $companyId, 'name' => 'Тестовая категория'])
+            ->one();
+        if (!$category) {
+            $category             = new Category();
+            $category->company_id = $companyId;
+            $category->name       = 'Тестовая категория';
+            $category->description = 'Создана автоматически для тестирования';
+            $category->save(false);
+            $this->stdout("   ✓ Категория: {$category->name}\n");
+        }
+
         // Группа
-        $group = AccountGroup::find()
-            ->where(['company_id' => $companyId, 'name' => 'Тестовая группа'])
+        $group = Group::find()
+            ->where(['category_id' => $category->id, 'name' => 'Основная группа'])
             ->one();
         if (!$group) {
-            $group             = new AccountGroup();
-            $group->company_id = $companyId;
-            $group->name       = 'Тестовая группа';
-            $group->description = 'Создана автоматически для тестирования';
+            $group              = new Group();
+            $group->company_id  = $companyId;
+            $group->category_id = $category->id;
+            $group->name        = 'Основная группа';
+            $group->is_active   = true;
             $group->save(false);
             $this->stdout("   ✓ Группа: {$group->name}\n");
         }
 
-        // Пул
+        // Пул (ностробанк)
         $pool = AccountPool::find()
-            ->where(['group_id' => $group->id, 'name' => 'Основной пул'])
+            ->where(['company_id' => $companyId, 'name' => 'Основной пул'])
             ->one();
         if (!$pool) {
             $pool             = new AccountPool();
             $pool->company_id = $companyId;
-            $pool->group_id   = $group->id;
             $pool->name       = 'Основной пул';
-            $pool->is_active  = true;
             $pool->save(false);
             $this->stdout("   ✓ Пул: {$pool->name}\n");
         }

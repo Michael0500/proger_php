@@ -21,23 +21,22 @@ var SmartMatchApi = (function () {
             return post(url, data).then(function (r) { return r.data; });
         },
 
-        // ── Группы ──────────────────────────────────────────────────
-        groups: {
-            list:   function ()       { return get(AppRoutes.groupGetGroups); },
-            create: function (data)   { return post(AppRoutes.groupCreate, data); },
-            update: function (data)   { return post(AppRoutes.groupUpdate, data); },
-            delete: function (id)     { return post(AppRoutes.groupDelete, { id: id }); }
+        // ── Категории ─────────────────────────────────────────────
+        categories: {
+            list:   function ()       { return get(AppRoutes.categoryGetCategories); },
+            create: function (data)   { return post(AppRoutes.categoryCreate, data); },
+            update: function (data)   { return post(AppRoutes.categoryUpdate, data); },
+            delete: function (id)     { return post(AppRoutes.categoryDelete, { id: id }); }
         },
 
-        // ── Пулы ────────────────────────────────────────────────────
-        pools: {
-            create:   function (data) { return post(AppRoutes.poolCreate, data); },
-            update:   function (data) { return post(AppRoutes.poolUpdate, data); },
-            delete:   function (id)   { return post(AppRoutes.poolDelete, { id: id }); },
-            accounts: function (id)   { return get(AppRoutes.poolGetAccounts, { id: id }); },
-            getFilters:  function(poolId) { return get(AppRoutes.poolGetFilters, { pool_id: poolId }); },
-            saveFilters: function(data)   { return post(AppRoutes.poolSaveFilters, data); },
-
+        // ── Группы ────────────────────────────────────────────────
+        groups: {
+            create:      function (data)    { return post(AppRoutes.groupCreate, data); },
+            update:      function (data)    { return post(AppRoutes.groupUpdate, data); },
+            delete:      function (id)      { return post(AppRoutes.groupDelete, { id: id }); },
+            accounts:    function (id)      { return get(AppRoutes.groupGetAccounts, { id: id }); },
+            getFilters:  function(groupId)  { return get(AppRoutes.groupGetFilters, { group_id: groupId }); },
+            saveFilters: function(data)     { return post(AppRoutes.groupSaveFilters, data); },
         },
 
         // ── Записи выверки (NostroEntry) ────────────────────────────

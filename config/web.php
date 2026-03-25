@@ -37,31 +37,32 @@ $config = [
                 // ── User / Profile ────────────────────────────────
                 'user/view'            => 'user/view',
                 'user/update'          => 'user/update',
-                'user/get-pools'       => 'user/get-pools',
-                'user/get-accounts'    => 'user/get-accounts',
                 'user/select-company'  => 'user/select-company',
                 'user/reset-company'   => 'user/reset-company',
-                'user/create-account'  => 'user/create-account',
-                'user/delete-account'  => 'user/delete-account',
 
                 // ── Company (старые роуты оставляем для совместимости) ─
                 'company/select' => 'company/select',
                 'company/reset'  => 'company/reset',
 
-                // ── Account (JSON API для Vue основного приложения) ───
-                'account/create' => 'account/create',
-                'account/update' => 'account/update',
-                'account/delete' => 'account/delete',
-                'account/list'   => 'account/list',
+                // ── Счета ────────────────────────────────────────
+                'accounts'         => 'account/index',
+                'account/create'   => 'account/create',
+                'account/update'   => 'account/update',
+                'account/delete'   => 'account/delete',
+                'account/list'     => 'account/list',
 
-                // ── Account Groups ────────────────────────────────
-                'account-group/get-groups' => 'account-group/get-groups',
-                'account-group/create'     => 'account-group/create',
-                'account-group/update'     => 'account-group/update',
-                'account-group/delete'     => 'account-group/delete',
+                // ── Категории ────────────────────────────────────
+                'category/get-categories' => 'category/get-categories',
+                'category/create'         => 'category/create',
+                'category/update'         => 'category/update',
+                'category/delete'         => 'category/delete',
 
-                // ── Account Pools ─────────────────────────────────
-                'account-pool/<action>' => 'account-pool/<action>',
+                // ── Группы ───────────────────────────────────────
+                'group/<action>' => 'group/<action>',
+
+                // ── Ностро-банки ─────────────────────────────────
+                'nostro-banks'                     => 'account-pool/index',
+                'account-pool/<action>'            => 'account-pool/<action>',
 
                 // ── Nostro entries & Matching (универсальные) ─────
                 'nostro-entry/<action>' => 'nostro-entry/<action>',

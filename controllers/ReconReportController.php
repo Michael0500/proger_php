@@ -35,9 +35,9 @@ class ReconReportController extends BaseController
             return $this->redirect(['/site/index']);
         }
 
-        // Список пулов (групп банков) для выбора
+        // Список ностро-банков для выбора
         $pools = AccountPool::find()
-            ->where(['company_id' => $cid, 'is_active' => true])
+            ->where(['company_id' => $cid])
             ->orderBy(['name' => SORT_ASC])
             ->all();
 

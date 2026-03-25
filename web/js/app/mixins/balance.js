@@ -24,6 +24,8 @@ var BalanceMixin = {
             balanceFiltersOpen: false,
 
             balanceAccounts: [],
+            balancePools:    [],
+            balancePoolId:   '',  // фильтр по ностро-банку (Select2)
 
             editingBalance: {
                 id: null, account_id: null, account_name: '',
@@ -56,6 +58,26 @@ var BalanceMixin = {
 
             _balanceDebounceTimer: null,
         };
+    },
+
+    watch: {
+        selectedGroup: function () {
+            // При смене группы — сбрасываем ручной фильтр и обновляем Select2
+            this.balancePoolId = '';
+            var $el = jQuery('#balancePoolSelect');
+            if ($el.length) $el.val('').trigger('change.select2');
+            this.$nextTick(this.initBalancePoolSelect);
+            if (this.activeSection === 'balance') {
+                this.loadBalances(true);
+            }
+        },
+        groupFilters: function () {
+            // Если фильтры группы загрузились/изменились — обновляем плейсхолдер
+            this.$nextTick(this.initBalancePoolSelect);
+            if (this.activeSection === 'balance') {
+                this.loadBalances(true);
+            }
+        },
     },
 
     computed: {
@@ -97,12 +119,20 @@ var BalanceMixin = {
             else             this.balancesLoadingMore = true;
 
             var self = this;
+
+            // Собираем итоговые фильтры
+            var filters = Object.assign({}, self.balanceFilters);
+
+            // Фильтр по ностро-банку: из Select2 или из выбранной группы
+            var effectivePoolId = self.balancePoolId || self._getGroupPoolId();
+            if (effectivePoolId) filters.pool_id = effectivePoolId;
+
             SmartMatchApi.get(AppRoutes.balanceList, {
                 page:    self.balancesPage,
                 limit:   self.balancesLimit,
                 sort:    self.balanceSortCol,
                 dir:     self.balanceSortDir,
-                filters: JSON.stringify(self.balanceFilters),
+                filters: JSON.stringify(filters),
             }).then(function (r) {
                 var d = r.data;
                 if (!d.success) {
@@ -129,6 +159,10 @@ var BalanceMixin = {
             SmartMatchApi.get(AppRoutes.balanceAccounts).then(function (r) {
                 if (r.data && r.data.success) {
                     self.balanceAccounts = r.data.data;
+                    if (r.data.pools) {
+                        self.balancePools = r.data.pools;
+                        self.$nextTick(function () { self.initBalancePoolSelect(); });
+                    }
                 }
             });
         },
@@ -139,6 +173,24 @@ var BalanceMixin = {
             this._balanceDebounceTimer = setTimeout(function () {
                 self.loadBalances(true);
             }, 350);
+        },
+
+        onBalancePoolChange: function () {
+            this.loadBalances(true);
+        },
+
+        /**
+         * Из фильтров текущей группы достаём account_pool_id (если есть).
+         * Используется как дефолтный фильтр баланса при выборе группы.
+         */
+        _getGroupPoolId: function () {
+            if (!this.selectedGroup || !this.groupFilters || !this.groupFilters.length) return null;
+            for (var i = 0; i < this.groupFilters.length; i++) {
+                if (this.groupFilters[i].field === 'account_pool_id' && this.groupFilters[i].value) {
+                    return this.groupFilters[i].value;
+                }
+            }
+            return null;
         },
 
         // ── Сортировка ────────────────────────────────────────────
@@ -369,6 +421,40 @@ var BalanceMixin = {
             return parseFloat(amount).toLocaleString('ru-RU', {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
+            });
+        },
+
+        initBalancePoolSelect: function () {
+            var self = this;
+            var $el = jQuery('#balancePoolSelect');
+            if (!$el.length) return;
+
+            // Заполняем options
+            $el.find('option:gt(0)').remove();
+            self.balancePools.forEach(function (p) {
+                $el.append(new Option(p.name, p.id, false, false));
+            });
+
+            // Если есть авто pool_id из группы — ставим плейсхолдер
+            var autoPoolId = self._getGroupPoolId();
+
+            $el.select2({
+                theme: 'bootstrap-5',
+                allowClear: true,
+                placeholder: autoPoolId
+                    ? '— Авто: из группы —'
+                    : '— Все ностро-банки —',
+                width: '300px',
+            });
+
+            // Установить текущее значение
+            if (self.balancePoolId) {
+                $el.val(self.balancePoolId).trigger('change.select2');
+            }
+
+            $el.off('change.balancePool').on('change.balancePool', function () {
+                self.balancePoolId = jQuery(this).val() || '';
+                self.onBalancePoolChange();
             });
         },
 

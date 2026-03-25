@@ -4,9 +4,10 @@ namespace app\models;
 
 use Yii;
 use yii\db\ActiveRecord;
-use yii\behaviors\TimestampBehavior;
 
 /**
+ * Категория группировки счетов (ранее AccountGroup)
+ *
  * @property int $id
  * @property int $company_id
  * @property string $name
@@ -15,13 +16,13 @@ use yii\behaviors\TimestampBehavior;
  * @property string $updated_at
  *
  * @property Company $company
- * @property AccountPool[] $accountPools
+ * @property Group[] $groups
  */
-class AccountGroup extends ActiveRecord
+class Category extends ActiveRecord
 {
     public static function tableName()
     {
-        return '{{%account_groups}}';
+        return '{{%categories}}';
     }
 
     public function rules()
@@ -31,7 +32,7 @@ class AccountGroup extends ActiveRecord
             [['company_id'], 'integer'],
             [['description'], 'string'],
             [['name'], 'string', 'max' => 100],
-            [['company_id'], 'exist', 'skipOnError' => true, 'targetClass' => Company::className(), 'targetAttribute' => ['company_id' => 'id']],
+            [['company_id'], 'exist', 'skipOnError' => true, 'targetClass' => Company::class, 'targetAttribute' => ['company_id' => 'id']],
         ];
     }
 
@@ -47,34 +48,16 @@ class AccountGroup extends ActiveRecord
         ];
     }
 
-    /**
-     * Получает компанию, которой принадлежит группа
-     */
     public function getCompany()
     {
-        return $this->hasOne(Company::className(), ['id' => 'company_id']);
+        return $this->hasOne(Company::class, ['id' => 'company_id']);
     }
 
-    /**
-     * Получает пулы, входящие в группу
-     */
-    public function getAccountPools()
+    public function getGroups()
     {
-        return $this->hasMany(AccountPool::className(), ['group_id' => 'id']);
+        return $this->hasMany(Group::class, ['category_id' => 'id']);
     }
 
-    /**
-     * Получает все счета через пулы
-     */
-    public function getAccounts()
-    {
-        return $this->hasMany(Account::className(), ['id' => 'account_id'])
-            ->via('accountPools');
-    }
-
-    /**
-     * Получает группы для текущей компании пользователя
-     */
     public static function findForCurrentUser()
     {
         $userId = Yii::$app->user->id;

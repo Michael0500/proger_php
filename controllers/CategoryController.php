@@ -2,15 +2,13 @@
 namespace app\controllers;
 
 use Yii;
-use yii\web\Controller;
 use yii\web\Response;
-use app\models\AccountGroup;
-use app\models\AccountPool;
+use app\models\Category;
+use app\models\Group;
 
-class AccountGroupController extends BaseController
+class CategoryController extends BaseController
 {
-
-    public function actionGetGroups()
+    public function actionGetCategories()
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
 
@@ -24,25 +22,25 @@ class AccountGroupController extends BaseController
             ];
         }
 
-        $groups = AccountGroup::find()
+        $categories = Category::find()
             ->where(['company_id' => $user->company_id])
-            ->with('accountPools')
+            ->with('groups')
             ->orderBy('name')
             ->all();
 
         $data = [];
-        foreach ($groups as $group) {
+        foreach ($categories as $category) {
             $data[] = [
-                'id' => $group->id,
-                'name' => $group->name,
-                'description' => $group->description,
-                'created_at' => $group->created_at,
-                'pools' => array_map(function($pool) {
+                'id' => $category->id,
+                'name' => $category->name,
+                'description' => $category->description,
+                'created_at' => $category->created_at,
+                'groups' => array_map(function($group) {
                     return [
-                        'id' => $pool->id,
-                        'name' => $pool->name,
-                        'description' => $pool->description,
-                        'is_active' => $pool->is_active,
+                        'id' => $group->id,
+                        'name' => $group->name,
+                        'description' => $group->description,
+                        'is_active' => $group->is_active,
                         'filters' => array_map(function ($f) {
                                return [
                                    'id'       => $f->id,
@@ -51,9 +49,9 @@ class AccountGroupController extends BaseController
                                    'value'    => $f->value,
                                    'logic'    => $f->logic,
                                ];
-                           }, $pool->filters),
+                           }, $group->filters),
                     ];
-                }, $group->accountPools)
+                }, $category->groups)
             ];
         }
 
@@ -67,7 +65,7 @@ class AccountGroupController extends BaseController
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
 
-        $model = new AccountGroup();
+        $model = new Category();
         $model->company_id = Yii::$app->user->identity->company_id;
         $model->name = Yii::$app->request->post('name');
         $model->description = Yii::$app->request->post('description');
@@ -75,13 +73,13 @@ class AccountGroupController extends BaseController
         if ($model->save()) {
             return [
                 'success' => true,
-                'message' => 'Группа успешно создана',
+                'message' => 'Категория успешно создана',
                 'data' => $model
             ];
         } else {
             return [
                 'success' => false,
-                'message' => 'Ошибка при создании группы',
+                'message' => 'Ошибка при создании категории',
                 'errors' => $model->errors
             ];
         }
@@ -92,12 +90,12 @@ class AccountGroupController extends BaseController
         Yii::$app->response->format = Response::FORMAT_JSON;
 
         $id = Yii::$app->request->post('id');
-        $model = AccountGroup::findOne($id);
+        $model = Category::findOne($id);
 
         if (!$model) {
             return [
                 'success' => false,
-                'message' => 'Группа не найдена'
+                'message' => 'Категория не найдена'
             ];
         }
 
@@ -108,13 +106,13 @@ class AccountGroupController extends BaseController
         if ($model->save()) {
             return [
                 'success' => true,
-                'message' => 'Группа успешно обновлена',
+                'message' => 'Категория успешно обновлена',
                 'data' => $model
             ];
         } else {
             return [
                 'success' => false,
-                'message' => 'Ошибка при обновлении группы',
+                'message' => 'Ошибка при обновлении категории',
                 'errors' => $model->errors
             ];
         }
@@ -125,31 +123,30 @@ class AccountGroupController extends BaseController
         Yii::$app->response->format = Response::FORMAT_JSON;
 
         $id = Yii::$app->request->post('id');
-        $model = AccountGroup::findOne($id);
+        $model = Category::findOne($id);
 
         if (!$model) {
             return [
                 'success' => false,
-                'message' => 'Группа не найдена'
+                'message' => 'Категория не найдена'
             ];
         }
 
-        // Удаляем связанные пулы
-        $pools = AccountPool::find()->where(['group_id' => $id])->all();
-        foreach ($pools as $pool) {
-            \app\models\Account::updateAll(['pool_id' => null], ['pool_id' => $pool->id]);
-            $pool->delete();
+        // Удаляем связанные группы
+        $groups = Group::find()->where(['category_id' => $id])->all();
+        foreach ($groups as $group) {
+            $group->delete();
         }
 
         if ($model->delete()) {
             return [
                 'success' => true,
-                'message' => 'Группа успешно удалена'
+                'message' => 'Категория успешно удалена'
             ];
         } else {
             return [
                 'success' => false,
-                'message' => 'Ошибка при удалении группы',
+                'message' => 'Ошибка при удалении категории',
                 'errors' => $model->errors
             ];
         }

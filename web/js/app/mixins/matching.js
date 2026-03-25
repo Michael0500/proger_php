@@ -124,11 +124,11 @@ var MatchingMixin = {
         // ─── Автоквитование ────────────────────────────────────────
         runAutoMatch: function () {
             var self = this;
-            if (!self.selectedPool) return;
+            if (!self.selectedGroup) return;
 
             Swal.fire({
                 title: 'Автоквитование',
-                html: 'Запустить по всем записям пула <b>' + self.selectedPool.name + '</b>?',
+                html: 'Запустить по всем записям группы <b>' + self.selectedGroup.name + '</b>?',
                 icon: 'question', showCancelButton: true,
                 confirmButtonText: '<i class="fas fa-magic me-1"></i>Запустить',
                 cancelButtonText: 'Отмена', confirmButtonColor: '#6366f1'
@@ -137,7 +137,7 @@ var MatchingMixin = {
                 self.autoMatchRunning = true;
 
                 // ИСПРАВЛЕНО: было window.window.AppRoutes
-                SmartMatchApi.post(window.AppRoutes.autoMatch, { pool_id: self.selectedPool.id }).then(function (res) {
+                SmartMatchApi.post(window.AppRoutes.autoMatch, { pool_id: self.selectedGroup.id }).then(function (res) {
                     if (res.success) {
                         Swal.fire({ icon: 'success', title: 'Готово!', text: res.message });
                         self.loadEntries(true);

@@ -23,11 +23,13 @@ $showNoComp  = !$isGuest && !$hasCompany;
 $currentRoute = Yii::$app->controller->route;
 
 // Страницы, которые рендерятся без sidebar/Vue-app (напрямую в $content)
-$isProfilePage = ($currentRoute === 'user/view');
-$isReconPage   = (Yii::$app->controller->id === 'recon-report');
+$isProfilePage    = ($currentRoute === 'user/view');
+$isReconPage      = (Yii::$app->controller->id === 'recon-report');
+$isNostroBankPage = ($currentRoute === 'account-pool/index');
+$isAccountsPage   = ($currentRoute === 'account/index');
 
 // Объединяем: страницы без основного Vue-приложения
-$isStandalonePage = $isProfilePage || $isReconPage;
+$isStandalonePage = $isProfilePage || $isReconPage || $isNostroBankPage || $isAccountsPage;
 
 $currentUser = $isGuest ? null : Yii::$app->user->identity;
 $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->company : null;
@@ -60,7 +62,14 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
                 $menuItems[] = [
                         'label'  => '<i class="fas fa-university me-1"></i>Счета',
                         'encode' => false,
-                        'url'    => ['/user/view', 'id' => $currentUser->id, '#' => 'accounts'],
+                        'url'    => ['/accounts'],
+                        'active' => $isAccountsPage,
+                ];
+                $menuItems[] = [
+                        'label'  => '<i class="fas fa-landmark me-1"></i>Ностро-банки',
+                        'encode' => false,
+                        'url'    => ['/nostro-banks'],
+                        'active' => $isNostroBankPage,
                 ];
                 $menuItems[] = [
                         'label'  => '<i class="fas fa-file-alt me-1"></i>Раккорд',
