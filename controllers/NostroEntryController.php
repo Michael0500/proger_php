@@ -41,7 +41,7 @@ class NostroEntryController extends BaseController
         $filters = json_decode(Yii::$app->request->get('filters', '{}'), true) ?: [];
 
         $sortable = ['id','ls','dc','amount','currency','value_date','post_date',
-            'instruction_id','end_to_end_id','transaction_id','message_id',
+            'instruction_id','end_to_end_id','transaction_id','message_id','other_id',
             'comment','match_status','match_id','account_id'];
         if (!in_array($sort, $sortable, true)) $sort = 'id';
 
@@ -118,7 +118,7 @@ class NostroEntryController extends BaseController
 
         // Текстовые ILIKE-фильтры
         foreach (['ls','dc','currency','match_status','match_id',
-                     'instruction_id','end_to_end_id','transaction_id','message_id','comment'] as $f) {
+                     'instruction_id','end_to_end_id','transaction_id','message_id','other_id','comment'] as $f) {
             if (isset($filters[$f]) && $filters[$f] !== '') {
                 $q->andWhere(['ilike', "ne.$f", $filters[$f]]);
             }
@@ -206,6 +206,7 @@ class NostroEntryController extends BaseController
         $m->end_to_end_id  = ($p['end_to_end_id']  ?? '') ?: null;
         $m->transaction_id = ($p['transaction_id'] ?? '') ?: null;
         $m->message_id     = ($p['message_id']     ?? '') ?: null;
+        $m->other_id       = ($p['other_id']       ?? '') ?: null;
         $m->comment        = ($p['comment']        ?? '') ?: null;
         $m->match_status   = NostroEntry::STATUS_UNMATCHED;
 
@@ -238,6 +239,7 @@ class NostroEntryController extends BaseController
         $m->end_to_end_id  = ($p['end_to_end_id']      ?? '') ?: null;
         $m->transaction_id = ($p['transaction_id']     ?? '') ?: null;
         $m->message_id     = ($p['message_id']         ?? '') ?: null;
+        $m->other_id       = ($p['other_id']           ?? '') ?: null;
         $m->comment        = ($p['comment']            ?? '') ?: null;
 
         if (!$m->save()) return ['success' => false, 'message' => 'Ошибка', 'errors' => $m->errors];
@@ -379,7 +381,7 @@ class NostroEntryController extends BaseController
         // Поля, которые показываем в таблице
         $fields = ['account_id', 'ls', 'dc', 'amount', 'currency',
             'value_date', 'post_date', 'instruction_id', 'end_to_end_id',
-            'transaction_id', 'message_id', 'comment', 'match_status', 'match_id'];
+            'transaction_id', 'message_id', 'other_id', 'comment', 'match_status', 'match_id'];
 
         // Стартовое состояние — текущие данные записи (самое актуальное)
         // Идём от новых к старым, чтобы вычислить снапшоты в обратном порядке.
