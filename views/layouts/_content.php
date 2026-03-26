@@ -64,7 +64,12 @@
                     </button>
                     <button class="toolbar-btn primary" :disabled="autoMatchRunning" @click="runAutoMatch(null)">
                         <i :class="autoMatchRunning ? 'fas fa-spinner fa-spin' : 'fas fa-magic'"></i>
-                        {{ autoMatchRunning ? 'Выполняется...' : 'Автоквитование' }}
+                        <template v-if="autoMatchRunning && autoMatchProgress">
+                            Правило {{ autoMatchProgress.current_step }}/{{ autoMatchProgress.total_steps }}
+                            (пар: {{ autoMatchProgress.total_matched }})
+                        </template>
+                        <template v-else-if="autoMatchRunning">Запуск...</template>
+                        <template v-else>Автоквитование</template>
                     </button>
                     <button class="toolbar-btn success" :disabled="selectedIds.length < 2" @click="matchSelected">
                         <i class="fas fa-link"></i>
@@ -73,6 +78,33 @@
                     <button class="toolbar-btn danger-soft" v-if="selectedIds.length > 0" @click="clearSelection">
                         <i class="fas fa-times"></i>Сбросить
                     </button>
+                </div>
+            </div>
+
+            <!-- ПРОГРЕСС АВТОКВИТОВАНИЯ -->
+            <div v-if="autoMatchProgress && autoMatchRunning" class="auto-match-progress-bar">
+                <div class="d-flex align-items-center justify-content-between mb-1">
+                    <small class="text-muted">
+                        <i class="fas fa-cog fa-spin me-1"></i>
+                        <template v-if="autoMatchProgress.current_step < autoMatchProgress.total_steps">
+                            Обрабатывается правило {{ autoMatchProgress.current_step + 1 }} из {{ autoMatchProgress.total_steps }}:
+                            <b>{{ autoMatchProgress.rules[autoMatchProgress.current_step] ? autoMatchProgress.rules[autoMatchProgress.current_step].name : '' }}</b>
+                        </template>
+                        <template v-else>Завершение...</template>
+                    </small>
+                    <small class="fw-bold">Сквитовано пар: {{ autoMatchProgress.total_matched }}</small>
+                </div>
+                <div class="progress" style="height:6px">
+                    <div class="progress-bar bg-primary progress-bar-striped progress-bar-animated"
+                         :style="{ width: (autoMatchProgress.total_steps > 0 ? (autoMatchProgress.current_step / autoMatchProgress.total_steps * 100) : 0) + '%' }">
+                    </div>
+                </div>
+                <div v-if="autoMatchProgress.step_results && autoMatchProgress.step_results.length" class="mt-1">
+                    <small v-for="sr in autoMatchProgress.step_results" :key="sr.rule_id" class="d-block text-muted" style="font-size:11px">
+                        <i :class="sr.matched > 0 ? 'fas fa-check text-success' : 'fas fa-minus text-secondary'" class="me-1"></i>
+                        {{ sr.rule_name }}: <b>{{ sr.matched }}</b> пар
+                        <span v-if="sr.error" class="text-danger ms-1">⚠ {{ sr.error }}</span>
+                    </small>
                 </div>
             </div>
 

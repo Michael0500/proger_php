@@ -32,12 +32,14 @@ $companySection = $currentComp ? strtoupper($currentComp->code) : '';
         entryHistory:        '<?= Url::to(['/nostro-entry/history']) ?>',
 
         // Квитование
-        matchManual: '<?= Url::to(['/matching/match-manual']) ?>',
-        unmatch:     '<?= Url::to(['/matching/unmatch']) ?>',
-        autoMatch:   '<?= Url::to(['/matching/auto-match']) ?>',
-        getRules:    '<?= Url::to(['/matching/get-rules']) ?>',
-        saveRule:    '<?= Url::to(['/matching/save-rule']) ?>',
-        deleteRule:  '<?= Url::to(['/matching/delete-rule']) ?>',
+        matchManual:     '<?= Url::to(['/matching/match-manual']) ?>',
+        unmatch:         '<?= Url::to(['/matching/unmatch']) ?>',
+        autoMatch:       '<?= Url::to(['/matching/auto-match']) ?>',
+        autoMatchStart:  '<?= Url::to(['/matching/auto-match-start']) ?>',
+        autoMatchStep:   '<?= Url::to(['/matching/auto-match-step']) ?>',
+        getRules:        '<?= Url::to(['/matching/get-rules']) ?>',
+        saveRule:        '<?= Url::to(['/matching/save-rule']) ?>',
+        deleteRule:      '<?= Url::to(['/matching/delete-rule']) ?>',
 
         // Баланс Ностро
         balanceList:      '<?= Url::to(['/nostro-balance/list']) ?>',

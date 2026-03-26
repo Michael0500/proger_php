@@ -89,6 +89,7 @@ class MatchingController extends BaseController
     /**
      * POST /matching/auto-match
      * body: account_id=X (опционально)
+     * Синхронный запуск (обратная совместимость).
      */
     public function actionAutoMatch(): array
     {
@@ -104,6 +105,45 @@ class MatchingController extends BaseController
             : null;
 
         return $this->service()->autoMatch($companyId, $accountId);
+    }
+
+    /**
+     * POST /matching/auto-match-start
+     * Инициализация пошагового автоквитования с прогрессом.
+     * body: account_id=X (опционально)
+     * Возвращает job_id и количество правил.
+     */
+    public function actionAutoMatchStart(): array
+    {
+        Yii::$app->response->format = Response::FORMAT_JSON;
+
+        $companyId = $this->companyId();
+        if (!$companyId) {
+            return ['success' => false, 'message' => 'Компания не определена'];
+        }
+
+        $accountId = Yii::$app->request->post('account_id')
+            ? (int) Yii::$app->request->post('account_id')
+            : null;
+
+        return $this->service()->autoMatchStart($companyId, $accountId);
+    }
+
+    /**
+     * POST /matching/auto-match-step
+     * Выполнить следующее правило автоквитования.
+     * body: job_id=xxx
+     */
+    public function actionAutoMatchStep(): array
+    {
+        Yii::$app->response->format = Response::FORMAT_JSON;
+
+        $jobId = Yii::$app->request->post('job_id');
+        if (!$jobId) {
+            return ['success' => false, 'message' => 'Не указан job_id'];
+        }
+
+        return $this->service()->autoMatchStep($jobId);
     }
 
     // ── CRUD правил квитования ────────────────────────────────────────

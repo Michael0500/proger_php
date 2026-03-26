@@ -16,7 +16,8 @@ var MatchingMixin = {
                 match_transaction_id: false, match_message_id: false,
                 cross_id_search: false, is_active: true, priority: 100, description: ''
             },
-            autoMatchRunning: false
+            autoMatchRunning: false,
+            autoMatchProgress: null  // { job_id, total_steps, current_step, total_matched, rules, step_results, unmatched_count }
         };
     },
 
@@ -121,7 +122,7 @@ var MatchingMixin = {
             });
         },
 
-        // ─── Автоквитование ────────────────────────────────────────
+        // ─── Автоквитование с прогрессом ─────────────────────────
         runAutoMatch: function () {
             var self = this;
             if (!self.selectedGroup) return;
@@ -135,19 +136,89 @@ var MatchingMixin = {
             }).then(function (r) {
                 if (!r.isConfirmed) return;
                 self.autoMatchRunning = true;
+                self.autoMatchProgress = null;
 
-                // ИСПРАВЛЕНО: было window.window.AppRoutes
-                SmartMatchApi.post(window.AppRoutes.autoMatch, { pool_id: self.selectedGroup.id }).then(function (res) {
-                    if (res.success) {
-                        Swal.fire({ icon: 'success', title: 'Готово!', text: res.message });
-                        self.loadEntries(true);
-                    } else {
+                // Шаг 1: инициализация
+                SmartMatchApi.post(window.AppRoutes.autoMatchStart, {}).then(function (res) {
+                    if (!res.success) {
                         Swal.fire({ icon: 'error', title: 'Ошибка', text: res.message });
+                        self.autoMatchRunning = false;
+                        return;
                     }
-                })
-                    .finally(function () { self.autoMatchRunning = false; });
 
+                    self.autoMatchProgress = {
+                        job_id:          res.job_id,
+                        total_steps:     res.total_steps,
+                        current_step:    0,
+                        total_matched:   0,
+                        rules:           res.rules,
+                        step_results:    [],
+                        unmatched_count: res.unmatched_count
+                    };
 
+                    // Шаг 2: выполняем правила по одному
+                    self._runAutoMatchNextStep();
+                }).catch(function () {
+                    self.autoMatchRunning = false;
+                    Swal.fire({ icon: 'error', title: 'Ошибка сети' });
+                });
+            });
+        },
+
+        _runAutoMatchNextStep: function () {
+            var self = this;
+            if (!self.autoMatchProgress) return;
+
+            SmartMatchApi.post(window.AppRoutes.autoMatchStep, {
+                job_id: self.autoMatchProgress.job_id
+            }).then(function (res) {
+                if (!res.success) {
+                    self.autoMatchRunning = false;
+                    Swal.fire({ icon: 'error', title: 'Ошибка', text: res.message });
+                    return;
+                }
+
+                // Обновляем прогресс
+                self.autoMatchProgress.current_step  = res.current_step;
+                self.autoMatchProgress.total_matched  = res.total_matched;
+                self.autoMatchProgress.step_results   = res.step_results;
+
+                if (res.is_finished) {
+                    // Готово
+                    self.autoMatchRunning = false;
+                    self.loadEntries(true);
+
+                    // Формируем итоговое сообщение
+                    var html = '<div class="text-start">';
+                    html += '<p><b>Сквитовано пар: ' + res.total_matched + '</b></p>';
+                    if (res.step_results && res.step_results.length) {
+                        html += '<table class="table table-sm table-bordered mb-0"><thead><tr><th>Правило</th><th class="text-end">Пар</th></tr></thead><tbody>';
+                        res.step_results.forEach(function (sr) {
+                            var badge = sr.matched > 0
+                                ? '<span class="badge bg-success">' + sr.matched + '</span>'
+                                : '<span class="badge bg-secondary">0</span>';
+                            var err = sr.error ? ' <span class="text-danger">⚠ ' + sr.error + '</span>' : '';
+                            html += '<tr><td>' + sr.rule_name + err + '</td><td class="text-end">' + badge + '</td></tr>';
+                        });
+                        html += '</tbody></table>';
+                    }
+                    html += '</div>';
+
+                    Swal.fire({
+                        icon: res.total_matched > 0 ? 'success' : 'info',
+                        title: 'Автоквитование завершено',
+                        html: html,
+                        width: 500
+                    });
+                    self.autoMatchProgress = null;
+                } else {
+                    // Следующий шаг
+                    self._runAutoMatchNextStep();
+                }
+            }).catch(function () {
+                self.autoMatchRunning = false;
+                self.autoMatchProgress = null;
+                Swal.fire({ icon: 'error', title: 'Ошибка сети' });
             });
         },
 

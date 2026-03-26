@@ -136,13 +136,14 @@ class MatchingService
     // ── Автоматическое квитование ─────────────────────────────────────
 
     /**
-     * Запустить автоквитование.
+     * Запустить автоквитование целиком (для консольной команды).
      *
      * @param int      $companyId
      * @param int|null $accountId  null = по всем счетам
-     * @return array ['success'=>bool, 'matched'=>int, 'message'=>string]
+     * @param callable|null $onProgress  callback(int $ruleIndex, string $ruleName, int $matchedInRule, int $totalMatched)
+     * @return array ['success'=>bool, 'matched'=>int, 'rules_count'=>int, 'message'=>string]
      */
-    public function autoMatch(int $companyId, ?int $accountId = null): array
+    public function autoMatch(int $companyId, ?int $accountId = null, ?callable $onProgress = null): array
     {
         $rules = MatchingRule::find()
             ->where(['company_id' => $companyId, 'is_active' => true])
@@ -156,10 +157,14 @@ class MatchingService
         $totalMatched = 0;
         $errors       = [];
 
-        foreach ($rules as $rule) {
+        foreach ($rules as $i => $rule) {
             try {
                 $matched = $this->runRule($rule, $companyId, $accountId);
                 $totalMatched += $matched;
+
+                if ($onProgress) {
+                    $onProgress($i + 1, $rule->name, $matched, $totalMatched);
+                }
             } catch (\Exception $e) {
                 $errors[] = 'Правило "' . $rule->name . '": ' . $e->getMessage();
                 Yii::error('MatchingService rule #' . $rule->id . ': ' . $e->getMessage());
@@ -171,13 +176,155 @@ class MatchingService
             $message .= '. Ошибки: ' . implode('; ', $errors);
         }
 
-        return ['success' => true, 'matched' => $totalMatched, 'message' => $message];
+        return [
+            'success'     => true,
+            'matched'     => $totalMatched,
+            'rules_count' => count($rules),
+            'message'     => $message,
+        ];
+    }
+
+    // ── Пошаговое автоквитование (для UI с прогрессом) ──────────────
+
+    /**
+     * Инициализация пошагового автоквитования.
+     * Возвращает job_id и информацию о правилах.
+     */
+    public function autoMatchStart(int $companyId, ?int $accountId = null): array
+    {
+        $rules = MatchingRule::find()
+            ->where(['company_id' => $companyId, 'is_active' => true])
+            ->orderBy(['priority' => SORT_ASC])
+            ->all();
+
+        if (empty($rules)) {
+            return ['success' => false, 'message' => 'Нет активных правил квитования'];
+        }
+
+        // Считаем незаквитованные записи
+        $query = NostroEntry::find()
+            ->where(['company_id' => $companyId, 'match_status' => NostroEntry::STATUS_UNMATCHED]);
+        if ($accountId) {
+            $query->andWhere(['account_id' => $accountId]);
+        }
+        $unmatchedCount = (int) $query->count();
+
+        $jobId = 'job_' . bin2hex(random_bytes(8));
+
+        $rulesInfo = array_map(function (MatchingRule $r) {
+            return [
+                'id'   => $r->id,
+                'name' => $r->name,
+            ];
+        }, $rules);
+
+        // Сохраняем состояние в кэш
+        $state = [
+            'company_id'      => $companyId,
+            'account_id'      => $accountId,
+            'rules'           => array_map(fn($r) => $r->id, $rules),
+            'current_step'    => 0,
+            'total_steps'     => count($rules),
+            'total_matched'   => 0,
+            'step_results'    => [],
+            'is_finished'     => false,
+            'started_at'      => date('Y-m-d H:i:s'),
+        ];
+        Yii::$app->cache->set('automatch_' . $jobId, $state, 3600);
+
+        return [
+            'success'         => true,
+            'job_id'          => $jobId,
+            'rules'           => $rulesInfo,
+            'total_steps'     => count($rules),
+            'unmatched_count' => $unmatchedCount,
+        ];
+    }
+
+    /**
+     * Выполнить следующий шаг автоквитования.
+     * Обрабатывает одно правило за вызов.
+     */
+    public function autoMatchStep(string $jobId): array
+    {
+        $cacheKey = 'automatch_' . $jobId;
+        $state = Yii::$app->cache->get($cacheKey);
+
+        if (!$state) {
+            return ['success' => false, 'message' => 'Задание не найдено или истекло'];
+        }
+
+        if ($state['is_finished']) {
+            return [
+                'success'       => true,
+                'is_finished'   => true,
+                'total_matched' => $state['total_matched'],
+                'step_results'  => $state['step_results'],
+                'message'       => 'Автоквитование уже завершено. Сквитовано пар: ' . $state['total_matched'],
+            ];
+        }
+
+        $step    = $state['current_step'];
+        $ruleId  = $state['rules'][$step] ?? null;
+
+        if (!$ruleId) {
+            $state['is_finished'] = true;
+            Yii::$app->cache->set($cacheKey, $state, 3600);
+            return [
+                'success'       => true,
+                'is_finished'   => true,
+                'total_matched' => $state['total_matched'],
+                'step_results'  => $state['step_results'],
+                'message'       => 'Автоквитование завершено. Сквитовано пар: ' . $state['total_matched'],
+            ];
+        }
+
+        $rule = MatchingRule::findOne($ruleId);
+        $matched = 0;
+        $error = null;
+
+        if ($rule) {
+            try {
+                $matched = $this->runRule($rule, $state['company_id'], $state['account_id']);
+            } catch (\Exception $e) {
+                $error = $e->getMessage();
+                Yii::error("AutoMatch step rule #{$ruleId}: " . $e->getMessage());
+            }
+        }
+
+        $state['total_matched'] += $matched;
+        $state['step_results'][] = [
+            'rule_id'   => $ruleId,
+            'rule_name' => $rule ? $rule->name : '?',
+            'matched'   => $matched,
+            'error'     => $error,
+        ];
+        $state['current_step'] = $step + 1;
+
+        if ($state['current_step'] >= $state['total_steps']) {
+            $state['is_finished'] = true;
+        }
+
+        Yii::$app->cache->set($cacheKey, $state, 3600);
+
+        return [
+            'success'        => true,
+            'is_finished'    => $state['is_finished'],
+            'current_step'   => $state['current_step'],
+            'total_steps'    => $state['total_steps'],
+            'total_matched'  => $state['total_matched'],
+            'last_rule_name' => $rule ? $rule->name : '?',
+            'last_matched'   => $matched,
+            'last_error'     => $error,
+            'step_results'   => $state['step_results'],
+        ];
     }
 
     /**
      * Выполнить одно правило — найти пары и сквитовать их.
+     * Возвращает количество сквитованных пар.
      */
-    private function runRule(MatchingRule $rule, int $companyId, ?int $accountId): int
+    public function runRule(MatchingRule $rule, int $companyId, ?int $accountId): int
     {
         $db = Yii::$app->db;
 
@@ -241,7 +388,9 @@ class MatchingService
         }
 
         $now    = date('Y-m-d H:i:s');
-        $userId = Yii::$app->user->id ?? null;
+        $userId = (Yii::$app instanceof \yii\web\Application && !Yii::$app->user->isGuest)
+            ? Yii::$app->user->id
+            : null;
         $count  = 0;
 
         $transaction = $db->beginTransaction();
@@ -334,11 +483,14 @@ class MatchingService
     }
 
     /**
-     * Генерация уникального Match ID вида MTCHxxxxxxxx
+     * Генерация гарантированно уникального Match ID через PostgreSQL sequence.
+     * Формат: MTCH00000001, MTCH00000002, ...
+     * nextval() атомарен — уникальность гарантирована без дополнительных проверок.
      */
     public function generateMatchId(): string
     {
-        return 'MTCH' . strtoupper(substr(md5(uniqid('', true)), 0, 8));
+        $seq = Yii::$app->db->createCommand("SELECT nextval('match_id_seq')")->queryScalar();
+        return 'MTCH' . str_pad($seq, 8, '0', STR_PAD_LEFT);
     }
 
     /**
