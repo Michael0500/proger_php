@@ -166,12 +166,7 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                     </div>
                     <div v-else>
                         <label class="form-label">Выберите счёт</label>
-                        <select class="form-select" v-model="selectedAccountId">
-                            <option value="">— Выберите —</option>
-                            <option v-for="a in availableAccounts" :key="a.id" :value="a.id">
-                                {{ a.name }} {{ a.currency ? '(' + a.currency + ')' : '' }}
-                            </option>
-                        </select>
+                        <select id="assign-account-select2" style="width:100%"></select>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -377,7 +372,36 @@ new Vue({
 
             axios.get('<?= Url::to(['/account-pool/available-accounts']) ?>').then(function (r) {
                 self.availableAccounts = r.data.success ? r.data.data : [];
-            }).finally(function () { self.loadingAvailable = false; });
+            }).finally(function () {
+                self.loadingAvailable = false;
+                self.$nextTick(function () { self._initAssignSelect2(); });
+            });
+        },
+
+        _initAssignSelect2: function () {
+            var self = this;
+            var $el = $('#assign-account-select2');
+            if (!$el.length) return;
+            if ($el.data('select2')) $el.off('change.assign').select2('destroy');
+            $el.empty();
+
+            var accData = self.availableAccounts.map(function (a) {
+                return { id: String(a.id), text: a.name + (a.currency ? ' (' + a.currency + ')' : '') };
+            });
+
+            $el.select2({
+                theme:          'bootstrap-5',
+                placeholder:    '— Выберите счёт —',
+                allowClear:     true,
+                data:           accData,
+                dropdownParent: $('#assignModal'),
+            });
+
+            $el.val(null).trigger('change');
+
+            $el.on('change.assign', function () {
+                self.selectedAccountId = $el.val() || '';
+            });
         },
 
         assignAccount: function () {

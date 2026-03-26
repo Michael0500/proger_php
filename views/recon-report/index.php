@@ -28,37 +28,38 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
         </div>
         <div style="display:flex;align-items:center;gap:8px">
             <button v-if="report" class="btn-action btn-outline-secondary" @click="printReport" title="Печать / PDF">
-                <i class="fas fa-print"></i> Печать / PDF
+                <i class="fas fa-print"></i> Печать
             </button>
-            <button v-if="report" class="btn-action btn-primary-violet" @click="exportPdf">
-                <i class="fas fa-file-pdf"></i> Скачать PDF
+            <button v-if="report" class="btn-action btn-primary-violet" @click="exportPdf" :disabled="exporting">
+                <span v-if="exporting"><i class="fas fa-spinner fa-spin me-1"></i>Генерация...</span>
+                <span v-else><i class="fas fa-file-pdf me-1"></i> Скачать PDF</span>
             </button>
         </div>
     </div>
 
     <!-- ══════════════════════════════════════
-         ПАНЕЛЬ ФИЛЬТРОВ (форма формирования)
+         ПАНЕЛЬ ФИЛЬТРОВ
     ══════════════════════════════════════ -->
     <div class="sm-card" style="margin-bottom:18px">
         <div class="sm-card-header">
             <i class="fas fa-sliders-h me-2" style="color:#4f46e5"></i>
-            Параметры формирования ракорда
+            Параметры формирования раккорда
         </div>
         <div class="sm-card-body">
             <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end">
 
-                <!-- Пул / группа банков -->
+                <!-- Ностро-банк -->
                 <div style="min-width:180px;flex:1">
-                    <label class="form-label">Группа банков</label>
+                    <label class="form-label">Ностро-банк</label>
                     <select class="form-select" v-model="form.poolId" @change="onPoolChange">
                         <option value="">— Все счета —</option>
                         <option v-for="p in pools" :key="p.id" :value="p.id">{{ p.name }}</option>
                     </select>
                 </div>
 
-                <!-- Ностро счёт -->
+                <!-- Счёт -->
                 <div style="min-width:220px;flex:2">
-                    <label class="form-label">Ностро банк / счёт <span style="color:#ef4444">*</span></label>
+                    <label class="form-label">Счёт <span style="color:#ef4444">*</span></label>
                     <select class="form-select" v-model="form.accountId" :disabled="filteredAccounts.length===0">
                         <option value="">— Выберите счёт —</option>
                         <option v-for="a in filteredAccounts" :key="a.id" :value="a.id">
@@ -67,25 +68,44 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                     </select>
                 </div>
 
-                <!-- Дата ракорда -->
-                <div style="min-width:160px">
-                    <label class="form-label">Дата ракорда <span style="color:#ef4444">*</span></label>
+                <!-- Дата раккорда -->
+                <div style="min-width:150px">
+                    <label class="form-label">Дата раккорда <span style="color:#ef4444">*</span></label>
                     <input type="date" class="form-control" v-model="form.dateRecon" :max="todayIso">
                 </div>
 
-                <!-- Кнопка -->
-                <div>
-                    <button class="btn-action btn-primary-violet"
-                            @click="generateReport"
-                            :disabled="loading || !form.accountId || !form.dateRecon"
-                            style="height:38px;padding:0 20px">
-                        <span v-if="loading"><i class="fas fa-spinner fa-spin me-1"></i>Формирование...</span>
-                        <span v-else><i class="fas fa-play me-1"></i>Сформировать</span>
-                    </button>
+                <!-- Режим периода -->
+                <div style="min-width:120px">
+                    <label class="form-label">Режим</label>
+                    <select class="form-select" v-model="form.periodMode">
+                        <option value="auto">Авто (предыдущий + текущий)</option>
+                        <option value="custom">Произвольный период</option>
+                    </select>
                 </div>
             </div>
 
-            <!-- Ошибки -->
+            <!-- Произвольный период -->
+            <div v-if="form.periodMode==='custom'" style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;margin-top:12px">
+                <div style="min-width:150px">
+                    <label class="form-label">Период с</label>
+                    <input type="date" class="form-control" v-model="form.dateFrom" :max="form.dateTo||todayIso">
+                </div>
+                <div style="min-width:150px">
+                    <label class="form-label">Период по</label>
+                    <input type="date" class="form-control" v-model="form.dateTo" :min="form.dateFrom" :max="todayIso">
+                </div>
+            </div>
+
+            <div style="margin-top:14px">
+                <button class="btn-action btn-primary-violet"
+                        @click="generateReport"
+                        :disabled="loading || !form.accountId || !form.dateRecon"
+                        style="height:38px;padding:0 20px">
+                    <span v-if="loading"><i class="fas fa-spinner fa-spin me-1"></i>Формирование...</span>
+                    <span v-else><i class="fas fa-play me-1"></i>Сформировать</span>
+                </button>
+            </div>
+
             <div v-if="error" style="margin-top:12px;padding:10px 14px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;color:#dc2626;font-size:13px">
                 <i class="fas fa-exclamation-triangle me-1"></i>{{ error }}
             </div>
@@ -97,7 +117,7 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
     ══════════════════════════════════════ -->
     <div v-if="report" id="recon-report-printable">
 
-        <!-- ШАПКА ОТЧЁТА -->
+        <!-- ШАПКА -->
         <div class="sm-card" style="margin-bottom:14px">
             <div class="sm-card-body" style="padding:20px 24px">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px">
@@ -109,8 +129,11 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                             <div><span style="color:#9ca3af;font-weight:600">Company:</span>
                                 <span style="font-weight:700;color:#4f46e5;margin-left:5px">{{ report.company }}</span>
                             </div>
-                            <div><span style="color:#9ca3af;font-weight:600">Nostro Bank:</span>
+                            <div><span style="color:#9ca3af;font-weight:600">Nosto Bank:</span>
                                 <span style="font-weight:700;color:#1a1f36;margin-left:5px">{{ report.nostro_bank }}</span>
+                            </div>
+                            <div><span style="color:#9ca3af;font-weight:600">Account:</span>
+                                <span style="font-weight:700;color:#1a1f36;margin-left:5px">{{ report.account_name }}</span>
                             </div>
                             <div><span style="color:#9ca3af;font-weight:600">Currency:</span>
                                 <span style="font-weight:700;color:#1a1f36;margin-left:5px">{{ report.currency }}</span>
@@ -124,8 +147,9 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                         <div style="margin-top:3px"><span style="color:#9ca3af;font-weight:600">Date Reconciliation:</span>
                             <span style="font-weight:700;color:#1a1f36;margin-left:5px">{{ fmtDate(report.date_recon) }}</span>
                         </div>
-                        <div style="margin-top:3px"><span style="color:#9ca3af;font-weight:600">Account ID:</span>
-                            <span style="font-family:monospace;font-weight:600;color:#6b7280;margin-left:5px">{{ report.account_id }}</span>
+                        <div v-if="report.date_from && report.date_to" style="margin-top:3px">
+                            <span style="color:#9ca3af;font-weight:600">Period:</span>
+                            <span style="font-weight:700;color:#1a1f36;margin-left:5px">{{ fmtDate(report.date_from) }} — {{ fmtDate(report.date_to) }}</span>
                         </div>
                     </div>
                 </div>
@@ -142,230 +166,53 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                 <table class="recon-summary-table">
                     <thead>
                     <tr>
-                        <th style="width:50%">Тип</th>
-                        <th style="text-align:right">Сумма</th>
-                        <th style="text-align:center;width:60px">D/C</th>
+                        <th style="width:50%">Type</th>
+                        <th style="text-align:right">Amount</th>
                     </tr>
                     </thead>
                     <tbody>
                     <tr>
                         <td><span class="badge-ls badge-l">L</span> Ledger</td>
                         <td style="text-align:right;font-family:monospace;font-weight:700">
-                            {{ report.closing_balance.ledger !== null ? fmtAmount(Math.abs(report.closing_balance.ledger)) : '—' }}
-                        </td>
-                        <td style="text-align:center">
-                                <span v-if="report.closing_balance.ledger_dc" :class="report.closing_balance.ledger_dc==='D'?'dc-d':'dc-c'">
-                                    {{ report.closing_balance.ledger_dc }}
-                                </span>
-                            <span v-else style="color:#9ca3af">—</span>
+                            {{ report.closing_balance.ledger !== null ? fmtAmountSigned(report.closing_balance.ledger) : '—' }}
                         </td>
                     </tr>
                     <tr>
                         <td><span class="badge-ls badge-s">S</span> Statement</td>
                         <td style="text-align:right;font-family:monospace;font-weight:700">
-                            {{ report.closing_balance.statement !== null ? fmtAmount(Math.abs(report.closing_balance.statement)) : '—' }}
-                        </td>
-                        <td style="text-align:center">
-                                <span v-if="report.closing_balance.statement_dc" :class="report.closing_balance.statement_dc==='D'?'dc-d':'dc-c'">
-                                    {{ report.closing_balance.statement_dc }}
-                                </span>
-                            <span v-else style="color:#9ca3af">—</span>
+                            {{ report.closing_balance.statement !== null ? fmtAmountSigned(report.closing_balance.statement) : '—' }}
                         </td>
                     </tr>
-                    <tr class="recon-diff-row" :class="report.closing_balance.difference===0?'diff-zero':Math.abs(report.closing_balance.difference||0)>0?'diff-nonzero':''">
+                    <tr class="recon-diff-row" :class="diffClass(report.closing_balance.difference)">
                         <td><strong>Difference</strong></td>
                         <td style="text-align:right;font-family:monospace;font-weight:800">
                             {{ report.closing_balance.difference !== null ? fmtAmountSigned(report.closing_balance.difference) : '—' }}
                         </td>
-                        <td></td>
                     </tr>
                     </tbody>
                 </table>
             </div>
         </div>
 
-        <!-- ── OUTSTANDING ITEMS ── -->
+        <!-- ── OUTSTANDING ITEMS summary ── -->
         <div class="sm-card" style="margin-bottom:14px">
             <div class="sm-card-header">
                 <i class="fas fa-list-alt me-2" style="color:#f59e0b"></i>
                 Outstanding Items
                 <span style="margin-left:10px;font-size:11px;font-weight:500;color:#9ca3af">
-                    (несквитованные записи за {{ fmtDate(prevDay) }} и {{ fmtDate(report.date_recon) }})
+                    <template v-if="report.date_from && report.date_to">({{ fmtDate(report.date_from) }} — {{ fmtDate(report.date_to) }})</template>
+                    <template v-else>({{ fmtDate(prevDay) }} и {{ fmtDate(report.date_recon) }})</template>
                 </span>
             </div>
             <div class="sm-card-body" style="padding:0">
-
-                <!-- Ledger Debit -->
-                <div class="oi-section-header oi-ledger-debit">
-                    <i class="fas fa-arrow-up me-1"></i>
-                    Ledger — Debit
-                    <span class="oi-count">{{ report.outstanding_items.ledger_debit.length }} записей</span>
-                </div>
-                <div v-if="report.outstanding_items.ledger_debit.length>0" class="oi-table-wrap">
-                    <table class="recon-entries-table">
-                        <thead><tr>
-                            <th>Value Date</th>
-                            <th>Instruction ID</th>
-                            <th>EndToEnd ID</th>
-                            <th>Transaction ID</th>
-                            <th>Message ID</th>
-                            <th>D/C</th>
-                            <th style="text-align:right">Amount</th>
-                        </tr></thead>
-                        <tbody>
-                        <tr v-for="(r,i) in report.outstanding_items.ledger_debit" :key="i">
-                            <td style="white-space:nowrap">{{ fmtDate(r.value) }}</td>
-                            <td class="td-mono-sm">{{ r.instruction_id||'—' }}</td>
-                            <td class="td-mono-sm">{{ r.end_to_end_id||'—' }}</td>
-                            <td class="td-mono-sm">{{ r.transaction_id||'—' }}</td>
-                            <td class="td-mono-sm">{{ r.message_id||'—' }}</td>
-                            <td><span class="dc-d">D</span></td>
-                            <td style="text-align:right;font-family:monospace;font-weight:600">{{ fmtAmount(r.amount) }}</td>
-                        </tr>
-                        </tbody>
-                        <tfoot>
-                        <tr class="oi-net-row">
-                            <td colspan="6" style="font-weight:700;text-align:right">Net Amount:</td>
-                            <td style="text-align:right;font-family:monospace;font-weight:800">{{ fmtAmount(report.outstanding_items.net_ledger_debit) }}</td>
-                        </tr>
-                        </tfoot>
-                    </table>
-                </div>
-                <div v-else class="oi-empty">Нет несквитованных Ledger Debit записей</div>
-
-                <!-- Ledger Credit -->
-                <div class="oi-section-header oi-ledger-credit">
-                    <i class="fas fa-arrow-down me-1"></i>
-                    Ledger — Credit
-                    <span class="oi-count">{{ report.outstanding_items.ledger_credit.length }} записей</span>
-                </div>
-                <div v-if="report.outstanding_items.ledger_credit.length>0" class="oi-table-wrap">
-                    <table class="recon-entries-table">
-                        <thead><tr>
-                            <th>Value Date</th>
-                            <th>Instruction ID</th>
-                            <th>EndToEnd ID</th>
-                            <th>Transaction ID</th>
-                            <th>Message ID</th>
-                            <th>D/C</th>
-                            <th style="text-align:right">Amount</th>
-                        </tr></thead>
-                        <tbody>
-                        <tr v-for="(r,i) in report.outstanding_items.ledger_credit" :key="i">
-                            <td style="white-space:nowrap">{{ fmtDate(r.value) }}</td>
-                            <td class="td-mono-sm">{{ r.instruction_id||'—' }}</td>
-                            <td class="td-mono-sm">{{ r.end_to_end_id||'—' }}</td>
-                            <td class="td-mono-sm">{{ r.transaction_id||'—' }}</td>
-                            <td class="td-mono-sm">{{ r.message_id||'—' }}</td>
-                            <td><span class="dc-c">C</span></td>
-                            <td style="text-align:right;font-family:monospace;font-weight:600">{{ fmtAmount(r.amount) }}</td>
-                        </tr>
-                        </tbody>
-                        <tfoot>
-                        <tr class="oi-net-row">
-                            <td colspan="6" style="font-weight:700;text-align:right">Net Amount:</td>
-                            <td style="text-align:right;font-family:monospace;font-weight:800">{{ fmtAmount(report.outstanding_items.net_ledger_credit) }}</td>
-                        </tr>
-                        </tfoot>
-                    </table>
-                </div>
-                <div v-else class="oi-empty">Нет несквитованных Ledger Credit записей</div>
-
-                <!-- Statement Debit -->
-                <div class="oi-section-header oi-stmt-debit">
-                    <i class="fas fa-arrow-up me-1"></i>
-                    Statement — Debit
-                    <span class="oi-count">{{ report.outstanding_items.stmt_debit.length }} записей</span>
-                </div>
-                <div v-if="report.outstanding_items.stmt_debit.length>0" class="oi-table-wrap">
-                    <table class="recon-entries-table">
-                        <thead><tr>
-                            <th>Value Date</th>
-                            <th>Instruction ID</th>
-                            <th>EndToEnd ID</th>
-                            <th>Transaction ID</th>
-                            <th>Message ID</th>
-                            <th>D/C</th>
-                            <th style="text-align:right">Amount</th>
-                        </tr></thead>
-                        <tbody>
-                        <tr v-for="(r,i) in report.outstanding_items.stmt_debit" :key="i">
-                            <td style="white-space:nowrap">{{ fmtDate(r.value) }}</td>
-                            <td class="td-mono-sm">{{ r.instruction_id||'—' }}</td>
-                            <td class="td-mono-sm">{{ r.end_to_end_id||'—' }}</td>
-                            <td class="td-mono-sm">{{ r.transaction_id||'—' }}</td>
-                            <td class="td-mono-sm">{{ r.message_id||'—' }}</td>
-                            <td><span class="dc-d">D</span></td>
-                            <td style="text-align:right;font-family:monospace;font-weight:600">{{ fmtAmount(r.amount) }}</td>
-                        </tr>
-                        </tbody>
-                        <tfoot>
-                        <tr class="oi-net-row">
-                            <td colspan="6" style="font-weight:700;text-align:right">Net Amount:</td>
-                            <td style="text-align:right;font-family:monospace;font-weight:800">{{ fmtAmount(report.outstanding_items.net_stmt_debit) }}</td>
-                        </tr>
-                        </tfoot>
-                    </table>
-                </div>
-                <div v-else class="oi-empty">Нет несквитованных Statement Debit записей</div>
-
-                <!-- Statement Credit -->
-                <div class="oi-section-header oi-stmt-credit">
-                    <i class="fas fa-arrow-down me-1"></i>
-                    Statement — Credit
-                    <span class="oi-count">{{ report.outstanding_items.stmt_credit.length }} записей</span>
-                </div>
-                <div v-if="report.outstanding_items.stmt_credit.length>0" class="oi-table-wrap">
-                    <table class="recon-entries-table">
-                        <thead><tr>
-                            <th>Value Date</th>
-                            <th>Instruction ID</th>
-                            <th>EndToEnd ID</th>
-                            <th>Transaction ID</th>
-                            <th>Message ID</th>
-                            <th>D/C</th>
-                            <th style="text-align:right">Amount</th>
-                        </tr></thead>
-                        <tbody>
-                        <tr v-for="(r,i) in report.outstanding_items.stmt_credit" :key="i">
-                            <td style="white-space:nowrap">{{ fmtDate(r.value) }}</td>
-                            <td class="td-mono-sm">{{ r.instruction_id||'—' }}</td>
-                            <td class="td-mono-sm">{{ r.end_to_end_id||'—' }}</td>
-                            <td class="td-mono-sm">{{ r.transaction_id||'—' }}</td>
-                            <td class="td-mono-sm">{{ r.message_id||'—' }}</td>
-                            <td><span class="dc-c">C</span></td>
-                            <td style="text-align:right;font-family:monospace;font-weight:600">{{ fmtAmount(r.amount) }}</td>
-                        </tr>
-                        </tbody>
-                        <tfoot>
-                        <tr class="oi-net-row">
-                            <td colspan="6" style="font-weight:700;text-align:right">Net Amount:</td>
-                            <td style="text-align:right;font-family:monospace;font-weight:800">{{ fmtAmount(report.outstanding_items.net_stmt_credit) }}</td>
-                        </tr>
-                        </tfoot>
-                    </table>
-                </div>
-                <div v-else class="oi-empty">Нет несквитованных Statement Credit записей</div>
-
-                <!-- Outstanding Items Summary -->
-                <div style="padding:16px 20px;border-top:2px solid #e5e9f2;background:#f9fafb">
-                    <table class="recon-summary-table" style="margin:0">
-                        <tbody>
-                        <tr>
-                            <td style="width:50%;padding:5px 0;color:#9ca3af;font-size:12px;font-weight:600">Ledger: Net Amount (D−C)</td>
-                            <td style="text-align:right;font-family:monospace;font-weight:700">{{ fmtAmountSigned(report.outstanding_items.ledger_net_amount) }}</td>
-                        </tr>
-                        <tr>
-                            <td style="padding:5px 0;color:#9ca3af;font-size:12px;font-weight:600">Statement: Net Amount (D−C)</td>
-                            <td style="text-align:right;font-family:monospace;font-weight:700">{{ fmtAmountSigned(report.outstanding_items.stmt_net_amount) }}</td>
-                        </tr>
-                        <tr class="recon-diff-row" :class="report.outstanding_items.difference===0?'diff-zero':'diff-nonzero'">
-                            <td style="padding:6px 0"><strong>Difference</strong></td>
-                            <td style="text-align:right;font-family:monospace;font-weight:800">{{ fmtAmountSigned(report.outstanding_items.difference) }}</td>
-                        </tr>
-                        </tbody>
-                    </table>
-                </div>
+                <table class="recon-summary-table">
+                    <thead><tr><th style="width:50%">Type</th><th style="text-align:right">Amount</th></tr></thead>
+                    <tbody>
+                    <tr><td><span class="badge-ls badge-l">L</span> Ledger</td><td style="text-align:right;font-family:monospace;font-weight:700">{{ fmtAmountSigned(report.outstanding_items.ledger) }}</td></tr>
+                    <tr><td><span class="badge-ls badge-s">S</span> Statement</td><td style="text-align:right;font-family:monospace;font-weight:700">{{ fmtAmountSigned(report.outstanding_items.statement) }}</td></tr>
+                    <tr class="recon-diff-row" :class="diffClass(report.outstanding_items.difference)"><td><strong>Difference</strong></td><td style="text-align:right;font-family:monospace;font-weight:800">{{ fmtAmountSigned(report.outstanding_items.difference) }}</td></tr>
+                    </tbody>
+                </table>
             </div>
         </div>
 
@@ -379,7 +226,7 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                 <table class="recon-summary-table">
                     <thead>
                     <tr>
-                        <th style="width:50%">Показатель</th>
+                        <th style="width:40%">Indicator</th>
                         <th style="text-align:right">Ledger</th>
                         <th style="text-align:right">Statement</th>
                         <th style="text-align:right">Difference</th>
@@ -398,7 +245,7 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                         <td style="text-align:right;font-family:monospace">{{ fmtAmountSigned(report.outstanding_items.statement) }}</td>
                         <td style="text-align:right;font-family:monospace">{{ fmtAmountSigned(report.outstanding_items.difference) }}</td>
                     </tr>
-                    <tr class="recon-diff-row" :class="report.trial_balance.difference===0?'diff-zero':'diff-nonzero'">
+                    <tr class="recon-diff-row" :class="diffClass(report.trial_balance.difference)">
                         <td><strong>Trial Balance</strong></td>
                         <td style="text-align:right;font-family:monospace;font-weight:800">{{ fmtAmountSigned(report.trial_balance.ledger) }}</td>
                         <td style="text-align:right;font-family:monospace;font-weight:800">{{ fmtAmountSigned(report.trial_balance.statement) }}</td>
@@ -409,11 +256,158 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
             </div>
         </div>
 
-        <!-- ── ИТОГИ (Ledger/Statement Total Amount) ── -->
+        <!-- ── ДЕТАЛИЗАЦИЯ: Outstanding Items ── -->
+        <div class="sm-card" style="margin-bottom:14px">
+            <div class="sm-card-header">
+                <i class="fas fa-th-list me-2" style="color:#6366f1"></i>
+                Outstanding Items — Detail
+            </div>
+            <div class="sm-card-body" style="padding:0">
+
+                <!-- Ledger-Debit -->
+                <div class="oi-section-header oi-ledger-debit">
+                    <i class="fas fa-arrow-up me-1"></i>
+                    Ledger-Debit (Outstanding Items)
+                    <span class="oi-count">{{ report.outstanding_items.ledger_debit.length }} записей</span>
+                </div>
+                <div v-if="report.outstanding_items.ledger_debit.length>0" class="oi-table-wrap">
+                    <table class="recon-entries-table">
+                        <thead><tr>
+                            <th>Value</th><th>Instruction_ID</th><th>EndToEnd_ID</th><th>Transaction_ID</th><th>Message_ID</th><th>D/C Mark</th><th style="text-align:right">Amount</th>
+                        </tr></thead>
+                        <tbody>
+                        <tr v-for="(r,i) in report.outstanding_items.ledger_debit" :key="i">
+                            <td style="white-space:nowrap">{{ fmtDate(r.value) }}</td>
+                            <td class="td-mono-sm">{{ r.instruction_id||'—' }}</td>
+                            <td class="td-mono-sm">{{ r.end_to_end_id||'—' }}</td>
+                            <td class="td-mono-sm">{{ r.transaction_id||'—' }}</td>
+                            <td class="td-mono-sm">{{ r.message_id||'—' }}</td>
+                            <td><span class="dc-d">D</span></td>
+                            <td style="text-align:right;font-family:monospace;font-weight:600">{{ fmtAmount(r.amount) }}</td>
+                        </tr>
+                        </tbody>
+                        <tfoot><tr class="oi-net-row">
+                            <td colspan="6" style="font-weight:700;text-align:right">Net Amount:</td>
+                            <td style="text-align:right;font-family:monospace;font-weight:800">{{ fmtAmount(report.outstanding_items.net_ledger_debit) }}</td>
+                        </tr></tfoot>
+                    </table>
+                </div>
+                <div v-else class="oi-empty">Нет записей</div>
+
+                <!-- Ledger-Credit -->
+                <div class="oi-section-header oi-ledger-credit">
+                    <i class="fas fa-arrow-down me-1"></i>
+                    Ledger-Credit (Outstanding Items)
+                    <span class="oi-count">{{ report.outstanding_items.ledger_credit.length }} записей</span>
+                </div>
+                <div v-if="report.outstanding_items.ledger_credit.length>0" class="oi-table-wrap">
+                    <table class="recon-entries-table">
+                        <thead><tr>
+                            <th>Value</th><th>Instruction_ID</th><th>EndToEnd_ID</th><th>Transaction_ID</th><th>Message_ID</th><th>D/C Mark</th><th style="text-align:right">Amount</th>
+                        </tr></thead>
+                        <tbody>
+                        <tr v-for="(r,i) in report.outstanding_items.ledger_credit" :key="i">
+                            <td style="white-space:nowrap">{{ fmtDate(r.value) }}</td>
+                            <td class="td-mono-sm">{{ r.instruction_id||'—' }}</td>
+                            <td class="td-mono-sm">{{ r.end_to_end_id||'—' }}</td>
+                            <td class="td-mono-sm">{{ r.transaction_id||'—' }}</td>
+                            <td class="td-mono-sm">{{ r.message_id||'—' }}</td>
+                            <td><span class="dc-c">C</span></td>
+                            <td style="text-align:right;font-family:monospace;font-weight:600">{{ fmtAmount(r.amount) }}</td>
+                        </tr>
+                        </tbody>
+                        <tfoot><tr class="oi-net-row">
+                            <td colspan="6" style="font-weight:700;text-align:right">Net Amount:</td>
+                            <td style="text-align:right;font-family:monospace;font-weight:800">{{ fmtAmount(report.outstanding_items.net_ledger_credit) }}</td>
+                        </tr></tfoot>
+                    </table>
+                </div>
+                <div v-else class="oi-empty">Нет записей</div>
+
+                <!-- Ledger: Net Amount -->
+                <div style="padding:10px 20px;border-top:2px solid #e5e9f2;background:#eef2ff">
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                        <strong style="font-size:13px;color:#4338ca">Ledger: Net Amount</strong>
+                        <span style="font-family:monospace;font-weight:800;font-size:14px;color:#4338ca">{{ fmtAmountSigned(report.outstanding_items.ledger_net_amount) }}</span>
+                    </div>
+                </div>
+
+                <!-- Statement-Debit -->
+                <div class="oi-section-header oi-stmt-debit">
+                    <i class="fas fa-arrow-up me-1"></i>
+                    Statement-Debit (Outstanding Items)
+                    <span class="oi-count">{{ report.outstanding_items.stmt_debit.length }} записей</span>
+                </div>
+                <div v-if="report.outstanding_items.stmt_debit.length>0" class="oi-table-wrap">
+                    <table class="recon-entries-table">
+                        <thead><tr>
+                            <th>Value</th><th>Instruction_ID</th><th>EndToEnd_ID</th><th>Transaction_ID</th><th>Message_ID</th><th>D/C Mark</th><th style="text-align:right">Amount</th>
+                        </tr></thead>
+                        <tbody>
+                        <tr v-for="(r,i) in report.outstanding_items.stmt_debit" :key="i">
+                            <td style="white-space:nowrap">{{ fmtDate(r.value) }}</td>
+                            <td class="td-mono-sm">{{ r.instruction_id||'—' }}</td>
+                            <td class="td-mono-sm">{{ r.end_to_end_id||'—' }}</td>
+                            <td class="td-mono-sm">{{ r.transaction_id||'—' }}</td>
+                            <td class="td-mono-sm">{{ r.message_id||'—' }}</td>
+                            <td><span class="dc-d">D</span></td>
+                            <td style="text-align:right;font-family:monospace;font-weight:600">{{ fmtAmount(r.amount) }}</td>
+                        </tr>
+                        </tbody>
+                        <tfoot><tr class="oi-net-row">
+                            <td colspan="6" style="font-weight:700;text-align:right">Net Amount:</td>
+                            <td style="text-align:right;font-family:monospace;font-weight:800">{{ fmtAmount(report.outstanding_items.net_stmt_debit) }}</td>
+                        </tr></tfoot>
+                    </table>
+                </div>
+                <div v-else class="oi-empty">Нет записей</div>
+
+                <!-- Statement-Credit -->
+                <div class="oi-section-header oi-stmt-credit">
+                    <i class="fas fa-arrow-down me-1"></i>
+                    Statement-Credit (Outstanding Items)
+                    <span class="oi-count">{{ report.outstanding_items.stmt_credit.length }} записей</span>
+                </div>
+                <div v-if="report.outstanding_items.stmt_credit.length>0" class="oi-table-wrap">
+                    <table class="recon-entries-table">
+                        <thead><tr>
+                            <th>Value</th><th>Instruction_ID</th><th>EndToEnd_ID</th><th>Transaction_ID</th><th>Message_ID</th><th>D/C Mark</th><th style="text-align:right">Amount</th>
+                        </tr></thead>
+                        <tbody>
+                        <tr v-for="(r,i) in report.outstanding_items.stmt_credit" :key="i">
+                            <td style="white-space:nowrap">{{ fmtDate(r.value) }}</td>
+                            <td class="td-mono-sm">{{ r.instruction_id||'—' }}</td>
+                            <td class="td-mono-sm">{{ r.end_to_end_id||'—' }}</td>
+                            <td class="td-mono-sm">{{ r.transaction_id||'—' }}</td>
+                            <td class="td-mono-sm">{{ r.message_id||'—' }}</td>
+                            <td><span class="dc-c">C</span></td>
+                            <td style="text-align:right;font-family:monospace;font-weight:600">{{ fmtAmount(r.amount) }}</td>
+                        </tr>
+                        </tbody>
+                        <tfoot><tr class="oi-net-row">
+                            <td colspan="6" style="font-weight:700;text-align:right">Net Amount:</td>
+                            <td style="text-align:right;font-family:monospace;font-weight:800">{{ fmtAmount(report.outstanding_items.net_stmt_credit) }}</td>
+                        </tr></tfoot>
+                    </table>
+                </div>
+                <div v-else class="oi-empty">Нет записей</div>
+
+                <!-- Statement: Net Amount -->
+                <div style="padding:10px 20px;border-top:2px solid #e5e9f2;background:#eef2ff">
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                        <strong style="font-size:13px;color:#4338ca">Statement: Net Amount</strong>
+                        <span style="font-family:monospace;font-weight:800;font-size:14px;color:#4338ca">{{ fmtAmountSigned(report.outstanding_items.stmt_net_amount) }}</span>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ── LEDGER/STATEMENT TOTAL AMOUNT ── -->
         <div class="sm-card" style="margin-bottom:14px">
             <div class="sm-card-header">
                 <i class="fas fa-sigma me-2" style="color:#7c3aed"></i>
-                Итого
+                Ledger/Statement Total Amount
             </div>
             <div class="sm-card-body" style="padding:0">
                 <table class="recon-summary-table">
@@ -448,12 +442,16 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
     <!-- Пустой стейт -->
     <div v-if="!report && !loading" style="text-align:center;padding:60px 20px;color:#9ca3af">
         <i class="fas fa-file-contract" style="font-size:48px;margin-bottom:16px;opacity:.3"></i>
-        <div style="font-size:15px;font-weight:600;margin-bottom:6px">Ракорд не сформирован</div>
+        <div style="font-size:15px;font-weight:600;margin-bottom:6px">Раккорд не сформирован</div>
         <div style="font-size:13px">Выберите счёт и дату, затем нажмите «Сформировать»</div>
     </div>
 
 </div><!-- /recon-app -->
 
+
+<!-- jsPDF + autoTable для клиентской генерации PDF -->
+<script src="<?= Yii::getAlias('@web') ?>/js/jspdf.umd.min.js"></script>
+<script src="<?= Yii::getAlias('@web') ?>/js/jspdf.plugin.autotable.min.js"></script>
 
 <!-- ══════════════════════════════════════
      Vue2 Script
@@ -463,7 +461,6 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
         var _init = <?= $initJson ?>;
 
         document.addEventListener('DOMContentLoaded', function () {
-            // CSRF
             var csrfMeta = document.querySelector('meta[name="csrf-token"]');
             if (csrfMeta) {
                 axios.defaults.headers.common['X-CSRF-Token'] = csrfMeta.getAttribute('content');
@@ -487,17 +484,20 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                     pools:    _init.pools    || [],
                     accounts: _init.accounts || [],
                     form: {
-                        poolId:    '',
-                        accountId: '',
-                        dateRecon: (function () {
+                        poolId:     '',
+                        accountId:  '',
+                        dateRecon:  (function () {
                             var d = new Date();
-                            d.setDate(d.getDate() - 1);
                             return d.toISOString().slice(0, 10);
                         }()),
+                        periodMode: 'auto',
+                        dateFrom:   '',
+                        dateTo:     '',
                     },
-                    report:  null,
-                    loading: false,
-                    error:   null,
+                    report:    null,
+                    loading:   false,
+                    exporting: false,
+                    error:     null,
                 },
 
                 computed: {
@@ -527,6 +527,18 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                         this.form.accountId = '';
                     },
 
+                    _buildPayload: function () {
+                        var payload = {
+                            account_id: this.form.accountId,
+                            date_recon: this.form.dateRecon,
+                        };
+                        if (this.form.periodMode === 'custom' && this.form.dateFrom && this.form.dateTo) {
+                            payload.date_from = this.form.dateFrom;
+                            payload.date_to   = this.form.dateTo;
+                        }
+                        return payload;
+                    },
+
                     generateReport: function () {
                         var self = this;
                         if (!this.form.accountId || !this.form.dateRecon) return;
@@ -534,27 +546,19 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                         this.error   = null;
                         this.report  = null;
 
-                        axios.post('<?= Url::to(['/recon-report/generate']) ?>', {
-                            account_id: this.form.accountId,
-                            date_recon: this.form.dateRecon,
-                        })
+                        axios.post('<?= Url::to(['/recon-report/generate']) ?>', this._buildPayload())
                             .then(function (resp) {
-                                var data = resp.data;
-                                if (data.success) {
-                                    self.report = data.report;
-                                    self.$nextTick(function () {
-                                        self.scrollToReport();
-                                    });
+                                if (resp.data.success) {
+                                    self.report = resp.data.report;
+                                    self.$nextTick(function () { self.scrollToReport(); });
                                 } else {
-                                    self.error = data.message || 'Ошибка формирования отчёта';
+                                    self.error = resp.data.message || 'Ошибка формирования отчёта';
                                 }
                             })
                             .catch(function (err) {
                                 self.error = 'Ошибка сети: ' + (err.message || 'неизвестная ошибка');
                             })
-                            .finally(function () {
-                                self.loading = false;
-                            });
+                            .finally(function () { self.loading = false; });
                     },
 
                     scrollToReport: function () {
@@ -567,9 +571,238 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                     },
 
                     exportPdf: function () {
-                        // Браузерная печать в PDF (нет сервера PDF) — открыть диалог печати
-                        // с предложением сохранить как PDF
-                        window.print();
+                        var self = this;
+                        var r = self.report;
+                        if (!r) return;
+                        self.exporting = true;
+
+                        try {
+                            var jsPDF = window.jspdf.jsPDF;
+                            var doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+                            var pageW = doc.internal.pageSize.getWidth();
+                            var y = 15;
+
+                            // ── Заголовок ──
+                            doc.setFontSize(18);
+                            doc.setFont(undefined, 'bold');
+                            doc.text('Reconciliation Report', 14, y);
+                            y += 8;
+
+                            doc.setFontSize(9);
+                            doc.setFont(undefined, 'normal');
+                            var meta = [
+                                ['Company: ' + r.company, 'Date: ' + self.fmtDateTime(r.generated_at)],
+                                ['Nosto Bank: ' + r.nostro_bank, 'Date Reconciliation: ' + self.fmtDate(r.date_recon)],
+                                ['Account: ' + r.account_name + ' (' + (r.currency || '') + ')',
+                                    (r.date_from && r.date_to) ? 'Period: ' + self.fmtDate(r.date_from) + ' - ' + self.fmtDate(r.date_to) : ''],
+                            ];
+                            meta.forEach(function (row) {
+                                doc.text(row[0], 14, y);
+                                doc.text(row[1], pageW / 2, y);
+                                y += 4.5;
+                            });
+                            y += 4;
+
+                            // ── Closing Balance ──
+                            doc.setFontSize(11);
+                            doc.setFont(undefined, 'bold');
+                            doc.text('Closing Balance', 14, y);
+                            y += 2;
+
+                            doc.autoTable({
+                                startY: y,
+                                head: [['Type', 'Amount']],
+                                body: [
+                                    ['Ledger', self.fmtAmountSigned(r.closing_balance.ledger)],
+                                    ['Statement', self.fmtAmountSigned(r.closing_balance.statement)],
+                                    ['Difference', self.fmtAmountSigned(r.closing_balance.difference)],
+                                ],
+                                styles: { fontSize: 8, cellPadding: 2 },
+                                headStyles: { fillColor: [79, 70, 229] },
+                                columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } },
+                                margin: { left: 14, right: 14 },
+                                theme: 'grid',
+                                didParseCell: function (data) {
+                                    if (data.row.index === 2) { data.cell.styles.fillColor = [240, 242, 245]; data.cell.styles.fontStyle = 'bold'; }
+                                },
+                            });
+                            y = doc.lastAutoTable.finalY + 6;
+
+                            // ── Outstanding Items Summary ──
+                            doc.setFontSize(11);
+                            doc.setFont(undefined, 'bold');
+                            doc.text('Outstanding Items', 14, y);
+                            y += 2;
+
+                            doc.autoTable({
+                                startY: y,
+                                head: [['Type', 'Amount']],
+                                body: [
+                                    ['Ledger', self.fmtAmountSigned(r.outstanding_items.ledger)],
+                                    ['Statement', self.fmtAmountSigned(r.outstanding_items.statement)],
+                                    ['Difference', self.fmtAmountSigned(r.outstanding_items.difference)],
+                                ],
+                                styles: { fontSize: 8, cellPadding: 2 },
+                                headStyles: { fillColor: [245, 158, 11] },
+                                columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } },
+                                margin: { left: 14, right: 14 },
+                                theme: 'grid',
+                                didParseCell: function (data) {
+                                    if (data.row.index === 2) { data.cell.styles.fillColor = [240, 242, 245]; data.cell.styles.fontStyle = 'bold'; }
+                                },
+                            });
+                            y = doc.lastAutoTable.finalY + 6;
+
+                            // ── Trial Balance ──
+                            doc.setFontSize(11);
+                            doc.setFont(undefined, 'bold');
+                            doc.text('Trial Balance', 14, y);
+                            y += 2;
+
+                            doc.autoTable({
+                                startY: y,
+                                head: [['Indicator', 'Ledger', 'Statement', 'Difference']],
+                                body: [
+                                    ['Closing Balance', self.fmtAmountSigned(r.closing_balance.ledger), self.fmtAmountSigned(r.closing_balance.statement), self.fmtAmountSigned(r.closing_balance.difference)],
+                                    ['+ Outstanding Items', self.fmtAmountSigned(r.outstanding_items.ledger), self.fmtAmountSigned(r.outstanding_items.statement), self.fmtAmountSigned(r.outstanding_items.difference)],
+                                    ['Trial Balance', self.fmtAmountSigned(r.trial_balance.ledger), self.fmtAmountSigned(r.trial_balance.statement), self.fmtAmountSigned(r.trial_balance.difference)],
+                                ],
+                                styles: { fontSize: 8, cellPadding: 2 },
+                                headStyles: { fillColor: [79, 70, 229] },
+                                columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
+                                margin: { left: 14, right: 14 },
+                                theme: 'grid',
+                                didParseCell: function (data) {
+                                    if (data.row.index === 2) { data.cell.styles.fillColor = [240, 242, 245]; data.cell.styles.fontStyle = 'bold'; }
+                                },
+                            });
+                            y = doc.lastAutoTable.finalY + 8;
+
+                            // ── Функция для таблицы записей ──
+                            var entryCols = ['Value', 'Instruction_ID', 'EndToEnd_ID', 'Transaction_ID', 'Message_ID', 'D/C Mark', 'Amount'];
+                            var entryRow = function (e) {
+                                return [
+                                    self.fmtDate(e.value), e.instruction_id || '-', e.end_to_end_id || '-',
+                                    e.transaction_id || '-', e.message_id || '-', e.dc || '-', self.fmtAmount(e.amount)
+                                ];
+                            };
+
+                            var sections = [
+                                { title: 'Ledger-Debit (Outstanding Items)', data: r.outstanding_items.ledger_debit, net: r.outstanding_items.net_ledger_debit, color: [220, 38, 38] },
+                                { title: 'Ledger-Credit (Outstanding Items)', data: r.outstanding_items.ledger_credit, net: r.outstanding_items.net_ledger_credit, color: [5, 150, 105] },
+                            ];
+
+                            // Добавляем новую страницу для детализации
+                            doc.addPage();
+                            y = 15;
+
+                            doc.setFontSize(13);
+                            doc.setFont(undefined, 'bold');
+                            doc.text('Outstanding Items - Detail', 14, y);
+                            y += 8;
+
+                            sections.forEach(function (sec) {
+                                if (y > 170) { doc.addPage(); y = 15; }
+                                doc.setFontSize(10);
+                                doc.setFont(undefined, 'bold');
+                                doc.text(sec.title, 14, y);
+                                y += 2;
+
+                                var body = sec.data.map(entryRow);
+                                body.push([{ content: 'Net Amount:', colSpan: 6, styles: { halign: 'right', fontStyle: 'bold' } }, self.fmtAmount(sec.net)]);
+
+                                doc.autoTable({
+                                    startY: y,
+                                    head: [entryCols],
+                                    body: body,
+                                    styles: { fontSize: 7, cellPadding: 1.5 },
+                                    headStyles: { fillColor: sec.color },
+                                    columnStyles: { 6: { halign: 'right', fontStyle: 'bold' } },
+                                    margin: { left: 14, right: 14 },
+                                    theme: 'grid',
+                                });
+                                y = doc.lastAutoTable.finalY + 4;
+                            });
+
+                            // Ledger: Net Amount
+                            doc.setFontSize(10);
+                            doc.setFont(undefined, 'bold');
+                            doc.setTextColor(67, 56, 202);
+                            doc.text('Ledger: Net Amount = ' + self.fmtAmountSigned(r.outstanding_items.ledger_net_amount), 14, y + 2);
+                            doc.setTextColor(0, 0, 0);
+                            y += 10;
+
+                            // Statement sections
+                            var stmtSections = [
+                                { title: 'Statement-Debit (Outstanding Items)', data: r.outstanding_items.stmt_debit, net: r.outstanding_items.net_stmt_debit, color: [220, 38, 38] },
+                                { title: 'Statement-Credit (Outstanding Items)', data: r.outstanding_items.stmt_credit, net: r.outstanding_items.net_stmt_credit, color: [5, 150, 105] },
+                            ];
+
+                            stmtSections.forEach(function (sec) {
+                                if (y > 170) { doc.addPage(); y = 15; }
+                                doc.setFontSize(10);
+                                doc.setFont(undefined, 'bold');
+                                doc.text(sec.title, 14, y);
+                                y += 2;
+
+                                var body = sec.data.map(entryRow);
+                                body.push([{ content: 'Net Amount:', colSpan: 6, styles: { halign: 'right', fontStyle: 'bold' } }, self.fmtAmount(sec.net)]);
+
+                                doc.autoTable({
+                                    startY: y,
+                                    head: [entryCols],
+                                    body: body,
+                                    styles: { fontSize: 7, cellPadding: 1.5 },
+                                    headStyles: { fillColor: sec.color },
+                                    columnStyles: { 6: { halign: 'right', fontStyle: 'bold' } },
+                                    margin: { left: 14, right: 14 },
+                                    theme: 'grid',
+                                });
+                                y = doc.lastAutoTable.finalY + 4;
+                            });
+
+                            // Statement: Net Amount
+                            doc.setFontSize(10);
+                            doc.setFont(undefined, 'bold');
+                            doc.setTextColor(67, 56, 202);
+                            doc.text('Statement: Net Amount = ' + self.fmtAmountSigned(r.outstanding_items.stmt_net_amount), 14, y + 2);
+                            doc.setTextColor(0, 0, 0);
+                            y += 10;
+
+                            // ── Ledger/Statement Total Amount ──
+                            if (y > 170) { doc.addPage(); y = 15; }
+                            doc.setFontSize(11);
+                            doc.setFont(undefined, 'bold');
+                            doc.text('Ledger/Statement Total Amount', 14, y);
+                            y += 2;
+
+                            doc.autoTable({
+                                startY: y,
+                                body: [
+                                    ['Ledger: Net Amount', self.fmtAmountSigned(r.totals.ledger_net_amount)],
+                                    ['Statement: Net Amount', self.fmtAmountSigned(r.totals.statement_net_amount)],
+                                    ['Ledger/Statement Total Amount', self.fmtAmountSigned(r.totals.total_amount)],
+                                ],
+                                styles: { fontSize: 9, cellPadding: 3 },
+                                columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } },
+                                margin: { left: 14, right: 14 },
+                                theme: 'grid',
+                                didParseCell: function (data) {
+                                    if (data.row.index === 2) { data.cell.styles.fillColor = [232, 245, 233]; data.cell.styles.fontStyle = 'bold'; data.cell.styles.fontSize = 11; }
+                                },
+                            });
+
+                            doc.save(self.pdfFilename);
+                        } catch (e) {
+                            Swal.fire({ icon: 'error', title: 'Ошибка PDF', text: e.message || 'Не удалось сгенерировать PDF' });
+                        } finally {
+                            self.exporting = false;
+                        }
+                    },
+
+                    diffClass: function (val) {
+                        if (val === null || val === undefined) return '';
+                        return val === 0 ? 'diff-zero' : 'diff-nonzero';
                     },
 
                     fmtDate: function (val) {

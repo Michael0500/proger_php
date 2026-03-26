@@ -23,6 +23,12 @@
 
             data: {
                 isSidebarCollapsed: false,
+                sidebarWidth: 240,
+                isResizingSidebar: false,
+
+                // Flyout
+                flyoutCategory: null,
+                flyoutStyle: {},
                 loadingCategories:  false,
                 categories:         [],
                 selectedCategory:   null,
@@ -51,6 +57,7 @@
             },
 
             mounted: function () {
+                this.flyoutTimer = null;
                 this.loadCategories();
                 this.loadBalanceAccounts();
                 this.loadArchiveAccounts();
@@ -63,9 +70,79 @@
                 }
             },
 
+            computed: {
+                sidebarStyle: function () {
+                    if (this.isSidebarCollapsed) return {};
+                    return {
+                        width: this.sidebarWidth + 'px',
+                        minWidth: this.sidebarWidth + 'px'
+                    };
+                }
+            },
+
             methods: {
                 toggleSidebar: function () {
                     this.isSidebarCollapsed = !this.isSidebarCollapsed;
+                },
+
+                /* ── Sidebar resize ─────────────────── */
+                startSidebarResize: function (e) {
+                    this.isResizingSidebar = true;
+                    var self = this;
+                    var startX = e.clientX;
+                    var startW = this.sidebarWidth;
+
+                    function onMove(ev) {
+                        var newW = startW + (ev.clientX - startX);
+                        if (newW < 180) newW = 180;
+                        if (newW > 500) newW = 500;
+                        self.sidebarWidth = newW;
+                    }
+                    function onUp() {
+                        self.isResizingSidebar = false;
+                        document.removeEventListener('mousemove', onMove);
+                        document.removeEventListener('mouseup', onUp);
+                        document.body.style.cursor = '';
+                        document.body.style.userSelect = '';
+                    }
+                    document.body.style.cursor = 'col-resize';
+                    document.body.style.userSelect = 'none';
+                    document.addEventListener('mousemove', onMove);
+                    document.addEventListener('mouseup', onUp);
+                },
+
+                /* ── Flyout (collapsed hover) ───────── */
+                onCategoryHover: function (category, event) {
+                    if (!this.isSidebarCollapsed) return;
+                    clearTimeout(this.flyoutTimer);
+                    var row = event.currentTarget;
+                    var rect = row.getBoundingClientRect();
+                    this.flyoutStyle = {
+                        position: 'fixed',
+                        left: (rect.right + 8) + 'px',
+                        top: rect.top + 'px'
+                    };
+                    this.flyoutCategory = category;
+                },
+                onCategoryLeave: function () {
+                    if (!this.isSidebarCollapsed) return;
+                    var self = this;
+                    this.flyoutTimer = setTimeout(function () {
+                        self.flyoutCategory = null;
+                    }, 120);
+                },
+                onFlyoutEnter: function () {
+                    clearTimeout(this.flyoutTimer);
+                },
+                onFlyoutLeave: function () {
+                    var self = this;
+                    this.flyoutTimer = setTimeout(function () {
+                        self.flyoutCategory = null;
+                    }, 80);
+                },
+                closeFlyout: function () {
+                    clearTimeout(this.flyoutTimer);
+                    this.flyoutCategory = null;
                 },
 
                 switchToBalance: function () {

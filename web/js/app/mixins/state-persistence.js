@@ -14,6 +14,12 @@ var StatePersistenceMixin = {
         // Восстанавливаем сайдбар
         var collapsed = StateStorage.get('sidebarCollapsed', false);
         this.isSidebarCollapsed = !!collapsed;
+
+        // Восстанавливаем ширину сайдбара
+        var width = StateStorage.get('sidebarWidth', 240);
+        if (typeof width === 'number' && width >= 180 && width <= 500) {
+            this.sidebarWidth = width;
+        }
     },
 
     watch: {
@@ -22,6 +28,9 @@ var StatePersistenceMixin = {
         },
         isSidebarCollapsed: function (val) {
             StateStorage.set('sidebarCollapsed', val);
+        },
+        sidebarWidth: function (val) {
+            StateStorage.set('sidebarWidth', val);
         }
     }
 };

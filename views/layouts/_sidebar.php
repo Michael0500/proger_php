@@ -1,10 +1,18 @@
 <?php /** @var yii\web\View $this */ ?>
 
-<div id="sidebar" :class="{ 'collapsed': isSidebarCollapsed }">
+<div id="sidebar"
+     :class="{ 'collapsed': isSidebarCollapsed, 'resizing': isResizingSidebar }"
+     :style="sidebarStyle">
 
     <!-- Тоггл -->
     <div id="sidebar-toggle" @click="toggleSidebar" title="Свернуть/развернуть">
         <i class="fas fa-chevron-left"></i>
+    </div>
+
+    <!-- Ресайз-хэндл -->
+    <div class="sidebar-resize-handle"
+         v-if="!isSidebarCollapsed"
+         @mousedown.prevent="startSidebarResize">
     </div>
 
     <!-- Заголовок (скрывается при collapsed) -->
@@ -34,7 +42,9 @@
                          category.groups.some(function(g){ return g.id === selectedGroup.id; })
                  }"
                  :data-name="category.name"
-                 @click="toggleCategory(category)">
+                 @click="toggleCategory(category)"
+                 @mouseenter="onCategoryHover(category, $event)"
+                 @mouseleave="onCategoryLeave(category)">
 
                 <!-- Стрелка (скрыта в collapsed) -->
                 <span class="tree-chevron" :class="{ open: category.expanded }">
@@ -61,6 +71,33 @@
                         <i class="fas fa-trash"></i>
                     </button>
                 </span>
+            </div>
+
+            <!-- Flyout-подменю (collapsed mode) -->
+            <div v-if="isSidebarCollapsed && flyoutCategory && flyoutCategory.id === category.id"
+                 class="sidebar-flyout"
+                 :style="flyoutStyle"
+                 @mouseenter="onFlyoutEnter"
+                 @mouseleave="onFlyoutLeave">
+
+                <div class="flyout-header">{{ category.name }}</div>
+
+                <div v-if="!category.groups || category.groups.length === 0"
+                     class="flyout-empty">Нет групп</div>
+
+                <div v-for="group in category.groups" :key="group.id"
+                     class="flyout-item"
+                     :class="{ active: selectedGroup && selectedGroup.id === group.id }"
+                     @click.stop="selectGroup(group, category); closeFlyout()">
+                    <span class="flyout-dot"></span>
+                    <span class="flyout-item-name">{{ group.name }}</span>
+                    <span v-if="!group.is_active" class="flyout-badge-off">Откл</span>
+                </div>
+
+                <button class="flyout-add" @click.stop="showAddGroupModal(category); closeFlyout()">
+                    <i class="fas fa-plus" style="font-size:9px"></i>
+                    Добавить группу
+                </button>
             </div>
 
             <!-- Группы — только в развёрнутом виде -->

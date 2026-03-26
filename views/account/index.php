@@ -34,11 +34,7 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
         <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
             <div style="display:flex;align-items:center;gap:6px">
                 <i class="fas fa-filter" style="color:#9ca3af;font-size:12px"></i>
-                <select class="form-select form-select-sm" v-model="filterPool" style="width:200px">
-                    <option value="">Все ностро-банки</option>
-                    <option value="__none__">Без ностро-банка</option>
-                    <option v-for="p in pools" :key="p.id" :value="p.id">{{ p.name }}</option>
-                </select>
+                <select id="filter-pool-select2" style="width:200px"></select>
             </div>
             <div style="display:flex;align-items:center;gap:6px">
                 <input type="text" class="form-control form-control-sm" v-model="searchQuery"
@@ -144,10 +140,7 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                         <!-- Ностро-банк -->
                         <div class="col-md-6">
                             <label class="form-label">Ностро-банк</label>
-                            <select class="form-select" v-model="form.pool_id">
-                                <option value="">— не привязан —</option>
-                                <option v-for="p in pools" :key="p.id" :value="p.id">{{ p.name }}</option>
-                            </select>
+                            <select id="account-pool-select2" style="width:100%"></select>
                             <div class="form-text">Необязательно. Можно привязать позже.</div>
                         </div>
 
@@ -323,7 +316,32 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         },
 
+        mounted: function () {
+            this._initFilterPoolSelect2();
+        },
+
         methods: {
+            _initFilterPoolSelect2: function () {
+                var self = this;
+                var $el = $('#filter-pool-select2');
+
+                var data = [{ id: '__none__', text: 'Без ностро-банка' }];
+                self.pools.forEach(function (p) {
+                    data.push({ id: String(p.id), text: p.name });
+                });
+
+                $el.select2({
+                    theme:       'bootstrap-5',
+                    placeholder: 'Все ностро-банки',
+                    allowClear:  true,
+                    data:        data,
+                });
+
+                $el.on('change', function () {
+                    self.filterPool = $el.val() || '';
+                });
+            },
+
             _emptyForm: function () {
                 return {
                     id: null, name: '', currency: '', pool_id: '',
@@ -359,9 +377,39 @@ document.addEventListener('DOMContentLoaded', function () {
             },
 
             // ── CRUD ────────────────────────────────────────
+            _initPoolSelect2: function () {
+                var self = this;
+                var $el = $('#account-pool-select2');
+                if ($el.data('select2')) $el.off('change.pool').select2('destroy');
+                $el.empty();
+
+                var poolData = self.pools.map(function (p) {
+                    return { id: String(p.id), text: p.name };
+                });
+
+                $el.select2({
+                    theme:          'bootstrap-5',
+                    placeholder:    '— не привязан —',
+                    allowClear:     true,
+                    data:           poolData,
+                    dropdownParent: $('#accountModal'),
+                });
+
+                if (self.form.pool_id) {
+                    $el.val(String(self.form.pool_id)).trigger('change');
+                } else {
+                    $el.val(null).trigger('change');
+                }
+
+                $el.on('change.pool', function () {
+                    self.form.pool_id = $el.val() || '';
+                });
+            },
+
             showCreateModal: function () {
                 this.form = this._emptyForm();
                 this._modal('accountModal', 'show');
+                this.$nextTick(this._initPoolSelect2);
             },
 
             editAccount: function (acc) {
@@ -379,6 +427,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     date_close:   acc.date_close || '',
                 };
                 this._modal('accountModal', 'show');
+                this.$nextTick(this._initPoolSelect2);
             },
 
             saveAccount: function () {

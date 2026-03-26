@@ -66,6 +66,9 @@ body {
     flex-shrink: 0;
 }
 
+/* Без анимации при ресайзе */
+#sidebar.resizing { transition: none !important; }
+
 /* ── Свёрнутый sidebar ─────────────────────────────────────────── */
 #sidebar.collapsed {
     width: 52px;
@@ -123,41 +126,117 @@ body {
     box-shadow: 0 0 0 2px #a5b4fc;
 }
 
-/* ── Tooltip при наведении ─────────── */
-#sidebar.collapsed .tree-group-row::after {
-    content: attr(data-name);
-    position: absolute;
-    left: calc(100% + 12px);
-    top: 50%;
-    transform: translateY(-50%);
-    background: #1a1f36;
-    color: #fff;
-    font-size: 12px;
-    font-weight: 600;
-    padding: 5px 11px;
-    border-radius: 7px;
+/* ── Tooltip при наведении (скрыт когда есть flyout) ─────────── */
+#sidebar.collapsed .tree-group-row::after,
+#sidebar.collapsed .tree-group-row::before { display: none; }
+
+/* ── Flyout-подменю (collapsed mode) ────────────────────────── */
+.sidebar-flyout {
+    background: #fff;
+    border: 1px solid #e8eaf0;
+    border-radius: 10px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.12), 0 2px 8px rgba(0,0,0,.06);
+    min-width: 180px;
+    max-width: 260px;
+    padding: 6px;
+    z-index: 10000;
+    animation: flyoutIn .12s ease-out;
+}
+@keyframes flyoutIn {
+    from { opacity: 0; transform: translateX(-6px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+.flyout-header {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: #6366f1;
+    padding: 5px 8px 6px;
+    border-bottom: 1px solid #f1f3f7;
+    margin-bottom: 3px;
     white-space: nowrap;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity .15s .05s;
-    z-index: 9999;
-    box-shadow: 0 4px 12px rgba(0,0,0,.25);
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
-#sidebar.collapsed .tree-group-row::before {
-    content: '';
+.flyout-empty {
+    font-size: 11px;
+    color: #9ca3af;
+    padding: 6px 8px;
+}
+.flyout-item {
+    display: flex;
+    align-items: center;
+    padding: 5px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background .1s;
+    gap: 7px;
+}
+.flyout-item:hover { background: #f7f8fc; }
+.flyout-item.active {
+    background: linear-gradient(135deg, #ecfdf5, #f0fdf4);
+}
+.flyout-dot {
+    width: 6px; height: 6px;
+    background: #d1d5db;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.flyout-item.active .flyout-dot {
+    background: #10b981;
+    box-shadow: 0 0 0 3px rgba(16,185,129,.15);
+}
+.flyout-item-name {
+    font-size: 12px;
+    color: #4b5563;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    flex: 1;
+}
+.flyout-item.active .flyout-item-name { color: #065f46; font-weight: 600; }
+.flyout-badge-off {
+    font-size: 9px;
+    background: #e5e7eb;
+    color: #6b7280;
+    border-radius: 4px;
+    padding: 1px 5px;
+    flex-shrink: 0;
+}
+.flyout-add {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    width: 100%;
+    padding: 4px 8px;
+    margin-top: 3px;
+    border-radius: 6px;
+    border: 1px dashed #d1d5db;
+    background: transparent;
+    color: #9ca3af;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all .12s;
+}
+.flyout-add:hover { border-color: #6366f1; color: #6366f1; background: #f5f3ff; }
+
+/* ── Resize handle ───────────────────────────────────────────── */
+.sidebar-resize-handle {
     position: absolute;
-    left: calc(100% + 7px);
-    top: 50%;
-    transform: translateY(-50%);
-    border: 5px solid transparent;
-    border-right-color: #1a1f36;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity .15s .05s;
-    z-index: 9999;
+    right: -3px;
+    top: 0;
+    width: 6px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 201;
+    transition: background .15s;
 }
-#sidebar.collapsed .tree-group-row:hover::after,
-#sidebar.collapsed .tree-group-row:hover::before { opacity: 1; }
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle:active {
+    background: rgba(99, 102, 241, .25);
+}
 
 /* ── Кнопка «+» в collapsed ──────── */
 #sidebar.collapsed .sidebar-footer {

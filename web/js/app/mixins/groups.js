@@ -171,11 +171,13 @@ var GroupsMixin = {
         },
 
         removeGroupFilter: function (index) {
+            this._destroyFilterSelect2(index);
             this.groupFilters.splice(index, 1);
         },
 
         onGroupFilterFieldChange: function (index) {
             var self   = this;
+            self._destroyFilterSelect2(index);
             var filter = self.groupFilters[index];
             var ops    = (self.groupFilterMeta.operatorsMap || {})[filter.field] || { eq: 'равно' };
             self.$set(filter, 'operator', Object.keys(ops)[0]);
@@ -254,12 +256,20 @@ var GroupsMixin = {
                 .catch(function () { Swal.fire('Ошибка', 'Не удалось сохранить фильтры', 'error'); });
         },
 
+        _destroyFilterSelect2: function (index) {
+            var $acc  = $('#group-filter-account-' + index);
+            var $pool = $('#group-filter-pool-' + index);
+            if ($acc.length && $acc.data('select2'))  { $acc.off('change.groupfilter').select2('destroy'); }
+            if ($pool.length && $pool.data('select2')) { $pool.off('change.groupfilter').select2('destroy'); }
+        },
+
         _initFilterAccountSelects: function () {
             var self = this;
             self.groupFilters.forEach(function (filter, index) {
                 if (filter.field === 'account_id') {
                     var $el = $('#group-filter-account-' + index);
                     if (!$el.length || $el.data('select2')) return;
+                    $el.empty();
 
                     var accountData = (self.groupFilterMeta.accounts || []).map(function (a) {
                         return {
@@ -269,10 +279,11 @@ var GroupsMixin = {
                     });
 
                     $el.select2({
-                        theme:       'bootstrap-5',
-                        placeholder: 'Выберите счёт...',
-                        allowClear:  true,
-                        data:        accountData,
+                        theme:          'bootstrap-5',
+                        placeholder:    'Выберите счёт...',
+                        allowClear:     true,
+                        data:           accountData,
+                        dropdownParent: $('#configureGroupModal'),
                     });
 
                     if (filter.value) {
@@ -287,16 +298,18 @@ var GroupsMixin = {
                 if (filter.field === 'account_pool_id') {
                     var $el2 = $('#group-filter-pool-' + index);
                     if (!$el2.length || $el2.data('select2')) return;
+                    $el2.empty();
 
                     var poolData = (self.groupFilterMeta.accountPools || []).map(function (p) {
                         return { id: String(p.id), text: p.name };
                     });
 
                     $el2.select2({
-                        theme:       'bootstrap-5',
-                        placeholder: 'Выберите пул...',
-                        allowClear:  true,
-                        data:        poolData,
+                        theme:          'bootstrap-5',
+                        placeholder:    'Выберите пул...',
+                        allowClear:     true,
+                        data:           poolData,
+                        dropdownParent: $('#configureGroupModal'),
                     });
 
                     if (filter.value) {

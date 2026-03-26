@@ -30,7 +30,11 @@ var ModalsMixin = {
         // Группы
         closeAddGroupModal:       function () { this._hideModal('addGroupModal'); },
         closeEditGroupModal:      function () { this._hideModal('editGroupModal'); },
-        closeConfigureGroupModal: function () { this._hideModal('configureGroupModal'); },
+        closeConfigureGroupModal: function () {
+            var self = this;
+            (self.groupFilters || []).forEach(function (f, i) { self._destroyFilterSelect2(i); });
+            this._hideModal('configureGroupModal');
+        },
 
         // Записи
         closeEntryModal: function () { this._hideModal('entryModal'); },
