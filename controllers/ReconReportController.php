@@ -130,20 +130,22 @@ class ReconReportController extends BaseController
 
     private function buildReportData(Account $account, $poolName, $dateRecon, $dateFrom, $dateTo, $cid)
     {
-        $generatedAt = date('Y-m-d H:i:s');
-        $dtRecon     = \DateTime::createFromFormat('Y-m-d', $dateRecon);
-        $prevDay     = (clone $dtRecon)->modify('-1 day')->format('Y-m-d');
+        $generatedAt  = date('Y-m-d H:i:s');
+        $dtRecon      = \DateTime::createFromFormat('Y-m-d', $dateRecon);
+        $prevDay      = (clone $dtRecon)->modify('-1 day')->format('Y-m-d');
+        // В режиме произвольного периода closing balance берём на конец периода
+        $balanceDate  = ($dateFrom && $dateTo) ? $dateTo : $dateRecon;
 
         // ── 1. Closing Balance из nostro_balance ─────────────────────────────
         $closingLedger = NostroBalance::find()
             ->where(['account_id' => $account->id, 'ls_type' => 'L'])
-            ->andWhere(['<=', 'value_date', $dateRecon])
+            ->andWhere(['<=', 'value_date', $balanceDate])
             ->orderBy(['value_date' => SORT_DESC])
             ->one();
 
         $closingStatement = NostroBalance::find()
             ->where(['account_id' => $account->id, 'ls_type' => 'S'])
-            ->andWhere(['<=', 'value_date', $dateRecon])
+            ->andWhere(['<=', 'value_date', $balanceDate])
             ->orderBy(['value_date' => SORT_DESC])
             ->one();
 

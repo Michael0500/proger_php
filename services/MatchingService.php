@@ -391,24 +391,46 @@ class MatchingService
         $userId = (Yii::$app instanceof \yii\web\Application && !Yii::$app->user->isGuest)
             ? Yii::$app->user->id
             : null;
-        $count  = 0;
 
-        $transaction = $db->beginTransaction();
-        try {
-            foreach ($pairs as $pair) {
+        // Пакетный UPDATE: собираем все пары и обновляем одним запросом через VALUES + JOIN.
+        // Вместо N отдельных UPDATE (один на пару) — один UPDATE на весь батч.
+        $batchSize = 500;
+        $count     = 0;
+
+        foreach (array_chunk($pairs, $batchSize) as $batch) {
+            // Генерируем match_id для каждой пары и строим VALUES
+            $values = [];
+            foreach ($batch as $pair) {
                 $matchId = $this->generateMatchId();
-                $db->createCommand()->update('nostro_entries', [
-                    'match_id'     => $matchId,
-                    'match_status' => 'M',
-                    'updated_at'   => $now,
-                    'updated_by'   => $userId,
-                ], ['id' => [$pair['id_a'], $pair['id_b']]])->execute();
-                $count++;
+                $idA = (int) $pair['id_a'];
+                $idB = (int) $pair['id_b'];
+                $mid = $db->quoteValue($matchId);
+                $values[] = "({$idA}, {$mid})";
+                $values[] = "({$idB}, {$mid})";
             }
-            $transaction->commit();
-        } catch (\Exception $e) {
-            $transaction->rollBack();
-            throw $e;
+            $valuesSql = implode(",\n", $values);
+
+            $userIdSql = $userId !== null ? (int) $userId : 'NULL';
+
+            $updateSql = "
+                UPDATE nostro_entries AS ne
+                SET match_id     = v.mid,
+                    match_status = 'M',
+                    updated_at   = '{$now}',
+                    updated_by   = {$userIdSql}
+                FROM (VALUES {$valuesSql}) AS v(eid, mid)
+                WHERE ne.id = v.eid
+            ";
+
+            $transaction = $db->beginTransaction();
+            try {
+                $db->createCommand($updateSql)->execute();
+                $transaction->commit();
+                $count += count($batch);
+            } catch (\Exception $e) {
+                $transaction->rollBack();
+                throw $e;
+            }
         }
 
         return $count;

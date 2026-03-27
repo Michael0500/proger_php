@@ -68,8 +68,8 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                     </select>
                 </div>
 
-                <!-- Дата раккорда -->
-                <div style="min-width:150px">
+                <!-- Дата раккорда (скрыта в режиме произвольного периода) -->
+                <div v-if="form.periodMode !== 'custom'" style="min-width:150px">
                     <label class="form-label">Дата раккорда <span style="color:#ef4444">*</span></label>
                     <input type="date" class="form-control" v-model="form.dateRecon" :max="todayIso">
                 </div>
@@ -99,7 +99,7 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
             <div style="margin-top:14px">
                 <button class="btn-action btn-primary-violet"
                         @click="generateReport"
-                        :disabled="loading || !form.accountId || !form.dateRecon"
+                        :disabled="loading || !form.accountId || (form.periodMode==='auto' ? !form.dateRecon : (!form.dateFrom || !form.dateTo))"
                         style="height:38px;padding:0 20px">
                     <span v-if="loading"><i class="fas fa-spinner fa-spin me-1"></i>Формирование...</span>
                     <span v-else><i class="fas fa-play me-1"></i>Сформировать</span>
@@ -528,11 +528,12 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                     },
 
                     _buildPayload: function () {
+                        var isCustom = this.form.periodMode === 'custom';
                         var payload = {
                             account_id: this.form.accountId,
-                            date_recon: this.form.dateRecon,
+                            date_recon: isCustom ? this.form.dateTo : this.form.dateRecon,
                         };
-                        if (this.form.periodMode === 'custom' && this.form.dateFrom && this.form.dateTo) {
+                        if (isCustom && this.form.dateFrom && this.form.dateTo) {
                             payload.date_from = this.form.dateFrom;
                             payload.date_to   = this.form.dateTo;
                         }
@@ -541,7 +542,9 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
 
                     generateReport: function () {
                         var self = this;
-                        if (!this.form.accountId || !this.form.dateRecon) return;
+                        if (!this.form.accountId) return;
+                        if (this.form.periodMode === 'auto' && !this.form.dateRecon) return;
+                        if (this.form.periodMode === 'custom' && (!this.form.dateFrom || !this.form.dateTo)) return;
                         this.loading = true;
                         this.error   = null;
                         this.report  = null;
