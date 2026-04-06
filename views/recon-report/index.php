@@ -27,10 +27,10 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
             </div>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
-            <button v-if="report" class="btn-action btn-outline-secondary" @click="printReport" title="Печать / PDF">
+            <button v-if="reports.length" class="btn-action btn-outline-secondary" @click="printReport" title="Печать / PDF">
                 <i class="fas fa-print"></i> Печать
             </button>
-            <button v-if="report" class="btn-action btn-primary-violet" @click="exportPdf" :disabled="exporting">
+            <button v-if="reports.length" class="btn-action btn-primary-violet" @click="exportPdf" :disabled="exporting">
                 <span v-if="exporting"><i class="fas fa-spinner fa-spin me-1"></i>Генерация...</span>
                 <span v-else><i class="fas fa-file-pdf me-1"></i> Скачать PDF</span>
             </button>
@@ -48,20 +48,31 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
         <div class="sm-card-body">
             <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end">
 
+                <!-- Группа -->
+                <div style="min-width:200px;flex:1">
+                    <label class="form-label">Группа</label>
+                    <select class="form-select" v-model="form.groupId" @change="onGroupChange">
+                        <option value="">— Без группы —</option>
+                        <optgroup v-for="cat in categoriesWithGroups" :key="cat.id" :label="cat.name">
+                            <option v-for="g in cat.groups" :key="g.id" :value="g.id">{{ g.name }}</option>
+                        </optgroup>
+                    </select>
+                </div>
+
                 <!-- Ностро-банк -->
                 <div style="min-width:180px;flex:1">
                     <label class="form-label">Ностро-банк</label>
-                    <select class="form-select" v-model="form.poolId" @change="onPoolChange">
-                        <option value="">— Все счета —</option>
+                    <select class="form-select" v-model="form.poolId" @change="onPoolChange" :disabled="!!form.groupId">
+                        <option value="">— Все —</option>
                         <option v-for="p in pools" :key="p.id" :value="p.id">{{ p.name }}</option>
                     </select>
                 </div>
 
                 <!-- Счёт -->
                 <div style="min-width:220px;flex:2">
-                    <label class="form-label">Счёт <span style="color:#ef4444">*</span></label>
-                    <select class="form-select" v-model="form.accountId" :disabled="filteredAccounts.length===0">
-                        <option value="">— Выберите счёт —</option>
+                    <label class="form-label">Счёт <span v-if="!form.groupId && !form.poolId" style="color:#ef4444">*</span></label>
+                    <select class="form-select" v-model="form.accountId" :disabled="filteredAccounts.length===0 || !!form.groupId">
+                        <option value="">{{ form.groupId || form.poolId ? '— Все счета —' : '— Выберите счёт —' }}</option>
                         <option v-for="a in filteredAccounts" :key="a.id" :value="a.id">
                             {{ a.name }} ({{ a.currency }})
                         </option>
@@ -96,10 +107,17 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                 </div>
             </div>
 
+            <!-- Подсказка о формировании -->
+            <div v-if="form.groupId || (form.poolId && !form.accountId)" style="margin-top:10px;padding:8px 12px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;font-size:12px;color:#4338ca">
+                <i class="fas fa-info-circle me-1"></i>
+                <template v-if="form.groupId">Отчёт будет сформирован по всем счетам группы</template>
+                <template v-else>Отчёт будет сформирован по всем счетам ностро-банка</template>
+            </div>
+
             <div style="margin-top:14px">
                 <button class="btn-action btn-primary-violet"
                         @click="generateReport"
-                        :disabled="loading || !form.accountId || (form.periodMode==='auto' ? !form.dateRecon : (!form.dateFrom || !form.dateTo))"
+                        :disabled="loading || !canGenerate"
                         style="height:38px;padding:0 20px">
                     <span v-if="loading"><i class="fas fa-spinner fa-spin me-1"></i>Формирование...</span>
                     <span v-else><i class="fas fa-play me-1"></i>Сформировать</span>
@@ -113,9 +131,30 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
     </div>
 
     <!-- ══════════════════════════════════════
-         ОТЧЁТ
+         ЗАГОЛОВОК ГРУППОВОГО ОТЧЁТА
     ══════════════════════════════════════ -->
-    <div v-if="report" id="recon-report-printable">
+    <div v-if="reports.length > 1 && reportLevel" class="sm-card" style="margin-bottom:14px">
+        <div class="sm-card-body" style="padding:16px 24px;display:flex;align-items:center;gap:12px">
+            <div style="width:32px;height:32px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border-radius:8px;display:flex;align-items:center;justify-content:center">
+                <i :class="reportLevel.type==='group' ? 'fas fa-layer-group' : 'fas fa-university'" style="color:#fff;font-size:14px"></i>
+            </div>
+            <div>
+                <div style="font-size:15px;font-weight:800;color:#1a1f36">
+                    {{ reportLevel.type === 'group' ? 'Группа' : 'Ностро-банк' }}: {{ reportLevel.label }}
+                </div>
+                <div style="font-size:12px;color:#9ca3af">{{ reports.length }} {{ declAccounts(reports.length) }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════
+         ОТЧЁТЫ (цикл по счетам)
+    ══════════════════════════════════════ -->
+    <template v-for="(report, rIdx) in reports">
+    <div :id="'recon-report-' + rIdx" :key="rIdx" class="recon-report-printable">
+
+        <!-- Разделитель между отчётами -->
+        <div v-if="rIdx > 0" style="margin:24px 0;border-top:3px solid #e5e9f2"></div>
 
         <!-- ШАПКА -->
         <div class="sm-card" style="margin-bottom:14px">
@@ -124,6 +163,7 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                     <div>
                         <div style="font-size:22px;font-weight:900;color:#1a1f36;letter-spacing:-.5px;margin-bottom:6px">
                             Reconciliation Report
+                            <span v-if="reports.length > 1" style="font-size:14px;font-weight:600;color:#9ca3af;margin-left:8px">({{ rIdx + 1 }}/{{ reports.length }})</span>
                         </div>
                         <div style="display:flex;flex-wrap:wrap;gap:16px;font-size:13px">
                             <div><span style="color:#9ca3af;font-weight:600">Company:</span>
@@ -201,7 +241,7 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                 Outstanding Items
                 <span style="margin-left:10px;font-size:11px;font-weight:500;color:#9ca3af">
                     <template v-if="report.date_from && report.date_to">({{ fmtDate(report.date_from) }} — {{ fmtDate(report.date_to) }})</template>
-                    <template v-else>({{ fmtDate(prevDay) }} и {{ fmtDate(report.date_recon) }})</template>
+                    <template v-else>({{ fmtDate(calcPrevDay(report.date_recon)) }} и {{ fmtDate(report.date_recon) }})</template>
                 </span>
             </div>
             <div class="sm-card-body" style="padding:0">
@@ -431,19 +471,20 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
             </div>
         </div>
 
-        <!-- Имя файла PDF -->
-        <div style="padding:10px 16px;background:#f9fafb;border-radius:8px;border:1px solid #e5e9f2;font-size:11px;color:#9ca3af;display:flex;align-items:center;gap:8px">
-            <i class="fas fa-info-circle" style="color:#4f46e5"></i>
-            <span>Имя файла PDF: <strong style="color:#1a1f36;font-family:monospace">{{ pdfFilename }}</strong></span>
-        </div>
+    </div><!-- /recon-report -->
+    </template>
 
-    </div><!-- /recon-report-printable -->
+    <!-- Имя файла PDF -->
+    <div v-if="reports.length" style="padding:10px 16px;background:#f9fafb;border-radius:8px;border:1px solid #e5e9f2;font-size:11px;color:#9ca3af;display:flex;align-items:center;gap:8px;margin-top:4px">
+        <i class="fas fa-info-circle" style="color:#4f46e5"></i>
+        <span>Имя файла PDF: <strong style="color:#1a1f36;font-family:monospace">{{ pdfFilename }}</strong></span>
+    </div>
 
     <!-- Пустой стейт -->
-    <div v-if="!report && !loading" style="text-align:center;padding:60px 20px;color:#9ca3af">
+    <div v-if="!reports.length && !loading" style="text-align:center;padding:60px 20px;color:#9ca3af">
         <i class="fas fa-file-contract" style="font-size:48px;margin-bottom:16px;opacity:.3"></i>
         <div style="font-size:15px;font-weight:600;margin-bottom:6px">Раккорд не сформирован</div>
-        <div style="font-size:13px">Выберите счёт и дату, затем нажмите «Сформировать»</div>
+        <div style="font-size:13px">Выберите группу, ностро-банк или счёт и дату, затем нажмите «Сформировать»</div>
     </div>
 
 </div><!-- /recon-app -->
@@ -481,9 +522,12 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                 el: '#recon-app',
 
                 data: {
-                    pools:    _init.pools    || [],
-                    accounts: _init.accounts || [],
+                    pools:      _init.pools      || [],
+                    accounts:   _init.accounts   || [],
+                    categories: _init.categories || [],
+                    groups:     _init.groups     || [],
                     form: {
+                        groupId:    '',
                         poolId:     '',
                         accountId:  '',
                         dateRecon:  (function () {
@@ -494,35 +538,59 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                         dateFrom:   '',
                         dateTo:     '',
                     },
-                    report:    null,
-                    loading:   false,
-                    exporting: false,
-                    error:     null,
+                    reports:     [],
+                    reportLevel: null,
+                    loading:     false,
+                    exporting:   false,
+                    error:       null,
                 },
 
                 computed: {
                     todayIso: function () {
                         return new Date().toISOString().slice(0, 10);
                     },
+                    categoriesWithGroups: function () {
+                        var groups = this.groups;
+                        return this.categories.map(function (cat) {
+                            return {
+                                id: cat.id,
+                                name: cat.name,
+                                groups: groups.filter(function (g) { return g.category_id === cat.id; })
+                            };
+                        }).filter(function (cat) { return cat.groups.length > 0; });
+                    },
                     filteredAccounts: function () {
+                        if (this.form.groupId) return [];
                         if (!this.form.poolId) return this.accounts;
                         var pid = parseInt(this.form.poolId);
                         return this.accounts.filter(function (a) { return a.pool_id === pid; });
                     },
-                    prevDay: function () {
-                        if (!this.report) return '';
-                        var d = new Date(this.report.date_recon);
-                        d.setDate(d.getDate() - 1);
-                        return d.toISOString().slice(0, 10);
+                    canGenerate: function () {
+                        var hasScope = !!this.form.accountId || !!this.form.poolId || !!this.form.groupId;
+                        var hasDate = this.form.periodMode === 'auto'
+                            ? !!this.form.dateRecon
+                            : (!!this.form.dateFrom && !!this.form.dateTo);
+                        return hasScope && hasDate;
                     },
                     pdfFilename: function () {
-                        if (!this.report) return '';
-                        var dt = this.report.date_recon.split('-').reverse().join('.');
-                        return 'ReconReport_' + this.report.nostro_bank + '_' + dt + '.pdf';
+                        if (!this.reports.length) return '';
+                        var r = this.reports[0];
+                        var dt = r.date_recon.split('-').reverse().join('.');
+                        if (this.reports.length === 1) {
+                            return 'ReconReport_' + r.nostro_bank + '_' + dt + '.pdf';
+                        }
+                        var label = this.reportLevel ? this.reportLevel.label : 'Multi';
+                        return 'ReconReport_' + label + '_' + dt + '.pdf';
                     },
                 },
 
                 methods: {
+                    onGroupChange: function () {
+                        if (this.form.groupId) {
+                            this.form.poolId = '';
+                            this.form.accountId = '';
+                        }
+                    },
                     onPoolChange: function () {
                         this.form.accountId = '';
                     },
@@ -530,9 +598,15 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                     _buildPayload: function () {
                         var isCustom = this.form.periodMode === 'custom';
                         var payload = {
-                            account_id: this.form.accountId,
                             date_recon: isCustom ? this.form.dateTo : this.form.dateRecon,
                         };
+                        if (this.form.accountId) {
+                            payload.account_id = this.form.accountId;
+                        } else if (this.form.poolId) {
+                            payload.pool_id = this.form.poolId;
+                        } else if (this.form.groupId) {
+                            payload.group_id = this.form.groupId;
+                        }
                         if (isCustom && this.form.dateFrom && this.form.dateTo) {
                             payload.date_from = this.form.dateFrom;
                             payload.date_to   = this.form.dateTo;
@@ -542,18 +616,22 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
 
                     generateReport: function () {
                         var self = this;
-                        if (!this.form.accountId) return;
-                        if (this.form.periodMode === 'auto' && !this.form.dateRecon) return;
-                        if (this.form.periodMode === 'custom' && (!this.form.dateFrom || !this.form.dateTo)) return;
+                        if (!this.canGenerate) return;
                         this.loading = true;
                         this.error   = null;
-                        this.report  = null;
+                        this.reports = [];
+                        this.reportLevel = null;
 
                         axios.post('<?= Url::to(['/recon-report/generate']) ?>', this._buildPayload())
                             .then(function (resp) {
                                 if (resp.data.success) {
-                                    self.report = resp.data.report;
-                                    self.$nextTick(function () { self.scrollToReport(); });
+                                    self.reports = resp.data.reports || [];
+                                    self.reportLevel = resp.data.report_level || null;
+                                    if (self.reports.length === 0) {
+                                        self.error = 'Нет данных для формирования отчёта';
+                                    } else {
+                                        self.$nextTick(function () { self.scrollToReport(); });
+                                    }
                                 } else {
                                     self.error = resp.data.message || 'Ошибка формирования отчёта';
                                 }
@@ -565,7 +643,7 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                     },
 
                     scrollToReport: function () {
-                        var el = document.getElementById('recon-report-printable');
+                        var el = document.getElementById('recon-report-0');
                         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     },
 
@@ -573,227 +651,250 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                         window.print();
                     },
 
+                    calcPrevDay: function (dateStr) {
+                        if (!dateStr) return '';
+                        var d = new Date(dateStr);
+                        d.setDate(d.getDate() - 1);
+                        return d.toISOString().slice(0, 10);
+                    },
+
+                    declAccounts: function (n) {
+                        var m = n % 100;
+                        if (m >= 11 && m <= 19) return 'счетов';
+                        var d = m % 10;
+                        if (d === 1) return 'счёт';
+                        if (d >= 2 && d <= 4) return 'счёта';
+                        return 'счетов';
+                    },
+
                     exportPdf: function () {
                         var self = this;
-                        var r = self.report;
-                        if (!r) return;
+                        if (!self.reports.length) return;
                         self.exporting = true;
 
                         try {
                             var jsPDF = window.jspdf.jsPDF;
                             var doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
                             var pageW = doc.internal.pageSize.getWidth();
-                            var y = 15;
 
-                            // ── Заголовок ──
-                            doc.setFontSize(18);
-                            doc.setFont(undefined, 'bold');
-                            doc.text('Reconciliation Report', 14, y);
-                            y += 8;
+                            self.reports.forEach(function (r, rIdx) {
+                                if (rIdx > 0) doc.addPage();
+                                var y = 15;
 
-                            doc.setFontSize(9);
-                            doc.setFont(undefined, 'normal');
-                            var meta = [
-                                ['Company: ' + r.company, 'Date: ' + self.fmtDateTime(r.generated_at)],
-                                ['Nosto Bank: ' + r.nostro_bank, 'Date Reconciliation: ' + self.fmtDate(r.date_recon)],
-                                ['Account: ' + r.account_name + ' (' + (r.currency || '') + ')',
-                                    (r.date_from && r.date_to) ? 'Period: ' + self.fmtDate(r.date_from) + ' - ' + self.fmtDate(r.date_to) : ''],
-                            ];
-                            meta.forEach(function (row) {
-                                doc.text(row[0], 14, y);
-                                doc.text(row[1], pageW / 2, y);
-                                y += 4.5;
-                            });
-                            y += 4;
+                                // ── Заголовок ──
+                                doc.setFontSize(18);
+                                doc.setFont(undefined, 'bold');
+                                var title = 'Reconciliation Report';
+                                if (self.reports.length > 1) title += ' (' + (rIdx + 1) + '/' + self.reports.length + ')';
+                                doc.text(title, 14, y);
+                                y += 8;
 
-                            // ── Closing Balance ──
-                            doc.setFontSize(11);
-                            doc.setFont(undefined, 'bold');
-                            doc.text('Closing Balance', 14, y);
-                            y += 2;
-
-                            doc.autoTable({
-                                startY: y,
-                                head: [['Type', 'Amount']],
-                                body: [
-                                    ['Ledger', self.fmtAmountSigned(r.closing_balance.ledger)],
-                                    ['Statement', self.fmtAmountSigned(r.closing_balance.statement)],
-                                    ['Difference', self.fmtAmountSigned(r.closing_balance.difference)],
-                                ],
-                                styles: { fontSize: 8, cellPadding: 2 },
-                                headStyles: { fillColor: [79, 70, 229] },
-                                columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } },
-                                margin: { left: 14, right: 14 },
-                                theme: 'grid',
-                                didParseCell: function (data) {
-                                    if (data.row.index === 2) { data.cell.styles.fillColor = [240, 242, 245]; data.cell.styles.fontStyle = 'bold'; }
-                                },
-                            });
-                            y = doc.lastAutoTable.finalY + 6;
-
-                            // ── Outstanding Items Summary ──
-                            doc.setFontSize(11);
-                            doc.setFont(undefined, 'bold');
-                            doc.text('Outstanding Items', 14, y);
-                            y += 2;
-
-                            doc.autoTable({
-                                startY: y,
-                                head: [['Type', 'Amount']],
-                                body: [
-                                    ['Ledger', self.fmtAmountSigned(r.outstanding_items.ledger)],
-                                    ['Statement', self.fmtAmountSigned(r.outstanding_items.statement)],
-                                    ['Difference', self.fmtAmountSigned(r.outstanding_items.difference)],
-                                ],
-                                styles: { fontSize: 8, cellPadding: 2 },
-                                headStyles: { fillColor: [245, 158, 11] },
-                                columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } },
-                                margin: { left: 14, right: 14 },
-                                theme: 'grid',
-                                didParseCell: function (data) {
-                                    if (data.row.index === 2) { data.cell.styles.fillColor = [240, 242, 245]; data.cell.styles.fontStyle = 'bold'; }
-                                },
-                            });
-                            y = doc.lastAutoTable.finalY + 6;
-
-                            // ── Trial Balance ──
-                            doc.setFontSize(11);
-                            doc.setFont(undefined, 'bold');
-                            doc.text('Trial Balance', 14, y);
-                            y += 2;
-
-                            doc.autoTable({
-                                startY: y,
-                                head: [['Indicator', 'Ledger', 'Statement', 'Difference']],
-                                body: [
-                                    ['Closing Balance', self.fmtAmountSigned(r.closing_balance.ledger), self.fmtAmountSigned(r.closing_balance.statement), self.fmtAmountSigned(r.closing_balance.difference)],
-                                    ['+ Outstanding Items', self.fmtAmountSigned(r.outstanding_items.ledger), self.fmtAmountSigned(r.outstanding_items.statement), self.fmtAmountSigned(r.outstanding_items.difference)],
-                                    ['Trial Balance', self.fmtAmountSigned(r.trial_balance.ledger), self.fmtAmountSigned(r.trial_balance.statement), self.fmtAmountSigned(r.trial_balance.difference)],
-                                ],
-                                styles: { fontSize: 8, cellPadding: 2 },
-                                headStyles: { fillColor: [79, 70, 229] },
-                                columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
-                                margin: { left: 14, right: 14 },
-                                theme: 'grid',
-                                didParseCell: function (data) {
-                                    if (data.row.index === 2) { data.cell.styles.fillColor = [240, 242, 245]; data.cell.styles.fontStyle = 'bold'; }
-                                },
-                            });
-                            y = doc.lastAutoTable.finalY + 8;
-
-                            // ── Функция для таблицы записей ──
-                            var entryCols = ['Value', 'Instruction_ID', 'EndToEnd_ID', 'Transaction_ID', 'Message_ID', 'D/C Mark', 'Amount'];
-                            var entryRow = function (e) {
-                                return [
-                                    self.fmtDate(e.value), e.instruction_id || '-', e.end_to_end_id || '-',
-                                    e.transaction_id || '-', e.message_id || '-', e.dc || '-', self.fmtAmount(e.amount)
+                                doc.setFontSize(9);
+                                doc.setFont(undefined, 'normal');
+                                var meta = [
+                                    ['Company: ' + r.company, 'Date: ' + self.fmtDateTime(r.generated_at)],
+                                    ['Nosto Bank: ' + r.nostro_bank, 'Date Reconciliation: ' + self.fmtDate(r.date_recon)],
+                                    ['Account: ' + r.account_name + ' (' + (r.currency || '') + ')',
+                                        (r.date_from && r.date_to) ? 'Period: ' + self.fmtDate(r.date_from) + ' - ' + self.fmtDate(r.date_to) : ''],
                                 ];
-                            };
+                                meta.forEach(function (row) {
+                                    doc.text(row[0], 14, y);
+                                    doc.text(row[1], pageW / 2, y);
+                                    y += 4.5;
+                                });
+                                y += 4;
 
-                            var sections = [
-                                { title: 'Ledger-Debit (Outstanding Items)', data: r.outstanding_items.ledger_debit, net: r.outstanding_items.net_ledger_debit, color: [220, 38, 38] },
-                                { title: 'Ledger-Credit (Outstanding Items)', data: r.outstanding_items.ledger_credit, net: r.outstanding_items.net_ledger_credit, color: [5, 150, 105] },
-                            ];
-
-                            // Добавляем новую страницу для детализации
-                            doc.addPage();
-                            y = 15;
-
-                            doc.setFontSize(13);
-                            doc.setFont(undefined, 'bold');
-                            doc.text('Outstanding Items - Detail', 14, y);
-                            y += 8;
-
-                            sections.forEach(function (sec) {
-                                if (y > 170) { doc.addPage(); y = 15; }
-                                doc.setFontSize(10);
+                                // ── Closing Balance ──
+                                doc.setFontSize(11);
                                 doc.setFont(undefined, 'bold');
-                                doc.text(sec.title, 14, y);
+                                doc.text('Closing Balance', 14, y);
                                 y += 2;
-
-                                var body = sec.data.map(entryRow);
-                                body.push([{ content: 'Net Amount:', colSpan: 6, styles: { halign: 'right', fontStyle: 'bold' } }, self.fmtAmount(sec.net)]);
 
                                 doc.autoTable({
                                     startY: y,
-                                    head: [entryCols],
-                                    body: body,
-                                    styles: { fontSize: 7, cellPadding: 1.5 },
-                                    headStyles: { fillColor: sec.color },
-                                    columnStyles: { 6: { halign: 'right', fontStyle: 'bold' } },
+                                    head: [['Type', 'Amount']],
+                                    body: [
+                                        ['Ledger', self.fmtAmountSigned(r.closing_balance.ledger)],
+                                        ['Statement', self.fmtAmountSigned(r.closing_balance.statement)],
+                                        ['Difference', self.fmtAmountSigned(r.closing_balance.difference)],
+                                    ],
+                                    styles: { fontSize: 8, cellPadding: 2 },
+                                    headStyles: { fillColor: [79, 70, 229] },
+                                    columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } },
                                     margin: { left: 14, right: 14 },
                                     theme: 'grid',
+                                    didParseCell: function (data) {
+                                        if (data.row.index === 2) { data.cell.styles.fillColor = [240, 242, 245]; data.cell.styles.fontStyle = 'bold'; }
+                                    },
                                 });
-                                y = doc.lastAutoTable.finalY + 4;
-                            });
+                                y = doc.lastAutoTable.finalY + 6;
 
-                            // Ledger: Net Amount
-                            doc.setFontSize(10);
-                            doc.setFont(undefined, 'bold');
-                            doc.setTextColor(67, 56, 202);
-                            doc.text('Ledger: Net Amount = ' + self.fmtAmountSigned(r.outstanding_items.ledger_net_amount), 14, y + 2);
-                            doc.setTextColor(0, 0, 0);
-                            y += 10;
-
-                            // Statement sections
-                            var stmtSections = [
-                                { title: 'Statement-Debit (Outstanding Items)', data: r.outstanding_items.stmt_debit, net: r.outstanding_items.net_stmt_debit, color: [220, 38, 38] },
-                                { title: 'Statement-Credit (Outstanding Items)', data: r.outstanding_items.stmt_credit, net: r.outstanding_items.net_stmt_credit, color: [5, 150, 105] },
-                            ];
-
-                            stmtSections.forEach(function (sec) {
-                                if (y > 170) { doc.addPage(); y = 15; }
-                                doc.setFontSize(10);
+                                // ── Outstanding Items Summary ──
+                                doc.setFontSize(11);
                                 doc.setFont(undefined, 'bold');
-                                doc.text(sec.title, 14, y);
+                                doc.text('Outstanding Items', 14, y);
                                 y += 2;
-
-                                var body = sec.data.map(entryRow);
-                                body.push([{ content: 'Net Amount:', colSpan: 6, styles: { halign: 'right', fontStyle: 'bold' } }, self.fmtAmount(sec.net)]);
 
                                 doc.autoTable({
                                     startY: y,
-                                    head: [entryCols],
-                                    body: body,
-                                    styles: { fontSize: 7, cellPadding: 1.5 },
-                                    headStyles: { fillColor: sec.color },
-                                    columnStyles: { 6: { halign: 'right', fontStyle: 'bold' } },
+                                    head: [['Type', 'Amount']],
+                                    body: [
+                                        ['Ledger', self.fmtAmountSigned(r.outstanding_items.ledger)],
+                                        ['Statement', self.fmtAmountSigned(r.outstanding_items.statement)],
+                                        ['Difference', self.fmtAmountSigned(r.outstanding_items.difference)],
+                                    ],
+                                    styles: { fontSize: 8, cellPadding: 2 },
+                                    headStyles: { fillColor: [245, 158, 11] },
+                                    columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } },
                                     margin: { left: 14, right: 14 },
                                     theme: 'grid',
+                                    didParseCell: function (data) {
+                                        if (data.row.index === 2) { data.cell.styles.fillColor = [240, 242, 245]; data.cell.styles.fontStyle = 'bold'; }
+                                    },
                                 });
-                                y = doc.lastAutoTable.finalY + 4;
-                            });
+                                y = doc.lastAutoTable.finalY + 6;
 
-                            // Statement: Net Amount
-                            doc.setFontSize(10);
-                            doc.setFont(undefined, 'bold');
-                            doc.setTextColor(67, 56, 202);
-                            doc.text('Statement: Net Amount = ' + self.fmtAmountSigned(r.outstanding_items.stmt_net_amount), 14, y + 2);
-                            doc.setTextColor(0, 0, 0);
-                            y += 10;
+                                // ── Trial Balance ──
+                                doc.setFontSize(11);
+                                doc.setFont(undefined, 'bold');
+                                doc.text('Trial Balance', 14, y);
+                                y += 2;
 
-                            // ── Ledger/Statement Total Amount ──
-                            if (y > 170) { doc.addPage(); y = 15; }
-                            doc.setFontSize(11);
-                            doc.setFont(undefined, 'bold');
-                            doc.text('Ledger/Statement Total Amount', 14, y);
-                            y += 2;
+                                doc.autoTable({
+                                    startY: y,
+                                    head: [['Indicator', 'Ledger', 'Statement', 'Difference']],
+                                    body: [
+                                        ['Closing Balance', self.fmtAmountSigned(r.closing_balance.ledger), self.fmtAmountSigned(r.closing_balance.statement), self.fmtAmountSigned(r.closing_balance.difference)],
+                                        ['+ Outstanding Items', self.fmtAmountSigned(r.outstanding_items.ledger), self.fmtAmountSigned(r.outstanding_items.statement), self.fmtAmountSigned(r.outstanding_items.difference)],
+                                        ['Trial Balance', self.fmtAmountSigned(r.trial_balance.ledger), self.fmtAmountSigned(r.trial_balance.statement), self.fmtAmountSigned(r.trial_balance.difference)],
+                                    ],
+                                    styles: { fontSize: 8, cellPadding: 2 },
+                                    headStyles: { fillColor: [79, 70, 229] },
+                                    columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
+                                    margin: { left: 14, right: 14 },
+                                    theme: 'grid',
+                                    didParseCell: function (data) {
+                                        if (data.row.index === 2) { data.cell.styles.fillColor = [240, 242, 245]; data.cell.styles.fontStyle = 'bold'; }
+                                    },
+                                });
+                                y = doc.lastAutoTable.finalY + 8;
 
-                            doc.autoTable({
-                                startY: y,
-                                body: [
-                                    ['Ledger: Net Amount', self.fmtAmountSigned(r.totals.ledger_net_amount)],
-                                    ['Statement: Net Amount', self.fmtAmountSigned(r.totals.statement_net_amount)],
-                                    ['Ledger/Statement Total Amount', self.fmtAmountSigned(r.totals.total_amount)],
-                                ],
-                                styles: { fontSize: 9, cellPadding: 3 },
-                                columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } },
-                                margin: { left: 14, right: 14 },
-                                theme: 'grid',
-                                didParseCell: function (data) {
-                                    if (data.row.index === 2) { data.cell.styles.fillColor = [232, 245, 233]; data.cell.styles.fontStyle = 'bold'; data.cell.styles.fontSize = 11; }
-                                },
-                            });
+                                // ── Функция для таблицы записей ──
+                                var entryCols = ['Value', 'Instruction_ID', 'EndToEnd_ID', 'Transaction_ID', 'Message_ID', 'D/C Mark', 'Amount'];
+                                var entryRow = function (e) {
+                                    return [
+                                        self.fmtDate(e.value), e.instruction_id || '-', e.end_to_end_id || '-',
+                                        e.transaction_id || '-', e.message_id || '-', e.dc || '-', self.fmtAmount(e.amount)
+                                    ];
+                                };
+
+                                var sections = [
+                                    { title: 'Ledger-Debit (Outstanding Items)', data: r.outstanding_items.ledger_debit, net: r.outstanding_items.net_ledger_debit, color: [220, 38, 38] },
+                                    { title: 'Ledger-Credit (Outstanding Items)', data: r.outstanding_items.ledger_credit, net: r.outstanding_items.net_ledger_credit, color: [5, 150, 105] },
+                                ];
+
+                                // Новая страница для детализации
+                                doc.addPage();
+                                y = 15;
+
+                                doc.setFontSize(13);
+                                doc.setFont(undefined, 'bold');
+                                var detailTitle = 'Outstanding Items - Detail';
+                                if (self.reports.length > 1) detailTitle += ' (' + r.account_name + ')';
+                                doc.text(detailTitle, 14, y);
+                                y += 8;
+
+                                sections.forEach(function (sec) {
+                                    if (y > 170) { doc.addPage(); y = 15; }
+                                    doc.setFontSize(10);
+                                    doc.setFont(undefined, 'bold');
+                                    doc.text(sec.title, 14, y);
+                                    y += 2;
+
+                                    var body = sec.data.map(entryRow);
+                                    body.push([{ content: 'Net Amount:', colSpan: 6, styles: { halign: 'right', fontStyle: 'bold' } }, self.fmtAmount(sec.net)]);
+
+                                    doc.autoTable({
+                                        startY: y,
+                                        head: [entryCols],
+                                        body: body,
+                                        styles: { fontSize: 7, cellPadding: 1.5 },
+                                        headStyles: { fillColor: sec.color },
+                                        columnStyles: { 6: { halign: 'right', fontStyle: 'bold' } },
+                                        margin: { left: 14, right: 14 },
+                                        theme: 'grid',
+                                    });
+                                    y = doc.lastAutoTable.finalY + 4;
+                                });
+
+                                // Ledger: Net Amount
+                                doc.setFontSize(10);
+                                doc.setFont(undefined, 'bold');
+                                doc.setTextColor(67, 56, 202);
+                                doc.text('Ledger: Net Amount = ' + self.fmtAmountSigned(r.outstanding_items.ledger_net_amount), 14, y + 2);
+                                doc.setTextColor(0, 0, 0);
+                                y += 10;
+
+                                // Statement sections
+                                var stmtSections = [
+                                    { title: 'Statement-Debit (Outstanding Items)', data: r.outstanding_items.stmt_debit, net: r.outstanding_items.net_stmt_debit, color: [220, 38, 38] },
+                                    { title: 'Statement-Credit (Outstanding Items)', data: r.outstanding_items.stmt_credit, net: r.outstanding_items.net_stmt_credit, color: [5, 150, 105] },
+                                ];
+
+                                stmtSections.forEach(function (sec) {
+                                    if (y > 170) { doc.addPage(); y = 15; }
+                                    doc.setFontSize(10);
+                                    doc.setFont(undefined, 'bold');
+                                    doc.text(sec.title, 14, y);
+                                    y += 2;
+
+                                    var body = sec.data.map(entryRow);
+                                    body.push([{ content: 'Net Amount:', colSpan: 6, styles: { halign: 'right', fontStyle: 'bold' } }, self.fmtAmount(sec.net)]);
+
+                                    doc.autoTable({
+                                        startY: y,
+                                        head: [entryCols],
+                                        body: body,
+                                        styles: { fontSize: 7, cellPadding: 1.5 },
+                                        headStyles: { fillColor: sec.color },
+                                        columnStyles: { 6: { halign: 'right', fontStyle: 'bold' } },
+                                        margin: { left: 14, right: 14 },
+                                        theme: 'grid',
+                                    });
+                                    y = doc.lastAutoTable.finalY + 4;
+                                });
+
+                                // Statement: Net Amount
+                                doc.setFontSize(10);
+                                doc.setFont(undefined, 'bold');
+                                doc.setTextColor(67, 56, 202);
+                                doc.text('Statement: Net Amount = ' + self.fmtAmountSigned(r.outstanding_items.stmt_net_amount), 14, y + 2);
+                                doc.setTextColor(0, 0, 0);
+                                y += 10;
+
+                                // ── Ledger/Statement Total Amount ──
+                                if (y > 170) { doc.addPage(); y = 15; }
+                                doc.setFontSize(11);
+                                doc.setFont(undefined, 'bold');
+                                doc.text('Ledger/Statement Total Amount', 14, y);
+                                y += 2;
+
+                                doc.autoTable({
+                                    startY: y,
+                                    body: [
+                                        ['Ledger: Net Amount', self.fmtAmountSigned(r.totals.ledger_net_amount)],
+                                        ['Statement: Net Amount', self.fmtAmountSigned(r.totals.statement_net_amount)],
+                                        ['Ledger/Statement Total Amount', self.fmtAmountSigned(r.totals.total_amount)],
+                                    ],
+                                    styles: { fontSize: 9, cellPadding: 3 },
+                                    columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } },
+                                    margin: { left: 14, right: 14 },
+                                    theme: 'grid',
+                                    didParseCell: function (data) {
+                                        if (data.row.index === 2) { data.cell.styles.fillColor = [232, 245, 233]; data.cell.styles.fontStyle = 'bold'; data.cell.styles.fontSize = 11; }
+                                    },
+                                });
+                            }); // end reports forEach
 
                             doc.save(self.pdfFilename);
                         } catch (e) {

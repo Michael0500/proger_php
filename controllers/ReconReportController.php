@@ -8,6 +8,9 @@ use app\models\NostroEntry;
 use app\models\NostroBalance;
 use app\models\Account;
 use app\models\AccountPool;
+use app\models\Category;
+use app\models\Group;
+use app\models\GroupFilter;
 
 class ReconReportController extends BaseController
 {
@@ -44,6 +47,16 @@ class ReconReportController extends BaseController
             ->orderBy(['name' => SORT_ASC])
             ->all();
 
+        $categories = Category::find()
+            ->where(['company_id' => $cid])
+            ->orderBy(['name' => SORT_ASC])
+            ->all();
+
+        $groups = Group::find()
+            ->where(['company_id' => $cid, 'is_active' => true])
+            ->orderBy(['name' => SORT_ASC])
+            ->all();
+
         $initData = [
             'pools'    => array_map(function ($p) { return ['id' => $p->id, 'name' => $p->name]; }, $pools),
             'accounts' => array_map(function ($a) {
@@ -54,6 +67,12 @@ class ReconReportController extends BaseController
                     'pool_id'  => $a->pool_id,
                 ];
             }, $accounts),
+            'categories' => array_map(function ($c) {
+                return ['id' => $c->id, 'name' => $c->name];
+            }, $categories),
+            'groups' => array_map(function ($g) {
+                return ['id' => $g->id, 'name' => $g->name, 'category_id' => $g->category_id];
+            }, $groups),
         ];
 
         return $this->render('index', ['initData' => $initData]);
@@ -61,6 +80,11 @@ class ReconReportController extends BaseController
 
     /**
      * POST /recon-report/generate
+     *
+     * Принимает один из вариантов:
+     *   1) account_id — отчёт по одному счёту
+     *   2) pool_id (без account_id) — отчёт по всем счетам ностро-банка
+     *   3) group_id (без account_id и pool_id) — отчёт по счетам группы
      */
     public function actionGenerate()
     {
@@ -71,12 +95,14 @@ class ReconReportController extends BaseController
 
         $r         = Yii::$app->request;
         $accountId = (int)$r->post('account_id');
+        $poolId    = (int)$r->post('pool_id');
+        $groupId   = (int)$r->post('group_id');
         $dateRecon = $r->post('date_recon');
         $dateFrom  = $r->post('date_from');
         $dateTo    = $r->post('date_to');
 
-        if (!$accountId || !$dateRecon) {
-            return ['success' => false, 'message' => 'Не указан счёт или дата формирования'];
+        if (!$dateRecon) {
+            return ['success' => false, 'message' => 'Не указана дата формирования'];
         }
 
         $dtRecon = \DateTime::createFromFormat('Y-m-d', $dateRecon);
@@ -84,20 +110,31 @@ class ReconReportController extends BaseController
             return ['success' => false, 'message' => 'Неверный формат даты'];
         }
 
-        $account = Account::findOne(['id' => $accountId, 'company_id' => $cid]);
-        if (!$account) {
-            return ['success' => false, 'message' => 'Счёт не найден'];
+        // Определяем список счетов для отчёта
+        $accounts = $this->resolveAccounts($accountId, $poolId, $groupId, $cid);
+
+        if (empty($accounts)) {
+            return ['success' => false, 'message' => 'Не найдено ни одного счёта для формирования отчёта'];
         }
 
-        $poolName = '';
-        if ($account->pool_id) {
-            $pool = AccountPool::findOne($account->pool_id);
-            $poolName = $pool ? $pool->name : '';
+        // Определяем label для уровня отчёта
+        $reportLevel = $this->resolveReportLevel($accountId, $poolId, $groupId, $cid);
+
+        $reports = [];
+        foreach ($accounts as $account) {
+            $poolName = '';
+            if ($account->pool_id) {
+                $pool = AccountPool::findOne($account->pool_id);
+                $poolName = $pool ? $pool->name : '';
+            }
+            $reports[] = $this->buildReportData($account, $poolName, $dateRecon, $dateFrom, $dateTo, $cid);
         }
 
-        $reportData = $this->buildReportData($account, $poolName, $dateRecon, $dateFrom, $dateTo, $cid);
-
-        return ['success' => true, 'report' => $reportData];
+        return [
+            'success'      => true,
+            'reports'      => $reports,
+            'report_level' => $reportLevel,
+        ];
     }
 
     /**
@@ -124,6 +161,87 @@ class ReconReportController extends BaseController
                 ];
             }, $rows),
         ];
+    }
+
+    // ── Вспомогательные методы ───────────────────────────────────────────────
+
+    /**
+     * Определяет список счетов по переданным параметрам.
+     * @return Account[]
+     */
+    private function resolveAccounts(int $accountId, int $poolId, int $groupId, int $cid): array
+    {
+        // 1) Конкретный счёт
+        if ($accountId > 0) {
+            $account = Account::findOne(['id' => $accountId, 'company_id' => $cid]);
+            return $account ? [$account] : [];
+        }
+
+        // 2) По ностро-банку
+        if ($poolId > 0) {
+            return Account::find()
+                ->where(['company_id' => $cid, 'pool_id' => $poolId])
+                ->orderBy(['name' => SORT_ASC])
+                ->all();
+        }
+
+        // 3) По группе (через GroupFilter)
+        if ($groupId > 0) {
+            $group = Group::findOne(['id' => $groupId, 'company_id' => $cid]);
+            if (!$group) return [];
+
+            $filters = GroupFilter::find()
+                ->where(['group_id' => $groupId])
+                ->orderBy(['sort_order' => SORT_ASC])
+                ->all();
+
+            $query = Account::find()->where(['company_id' => $cid]);
+
+            if (!empty($filters)) {
+                $accountFilters = array_values(array_filter($filters, function ($f) { return $f->isAccountField(); }));
+
+                if (!empty($accountFilters)) {
+                    $first = true;
+                    foreach ($accountFilters as $pf) {
+                        $condition = $pf->buildAccountCondition();
+                        if ($condition === null) continue;
+                        if ($first) {
+                            $query->andWhere($condition);
+                            $first = false;
+                        } else {
+                            if ($pf->logic === 'OR') {
+                                $query->orWhere($condition);
+                            } else {
+                                $query->andWhere($condition);
+                            }
+                        }
+                    }
+                }
+            }
+
+            return $query->orderBy(['name' => SORT_ASC])->all();
+        }
+
+        return [];
+    }
+
+    /**
+     * Формирует описание уровня отчёта для шапки.
+     */
+    private function resolveReportLevel(int $accountId, int $poolId, int $groupId, int $cid): array
+    {
+        if ($accountId > 0) {
+            return ['type' => 'account', 'label' => ''];
+        }
+        if ($poolId > 0) {
+            $pool = AccountPool::findOne(['id' => $poolId, 'company_id' => $cid]);
+            return ['type' => 'pool', 'label' => $pool ? $pool->name : ''];
+        }
+        if ($groupId > 0) {
+            $group = Group::findOne(['id' => $groupId, 'company_id' => $cid]);
+            return ['type' => 'group', 'label' => $group ? $group->name : ''];
+        }
+        return ['type' => 'unknown', 'label' => ''];
     }
 
     // ── Построение данных отчёта ─────────────────────────────────────────────
