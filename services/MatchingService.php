@@ -322,118 +322,201 @@ class MatchingService
 
     /**
      * Выполнить одно правило — найти пары и сквитовать их.
+     *
+     * Стратегия:
+     *   1. Обрабатываем по одному ностро-банку (pool) за раз — меньший рабочий набор.
+     *   2. DISTINCT ON вместо ROW_NUMBER: с индексом idx_ne_unmatched_scan PostgreSQL
+     *      сканирует записи в порядке id и останавливается на LIMIT, не материализуя
+     *      все пары заранее.
+     *   3. Всё обновление — в одном SQL (CTE + UPDATE), PHP не держит данные в памяти.
+     *
      * Возвращает количество сквитованных пар.
      */
     public function runRule(MatchingRule $rule, int $companyId, ?int $accountId): int
     {
         $db = Yii::$app->db;
 
-        // Определяем типы L/S для левой и правой части пары
         [$typeA, $typeB] = $this->pairTypes($rule->pair_type);
 
-        // Условия JOIN
         $joinConditions = $this->buildJoinConditions($rule);
         if (empty($joinConditions)) {
-            return 0; // нечего сравнивать
+            return 0;
+        }
+
+        $joinSql     = implode(' AND ', $joinConditions);
+        $dcCondition = $rule->match_dc
+            ? "AND ((a.dc = 'Debit' AND b.dc = 'Credit') OR (a.dc = 'Credit' AND b.dc = 'Debit'))"
+            : '';
+
+        $now       = date('Y-m-d H:i:s');
+        $userId    = (Yii::$app instanceof \yii\web\Application && !Yii::$app->user->isGuest)
+            ? (int) Yii::$app->user->id
+            : null;
+        $userIdSql = $userId !== null ? $userId : 'NULL';
+        $batchSize = 5000;
+        $total     = 0;
+
+        // ── Получаем список пулов для обработки ───────────────────────────────
+        $poolQuery = "
+            SELECT DISTINCT pool_id
+            FROM accounts
+            WHERE company_id = {$companyId} AND pool_id IS NOT NULL
+        ";
+        if ($accountId) {
+            $poolQuery .= " AND id = {$accountId}";
+        }
+        $poolIds = $db->createCommand($poolQuery)->queryColumn();
+
+        if (empty($poolIds)) {
+            return 0;
+        }
+
+        // ── Обрабатываем каждый пул отдельно ─────────────────────────────────
+        foreach ($poolIds as $poolId) {
+            $accountIds = $db->createCommand("
+                SELECT id FROM accounts
+                WHERE pool_id = {$poolId} AND company_id = {$companyId}
+            ")->queryColumn();
+
+            if (empty($accountIds)) {
+                continue;
+            }
+
+            $accList = implode(',', array_map('intval', $accountIds));
+            // При фильтре по конкретному счёту ограничиваем только сторону a
+            $filterA = $accountId
+                ? "AND a.account_id = {$accountId}"
+                : "AND a.account_id IN ({$accList})";
+
+            // DISTINCT ON (a.id) ORDER BY a.id, b.id:
+            //   PostgreSQL использует idx_ne_unmatched_scan для обхода a в порядке id,
+            //   для каждой a находит первую подходящую b через idx_ne_automatch_v2,
+            //   и останавливается после LIMIT — без сортировки всего набора пар.
+            $sql = "
+                WITH l_matches AS (
+                    SELECT DISTINCT ON (a.id)
+                        a.id AS id_a,
+                        b.id AS id_b
+                    FROM nostro_entries a
+                    JOIN nostro_entries b
+                        ON b.company_id = {$companyId}
+                       AND b.ls         = '{$typeB}'
+                       AND b.match_status = 'U'
+                       AND b.account_id IN ({$accList})
+                       AND b.id <> a.id
+                       AND {$joinSql}
+                       {$dcCondition}
+                    WHERE
+                        a.company_id   = {$companyId}
+                        AND a.ls       = '{$typeA}'
+                        AND a.match_status = 'U'
+                        {$filterA}
+                    ORDER BY a.id, b.id
+                    LIMIT {$batchSize}
+                ),
+                s_dedup AS (
+                    -- Гарантируем что каждая запись b входит максимум в одну пару
+                    SELECT DISTINCT ON (id_b) id_a, id_b
+                    FROM l_matches
+                    ORDER BY id_b, id_a
+                ),
+                numbered AS (
+                    SELECT id_a, id_b,
+                           'MTCH' || lpad(nextval('match_id_seq')::text, 8, '0') AS mid
+                    FROM s_dedup
+                ),
+                to_update AS (
+                    SELECT id_a AS eid, mid FROM numbered
+                    UNION ALL
+                    SELECT id_b AS eid, mid FROM numbered
+                )
+                UPDATE nostro_entries ne
+                SET match_id     = u.mid,
+                    match_status = 'M',
+                    updated_at   = '{$now}',
+                    updated_by   = {$userIdSql}
+                FROM to_update u
+                WHERE ne.id = u.eid
+            ";
+
+            do {
+                $transaction = $db->beginTransaction();
+                try {
+                    $affected = $db->createCommand($sql)->execute();
+                    $transaction->commit();
+                } catch (\Exception $e) {
+                    $transaction->rollBack();
+                    throw $e;
+                }
+                $total += (int) ($affected / 2);
+            } while ($affected > 0);
+        }
+
+        return $total;
+    }
+
+    /**
+     * Сгенерировать SQL для отладки — без выполнения.
+     * Возвращает null если buildJoinConditions пуст.
+     */
+    public function buildDebugSql(MatchingRule $rule, int $companyId, ?int $accountId): ?string
+    {
+        $db = Yii::$app->db;
+        [$typeA, $typeB] = $this->pairTypes($rule->pair_type);
+
+        $joinConditions = $this->buildJoinConditions($rule);
+        if (empty($joinConditions)) {
+            return null;
         }
 
         $accountFilter = $accountId ? "AND a.account_id = $accountId" : '';
         $joinSql       = implode(' AND ', $joinConditions);
 
-        // Для NRE: D/C должны быть противоположны (если pair_type=LS и match_dc=true)
         $dcCondition = '';
-        if ($rule->match_dc && $rule->pair_type === MatchingRule::PAIR_LS) {
-            $dcCondition = "AND ((a.dc = 'Debit' AND b.dc = 'Credit') OR (a.dc = 'Credit' AND b.dc = 'Debit'))";
-        } elseif ($rule->match_dc && in_array($rule->pair_type, [MatchingRule::PAIR_LL, MatchingRule::PAIR_SS])) {
-            // Для INV LL: оба Debit + Credit (противоположные в паре)
+        if ($rule->match_dc) {
             $dcCondition = "AND ((a.dc = 'Debit' AND b.dc = 'Credit') OR (a.dc = 'Credit' AND b.dc = 'Debit'))";
         }
 
-        $section = $db->quoteValue($rule->section);
+        return "-- Правило: {$rule->name} | pair_type={$rule->pair_type} | cross_id={$rule->cross_id_search}
+WITH pairs AS (
+    SELECT a.id AS id_a, b.id AS id_b,
+           ROW_NUMBER() OVER (PARTITION BY a.id ORDER BY b.id) AS rn_a,
+           ROW_NUMBER() OVER (PARTITION BY b.id ORDER BY a.id) AS rn_b
+    FROM nostro_entries a
+    JOIN accounts acc_a ON acc_a.id = a.account_id AND acc_a.pool_id IS NOT NULL
+    JOIN accounts acc_b ON acc_b.pool_id = acc_a.pool_id
+    JOIN nostro_entries b
+        ON b.account_id = acc_b.id
+       AND a.id <> b.id
+       AND {$joinSql}
+       {$dcCondition}
+    WHERE a.company_id = {$companyId}
+      AND b.company_id = {$companyId}
+      AND a.ls = '{$typeA}'
+      AND b.ls = '{$typeB}'
+      AND a.match_status = 'U'
+      AND b.match_status = 'U'
+      {$accountFilter}
+),
+unique_pairs AS (SELECT id_a, id_b FROM pairs WHERE rn_a = 1 AND rn_b = 1)
+SELECT id_a, id_b FROM unique_pairs;
 
-        // Ищем пары через CTE
-        $sql = "
-            WITH pairs AS (
-                SELECT
-                    a.id AS id_a,
-                    b.id AS id_b,
-                    ROW_NUMBER() OVER (PARTITION BY a.id ORDER BY b.id) AS rn_a,
-                    ROW_NUMBER() OVER (PARTITION BY b.id ORDER BY a.id) AS rn_b
-                FROM nostro_entries a
-                JOIN nostro_entries b
-                    ON a.account_id = b.account_id
-                   AND a.id <> b.id
-                   AND {$joinSql}
-                   {$dcCondition}
-                WHERE
-                    a.company_id = {$companyId}
-                    AND a.ls = '{$typeA}'
-                    AND b.ls = '{$typeB}'
-                    AND a.match_status = 'U'
-                    AND b.match_status = 'U'
-                    {$accountFilter}
-            ),
-            unique_pairs AS (
-                SELECT id_a, id_b
-                FROM pairs
-                WHERE rn_a = 1 AND rn_b = 1
-            )
-            SELECT id_a, id_b FROM unique_pairs
-        ";
+-- Диагностика: число незаквитованных L и S по этой компании
+SELECT ls, COUNT(*) FROM nostro_entries
+WHERE company_id = {$companyId} AND match_status = 'U'
+GROUP BY ls;
 
-        $pairs = $db->createCommand($sql)->queryAll();
-
-        if (empty($pairs)) {
-            return 0;
-        }
-
-        $now    = date('Y-m-d H:i:s');
-        $userId = (Yii::$app instanceof \yii\web\Application && !Yii::$app->user->isGuest)
-            ? Yii::$app->user->id
-            : null;
-
-        // Пакетный UPDATE: собираем все пары и обновляем одним запросом через VALUES + JOIN.
-        // Вместо N отдельных UPDATE (один на пару) — один UPDATE на весь батч.
-        $batchSize = 500;
-        $count     = 0;
-
-        foreach (array_chunk($pairs, $batchSize) as $batch) {
-            // Генерируем match_id для каждой пары и строим VALUES
-            $values = [];
-            foreach ($batch as $pair) {
-                $matchId = $this->generateMatchId();
-                $idA = (int) $pair['id_a'];
-                $idB = (int) $pair['id_b'];
-                $mid = $db->quoteValue($matchId);
-                $values[] = "({$idA}, {$mid})";
-                $values[] = "({$idB}, {$mid})";
-            }
-            $valuesSql = implode(",\n", $values);
-
-            $userIdSql = $userId !== null ? (int) $userId : 'NULL';
-
-            $updateSql = "
-                UPDATE nostro_entries AS ne
-                SET match_id     = v.mid,
-                    match_status = 'M',
-                    updated_at   = '{$now}',
-                    updated_by   = {$userIdSql}
-                FROM (VALUES {$valuesSql}) AS v(eid, mid)
-                WHERE ne.id = v.eid
-            ";
-
-            $transaction = $db->beginTransaction();
-            try {
-                $db->createCommand($updateSql)->execute();
-                $transaction->commit();
-                $count += count($batch);
-            } catch (\Exception $e) {
-                $transaction->rollBack();
-                throw $e;
-            }
-        }
-
-        return $count;
+-- Диагностика: заполненность ID-полей
+SELECT
+  COUNT(*) FILTER (WHERE instruction_id IS NOT NULL)  AS has_instruction_id,
+  COUNT(*) FILTER (WHERE end_to_end_id  IS NOT NULL)  AS has_end_to_end_id,
+  COUNT(*) FILTER (WHERE transaction_id IS NOT NULL)  AS has_transaction_id,
+  COUNT(*) FILTER (WHERE message_id     IS NOT NULL)  AS has_message_id,
+  COUNT(*) FILTER (WHERE value_date     IS NOT NULL)  AS has_value_date,
+  ls
+FROM nostro_entries
+WHERE company_id = {$companyId} AND match_status = 'U'
+GROUP BY ls;";
     }
 
     /**

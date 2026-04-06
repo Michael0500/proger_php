@@ -5,6 +5,7 @@ use Yii;
 use yii\web\Response;
 use app\models\NostroEntry;
 use app\models\Account;
+use app\models\Group;
 
 class NostroEntryController extends BaseController
 {
@@ -158,20 +159,39 @@ class NostroEntryController extends BaseController
     }
 
     /**
-     * GET /nostro-entry/search-accounts?pool_id=&q=
-     * Для Select2 autocomplete
+     * GET /nostro-entry/search-accounts?group_id=&q=
+     * Для Select2 autocomplete. Фильтрует счета через account-фильтры группы.
      */
     public function actionSearchAccounts(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
 
-        $cid    = $this->cid();
-        $poolId = (int)Yii::$app->request->get('pool_id', 0);
-        $q      = trim(Yii::$app->request->get('q', ''));
+        $cid     = $this->cid();
+        $groupId = (int)Yii::$app->request->get('group_id', 0);
+        $q       = trim(Yii::$app->request->get('q', ''));
 
         $query = Account::find()->where(['company_id' => $cid]);
-        if ($poolId > 0) $query->andWhere(['pool_id' => $poolId]);
-        if ($q !== '')   $query->andWhere(['ilike', 'name', $q]);
+
+        if ($groupId > 0) {
+            $group = Group::findOne($groupId);
+            if ($group) {
+                $first = true;
+                foreach ($group->filters as $filter) {
+                    $condition = $filter->buildAccountCondition();
+                    if ($condition === null) continue;
+                    if ($first) {
+                        $query->andWhere($condition);
+                        $first = false;
+                    } elseif ($filter->logic === 'OR') {
+                        $query->orWhere($condition);
+                    } else {
+                        $query->andWhere($condition);
+                    }
+                }
+            }
+        }
+
+        if ($q !== '') $query->andWhere(['ilike', 'name', $q]);
 
         $items = [];
         foreach ($query->orderBy('name')->limit(40)->all() as $acc) {

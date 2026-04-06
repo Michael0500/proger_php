@@ -215,7 +215,7 @@ var EntriesMixin = {
                 ajax: {
                     url: function () {
                         return window.AppRoutes.entrySearchAccounts +
-                            '?pool_id=' + (self.selectedGroup ? self.selectedGroup.id : 0);
+                            '?group_id=' + (self.selectedGroup ? self.selectedGroup.id : 0);
                     },
                     dataType: 'json', delay: 200,
                     data:     function (p) { return { q: p.term || '' }; },
@@ -260,7 +260,7 @@ var EntriesMixin = {
                 ajax: {
                     url: function () {
                         return window.AppRoutes.entrySearchAccounts +
-                            '?pool_id=' + (self.selectedGroup ? self.selectedGroup.id : 0);
+                            '?group_id=' + (self.selectedGroup ? self.selectedGroup.id : 0);
                     },
                     dataType: 'json', delay: 200,
                     data:     function (p) { return { q: p.term || '' }; },

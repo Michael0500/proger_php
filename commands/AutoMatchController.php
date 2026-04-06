@@ -31,9 +31,12 @@ class AutoMatchController extends Controller
     /** @var int|null ID счёта (работает только с --company) */
     public $account;
 
+    /** @var bool Вывести SQL без выполнения */
+    public $debug = false;
+
     public function options($actionID): array
     {
-        return array_merge(parent::options($actionID), ['company', 'account']);
+        return array_merge(parent::options($actionID), ['company', 'account', 'debug']);
     }
 
     /**
@@ -92,6 +95,13 @@ class AutoMatchController extends Controller
 
             $accountId = $this->account ? (int)$this->account : null;
             $ruleErrors = 0;
+
+            // Режим отладки: вывести SQL и выйти
+            if ($this->debug) {
+                $this->printDebugSql($company->id, $accountId);
+                $this->stdout("└─\n");
+                continue;
+            }
 
             // Запускаем с callback прогресса
             $result = $service->autoMatch($company->id, $accountId, function (
@@ -192,6 +202,33 @@ class AutoMatchController extends Controller
         }
 
         return ExitCode::OK;
+    }
+
+    /**
+     * Вывести SQL для каждого правила без выполнения.
+     */
+    private function printDebugSql(int $companyId, ?int $accountId): void
+    {
+        $rules = MatchingRule::find()
+            ->where(['company_id' => $companyId, 'is_active' => true])
+            ->orderBy(['priority' => SORT_ASC])
+            ->all();
+
+        if (empty($rules)) {
+            $this->stdout("│  Нет активных правил.\n", Console::FG_YELLOW);
+            return;
+        }
+
+        $service = new MatchingService();
+        foreach ($rules as $rule) {
+            $this->stdout("│\n│  === Правило: {$rule->name} (ID: {$rule->id}) ===\n", Console::FG_CYAN);
+            $sql = $service->buildDebugSql($rule, $companyId, $accountId);
+            if ($sql === null) {
+                $this->stdout("│  ⚠ buildJoinConditions вернул пустой массив — нет условий для JOIN\n", Console::FG_RED);
+            } else {
+                $this->stdout($sql . "\n");
+            }
+        }
     }
 
     /**
