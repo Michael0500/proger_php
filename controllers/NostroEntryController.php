@@ -251,7 +251,9 @@ class NostroEntryController extends BaseController
         $m->account_id     = (int)($p['account_id']    ?? $m->account_id);
         $m->ls             = $p['ls']                  ?? $m->ls;
         $m->dc             = $p['dc']                  ?? $m->dc;
-        $m->amount         = (float)($p['amount']      ?? $m->amount);
+        if ($m->match_status !== NostroEntry::STATUS_MATCHED) {
+            $m->amount     = (float)($p['amount']      ?? $m->amount);
+        }
         $m->currency       = strtoupper(trim($p['currency'] ?? $m->currency));
         $m->value_date     = ($p['value_date']         ?? '') ?: null;
         $m->post_date      = ($p['post_date']          ?? '') ?: null;

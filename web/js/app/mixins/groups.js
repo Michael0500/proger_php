@@ -269,7 +269,7 @@ var GroupsMixin = {
                 if (filter.field === 'account_id') {
                     var $el = $('#group-filter-account-' + index);
                     if (!$el.length || $el.data('select2')) return;
-                    $el.empty();
+                    $el.empty().append('<option></option>');
 
                     var accountData = (self.groupFilterMeta.accounts || []).map(function (a) {
                         return {
@@ -288,6 +288,8 @@ var GroupsMixin = {
 
                     if (filter.value) {
                         $el.val(String(filter.value)).trigger('change');
+                    } else {
+                        $el.val(null).trigger('change');
                     }
 
                     $el.on('change.groupfilter', function () {
@@ -298,7 +300,7 @@ var GroupsMixin = {
                 if (filter.field === 'account_pool_id') {
                     var $el2 = $('#group-filter-pool-' + index);
                     if (!$el2.length || $el2.data('select2')) return;
-                    $el2.empty();
+                    $el2.empty().append('<option></option>');
 
                     var poolData = (self.groupFilterMeta.accountPools || []).map(function (p) {
                         return { id: String(p.id), text: p.name };
@@ -314,6 +316,8 @@ var GroupsMixin = {
 
                     if (filter.value) {
                         $el2.val(String(filter.value)).trigger('change');
+                    } else {
+                        $el2.val(null).trigger('change');
                     }
 
                     $el2.on('change.groupfilter', function () {

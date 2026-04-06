@@ -386,14 +386,14 @@
                                     <button class="row-btn history" @click="showHistory(entry)" title="История изменений">
                                         <i class="fas fa-history"></i>
                                     </button>
-                                    <button class="row-btn edit" @click="editEntry(entry)" title="Редактировать">
+                                    <button v-if="entry.match_status!=='M'" class="row-btn edit" @click="editEntry(entry)" title="Редактировать">
                                         <i class="fas fa-pen"></i>
                                     </button>
                                     <button class="row-btn unlink" v-if="entry.match_status==='M'"
                                             @click="unmatchEntry(entry.match_id)" title="Расквитовать">
                                         <i class="fas fa-unlink"></i>
                                     </button>
-                                    <button class="row-btn delete" @click="deleteEntry(entry)" title="Удалить">
+                                    <button v-if="entry.match_status!=='M'" class="row-btn delete" @click="deleteEntry(entry)" title="Удалить">
                                         <i class="fas fa-trash"></i>
                                     </button>
                                 </div>
