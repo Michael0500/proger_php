@@ -78,7 +78,20 @@ var EntriesMixin = {
     },
 
     methods: {
+        /**
+         * Склонение слова "запись" в зависимости от числа
+         * @param {number} count - количество записей
+         * @returns {string} - "запись", "записи" или "записей"
+         */
+        recordText: function (count) {
+            var n = Math.abs(count) % 100;
+            var n1 = n % 10;
 
+            if (n > 10 && n < 20) return 'записей';
+            if (n1 > 1 && n1 < 5) return 'записи';
+            if (n1 === 1) return 'запись';
+            return 'записей';
+        },
         // ══════════════════════════════════════════════════
         // ЗАГРУЗКА
         // ══════════════════════════════════════════════════
@@ -251,6 +264,11 @@ var EntriesMixin = {
             if (!$el.length || self._entrySelect2Inited) return;
             self._entrySelect2Inited = true;
 
+            if ($el.data('select2')) {
+                $el.off('select2:select select2:clear');
+                $el.select2('destroy');
+            }
+
             $el.select2({
                 dropdownParent:     $('#entryModal'),
                 theme:              'bootstrap-5',
@@ -295,6 +313,11 @@ var EntriesMixin = {
                 self.editingEntry.account_id   = null;
                 self.editingEntry.account_name = '';
             });
+
+            // Сбрасываем выбранное значение после инициализации
+            if (!self.editingEntry.id) {
+                $el.val(null).trigger('change');
+            }
         },
 
         // ══════════════════════════════════════════════════
@@ -346,6 +369,7 @@ var EntriesMixin = {
                     position: 'top-end', timer: 2000, showConfirmButton: false });
                 return;
             }
+            self.editingEntry.amount = self.normalizeAmount(self.editingEntry.amount);
             if (!self.editingEntry.amount || parseFloat(self.editingEntry.amount) <= 0) {
                 Swal.fire({ icon: 'warning', title: 'Укажите сумму > 0', toast: true,
                     position: 'top-end', timer: 2000, showConfirmButton: false });
@@ -496,10 +520,23 @@ var EntriesMixin = {
 
         formatAmount: function (val) {
             if (val === null || val === undefined || val === '') return '—';
-            return parseFloat(val).toLocaleString('ru-RU', {
+            return parseFloat(val).toLocaleString('en-US', {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2
             });
+        },
+
+        /** Нормализует ввод суммы: убирает запятые-разделители тысяч, оставляет точку десятичную */
+        normalizeAmount: function (val) {
+            if (val === null || val === undefined || val === '') return '';
+            var s = String(val).trim();
+            // Убираем пробелы (разделитель тысяч)
+            s = s.replace(/\s/g, '');
+            // Убираем запятые (разделитель тысяч), точка остаётся десятичным
+            s = s.replace(/,/g, '');
+            var n = parseFloat(s);
+            if (isNaN(n)) return val;
+            return n.toFixed(2);
         },
 
         // ══════════════════════════════════════════════════

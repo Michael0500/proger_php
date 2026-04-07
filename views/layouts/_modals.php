@@ -502,8 +502,8 @@
                     </div>
                     <div class="col-md-3">
                         <label class="form-label-sm">Сумма <span class="required-star">*</span></label>
-                        <input type="number" class="form-control-sm-custom" v-model="editingEntry.amount"
-                               step="0.01" min="0.01" placeholder="0.00">
+                        <input type="text" class="form-control-sm-custom" v-model="editingEntry.amount"
+                               placeholder="0.00" @blur="editingEntry.amount = normalizeAmount(editingEntry.amount)">
                     </div>
                     <div class="col-md-3">
                         <label class="form-label-sm">Валюта <span class="required-star">*</span></label>

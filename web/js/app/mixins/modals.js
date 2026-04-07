@@ -125,7 +125,7 @@ var ModalsMixin = {
                 var label = self.getFieldLabel(key);
                 var formatted = val;
                 if (key === 'amount') {
-                    formatted = parseFloat(val).toLocaleString('ru-RU', {
+                    formatted = parseFloat(val).toLocaleString('en-US', {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2
                     }) + ' ' + (valuesObj.currency || '');

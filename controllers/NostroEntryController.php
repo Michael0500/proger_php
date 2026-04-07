@@ -136,7 +136,27 @@ class NostroEntryController extends BaseController
         if (!empty($filters['value_date_from'])) $q->andWhere(['>=', 'ne.value_date', $filters['value_date_from']]);
         if (!empty($filters['value_date_to']))   $q->andWhere(['<=', 'ne.value_date', $filters['value_date_to']]);
 
-        // Считаем total через отдельный запрос
+        // Поиск по конкретному полю (поле — значение)
+        $searchField = $filters['search_field'] ?? '';
+        $searchValue = trim($filters['search_value'] ?? '');
+        $searchFields = [
+            'match_id', 'instruction_id', 'end_to_end_id',
+            'transaction_id', 'message_id', 'other_id', 'comment',
+        ];
+
+        if ($searchValue !== '') {
+            if ($searchField && in_array($searchField, $searchFields, true)) {
+                $q->andWhere(['ilike', "ne.{$searchField}", $searchValue]);
+            } else {
+                $conditions = ['or'];
+                foreach ($searchFields as $sf) {
+                    $conditions[] = ['ilike', "ne.{$sf}", $searchValue];
+                }
+                $q->andWhere($conditions);
+            }
+        }
+
+        // Считаем total через о��дельный запрос
         $total = (int)(clone $q)->count('ne.id');
 
         $sortExpr = ($sort === 'account_id') ? 'ne.account_id' : "ne.{$sort}";

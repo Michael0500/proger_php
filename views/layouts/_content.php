@@ -44,7 +44,7 @@
                     <span class="pool-title">{{ selectedGroup.name }}</span>
                     <span class="pool-tag">{{ selectedCategory ? selectedCategory.name : '' }}</span>
                     <span v-if="entriesTotal > 0" style="font-size:11px;color:#9ca3af;margin-left:2px">
-                    {{ entriesTotal.toLocaleString() }} записей
+                    {{ entriesTotal.toLocaleString() }} {{ recordText(entriesTotal) }}
                 </span>
                 </div>
                 <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
@@ -205,23 +205,29 @@
                         </div>
                     </div>
 
-                    <!-- ID поиск -->
+                    <!-- Поле — Значение -->
                     <div class="filter-field">
-                        <label class="filter-label">Instr.ID</label>
-                        <div class="filter-input-wrap">
-                            <input type="text" class="filter-input" placeholder="..."
-                                   :value="filters.instruction_id||''"
-                                   @input="debouncedFilter('instruction_id',$event.target.value)">
-                            <button v-if="filters.instruction_id" class="filter-clear-btn" @click="clearFilter('instruction_id')">×</button>
-                        </div>
+                        <label class="filter-label">Поле поиска</label>
+                        <select class="filter-input" style="padding-right:24px"
+                                :value="filters.search_field||''"
+                                @change="applyFilter('search_field',$event.target.value)">
+                            <option value="">— Все поля —</option>
+                            <option value="match_id">Match ID</option>
+                            <option value="instruction_id">Instruction ID</option>
+                            <option value="end_to_end_id">EndToEnd ID</option>
+                            <option value="transaction_id">Transaction ID</option>
+                            <option value="message_id">Message ID</option>
+                            <option value="other_id">Other ID</option>
+                            <option value="comment">Комментарий</option>
+                        </select>
                     </div>
                     <div class="filter-field">
-                        <label class="filter-label">E2E ID</label>
+                        <label class="filter-label">Значение</label>
                         <div class="filter-input-wrap">
-                            <input type="text" class="filter-input" placeholder="..."
-                                   :value="filters.end_to_end_id||''"
-                                   @input="debouncedFilter('end_to_end_id',$event.target.value)">
-                            <button v-if="filters.end_to_end_id" class="filter-clear-btn" @click="clearFilter('end_to_end_id')">×</button>
+                            <input type="text" class="filter-input" placeholder="Поиск..."
+                                   :value="filters.search_value||''"
+                                   @input="debouncedFilter('search_value',$event.target.value)">
+                            <button v-if="filters.search_value" class="filter-clear-btn" @click="clearFilter('search_value')">×</button>
                         </div>
                     </div>
 
@@ -411,7 +417,7 @@
                             <td colspan="17" style="text-align:center;padding:12px;font-size:11px;
                                                color:#c4c9d6;border-top:1px solid #f4f5f8">
                                 <i class="fas fa-check-circle me-1"></i>
-                                Все {{ entriesTotal.toLocaleString() }} записей загружены
+                                Все {{ entriesTotal.toLocaleString() }} {{ recordText(entriesTotal) }} загружены
                             </td>
                         </tr>
                         </tbody>
@@ -436,7 +442,7 @@
                     {{ userSection }}
                 </span>
                 <span v-if="balancesTotal>0" style="font-size:11px;color:#9ca3af">
-                    {{ balancesTotal.toLocaleString() }} записей
+                    {{ balancesTotal.toLocaleString() }} {{ recordText(balancesTotal) }}
                 </span>
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
@@ -638,7 +644,7 @@
                     </tr>
                     <tr v-if="!hasMoreBalances&&balances.length>0&&!balancesLoading">
                         <td colspan="15" style="text-align:center;padding:12px;font-size:11px;color:#c4c9d6;border-top:1px solid #f4f5f8">
-                            <i class="fas fa-check-circle me-1"></i>Все {{ balancesTotal.toLocaleString() }} записей загружены
+                            <i class="fas fa-check-circle me-1"></i>Все {{ balancesTotal.toLocaleString() }} {{ recordText(balancesTotal) }} загружены
                         </td>
                     </tr>
                     </tbody>
@@ -996,7 +1002,7 @@
                 <i class="fas fa-archive" style="color:#7c3aed;margin-right:6px"></i>
                 Архив сквитованных записей
                 <span v-if="archiveTotal > 0" style="font-size:11px;color:#9ca3af;margin-left:4px">
-                        {{ archiveTotal.toLocaleString() }} записей
+                        {{ archiveTotal.toLocaleString() }} {{ recordText(archiveTotal) }}
                     </span>
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
@@ -1217,7 +1223,8 @@
                         <option value="end_to_end_id">EndToEnd ID</option>
                         <option value="transaction_id">Transaction ID</option>
                         <option value="message_id">Message ID</option>
-                        <option value="comment">Comment</option>
+                        <option value="other_id">Other ID</option>
+                        <option value="comment">Комментарий</option>
                     </select>
                 </div>
                 <div class="filter-field" style="min-width:180px">
