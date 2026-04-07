@@ -36,8 +36,7 @@ var ModalsMixin = {
             this._hideModal('configureGroupModal');
         },
 
-        // Записи
-        closeEntryModal: function () { this._hideModal('entryModal'); },
+        // Записи — closeEntryModal переопределён в EntriesMixin с подтверждением
 
         // История
         closeEntryHistoryModal: function (e) {

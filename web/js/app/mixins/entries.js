@@ -22,8 +22,9 @@ var EntriesMixin = {
             filtersOpen:  false,
 
             // Select2 флаги
-            _filterSelect2Inited: false,
-            _entrySelect2Inited:  false,
+            _filterSelect2Inited:     false,
+            _filterPoolSelect2Inited: false,
+            _entrySelect2Inited:      false,
 
             // ── Форма записи ──────────────────────────────
             editingEntry: {
@@ -42,6 +43,9 @@ var EntriesMixin = {
             // ── inline-комментарий ────────────────────────
             editingCommentId:    null,
             editingCommentValue: '',
+
+            // Ностро банки (для фильтра)
+            accountPools: [],
 
             // debounce timer
             _filterDebounceTimer: null,
@@ -95,6 +99,18 @@ var EntriesMixin = {
         // ══════════════════════════════════════════════════
         // ЗАГРУЗКА
         // ══════════════════════════════════════════════════
+
+        loadAccountPools: function () {
+            var self = this;
+            SmartMatchApi.get(window.AppRoutes.accountPoolList).then(function (r) {
+                var data = r.data !== undefined ? r.data : r;
+                if (data.success && Array.isArray(data.data)) {
+                    self.accountPools = data.data.map(function (p) {
+                        return { id: p.id, name: p.name };
+                    });
+                }
+            });
+        },
 
         loadEntries: function (reset) {
             if (!this.selectedGroup) return;
@@ -184,9 +200,9 @@ var EntriesMixin = {
         clearAllFilters: function () {
             this.filters = {};
             var $fs = $('#filter-account-select2');
-            if ($fs.length && $fs.data('select2')) {
-                $fs.val(null).trigger('change');
-            }
+            if ($fs.length && $fs.data('select2')) $fs.val(null).trigger('change');
+            var $fp = $('#filter-pool-select2');
+            if ($fp.length && $fp.data('select2')) $fp.val(null).trigger('change');
             this.loadEntries(true);
         },
 
@@ -206,7 +222,10 @@ var EntriesMixin = {
             var self = this;
             self.filtersOpen = !self.filtersOpen;
             if (self.filtersOpen) {
-                setTimeout(function () { self.initFilterAccountSelect2(); }, 120);
+                setTimeout(function () {
+                    self.initFilterAccountSelect2();
+                    self.initFilterPoolSelect2();
+                }, 120);
             }
         },
 
@@ -252,6 +271,52 @@ var EntriesMixin = {
             $el.on('select2:clear', function () {
                 self.clearFilter('account_id');
             });
+        },
+
+        initFilterPoolSelect2: function () {
+            var self = this;
+            var $el  = $('#filter-pool-select2');
+            if (!$el.length || self._filterPoolSelect2Inited) return;
+            self._filterPoolSelect2Inited = true;
+
+            var poolData = self.accountPools.map(function (p) {
+                return { id: String(p.id), text: p.name };
+            });
+
+            $el.select2({
+                theme:            'bootstrap-5',
+                placeholder:      'Все банки...',
+                allowClear:       true,
+                data:             poolData,
+                language: {
+                    noResults: function () { return 'Нет ностробанков'; }
+                }
+            });
+
+            // Если уже есть авто-выбранный пул — отображаем его, иначе явно сбрасываем
+            if (self.filters.account_pool_id) {
+                $el.val(String(self.filters.account_pool_id)).trigger('change.select2');
+            } else {
+                $el.val(null).trigger('change.select2');
+            }
+
+            $el.on('select2:select', function (e) {
+                self.applyFilter('account_pool_id', e.params.data.id);
+            });
+            $el.on('select2:clear', function () {
+                self.clearFilter('account_pool_id');
+            });
+        },
+
+        /** Программно обновляет выбранное значение в Pool Select2 (без реинициализации) */
+        updateFilterPoolSelect2: function (poolId) {
+            var $el = $('#filter-pool-select2');
+            if (!$el.length || !$el.data('select2')) return;
+            if (poolId) {
+                $el.val(String(poolId)).trigger('change.select2');
+            } else {
+                $el.val(null).trigger('change.select2');
+            }
         },
 
         // ══════════════════════════════════════════════════
@@ -336,6 +401,7 @@ var EntriesMixin = {
             };
             var $el = $('#entry-account-select2');
             if ($el.length && $el.data('select2')) $el.val(null).trigger('change');
+            self._bindEntryModalHidePrevented();
             self._showModal('entryModal');
             setTimeout(function () { self.initEntryAccountSelect2(); }, 300);
         },
@@ -344,6 +410,7 @@ var EntriesMixin = {
             var self = this;
             self._entrySelect2Inited = false;
             self.editingEntry = JSON.parse(JSON.stringify(entry));
+            self._bindEntryModalHidePrevented();
             self._showModal('entryModal');
             setTimeout(function () {
                 self.initEntryAccountSelect2();
@@ -357,7 +424,38 @@ var EntriesMixin = {
             }, 300);
         },
 
+        /** Биндит обработчик клика по backdrop (static) — один раз на открытие */
+        _bindEntryModalHidePrevented: function () {
+            var self = this;
+            var el = document.getElementById('entryModal');
+            if (!el) return;
+            $(el).off('hidePrevented.bs.modal.entry').on('hidePrevented.bs.modal.entry', function () {
+                self.closeEntryModal();
+            });
+        },
+
+        /** Закрывает модалку с подтверждением (Cancel, X, клик вне окна) */
         closeEntryModal: function () {
+            var self = this;
+            Swal.fire({
+                title: 'Отменить изменения?',
+                text: 'Введённые данные будут потеряны.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Да, отменить',
+                cancelButtonText: 'Нет, продолжить',
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#6c757d',
+                reverseButtons: true
+            }).then(function (result) {
+                if (result.isConfirmed) {
+                    self._forceCloseEntryModal();
+                }
+            });
+        },
+
+        /** Закрывает модалку без подтверждения (после успешного сохранения) */
+        _forceCloseEntryModal: function () {
             this._hideModal('entryModal');
             this._entrySelect2Inited = false;
         },
@@ -380,7 +478,7 @@ var EntriesMixin = {
 
             SmartMatchApi.post(url, self.editingEntry).then(function (r) {
                 if (r.success) {
-                    self.closeEntryModal();
+                    self._forceCloseEntryModal();
                     self.loadEntries(true);
                     Swal.fire({ icon: 'success',
                         title: isNew ? 'Запись добавлена' : 'Запись обновлена',
@@ -526,14 +624,44 @@ var EntriesMixin = {
             });
         },
 
-        /** Нормализует ввод суммы: убирает запятые-разделители тысяч, оставляет точку десятичную */
+        /** Нормализует ввод суммы. Если встречаются и точка, и запятая —
+         *  крайний правый разделитель считается десятичным, остальные убираются.
+         *  Примеры: "555 444.344,33" → "555444344.33", "555,444,344.33" → "555444344.33"
+         *  Логика теперь такая:
+         *
+         *   - Есть и точка, и запятая → крайний правый разделитель считается десятичным, остальные удаляются:
+         *     - 555 444.344,33 → запятая правее → 555444344.33
+         *     - 555,444,344.33 → точка правее → 555444344.33
+         *   - Только запятая → убирается (разделитель тысяч)
+         *   - Только точка → оставляется (десятичный разделитель)*/
         normalizeAmount: function (val) {
             if (val === null || val === undefined || val === '') return '';
             var s = String(val).trim();
             // Убираем пробелы (разделитель тысяч)
             s = s.replace(/\s/g, '');
-            // Убираем запятые (разделитель тысяч), точка остаётся десятичным
-            s = s.replace(/,/g, '');
+
+            var hasDot   = s.indexOf('.') !== -1;
+            var hasComma = s.indexOf(',') !== -1;
+
+            if (hasDot && hasComma) {
+                // Крайний правый разделитель — десятичный
+                var lastDot   = s.lastIndexOf('.');
+                var lastComma = s.lastIndexOf(',');
+                if (lastComma > lastDot) {
+                    // Запятая — десятичный разделитель: убираем все точки, заменяем последнюю запятую точкой
+                    s = s.replace(/\./g, '').replace(/,/g, function (m, offset, str) {
+                        return offset === str.lastIndexOf(',') ? '.' : '';
+                    });
+                } else {
+                    // Точка — десятичный разделитель: убираем все запятые
+                    s = s.replace(/,/g, '');
+                }
+            } else if (hasComma) {
+                // Только запятая — убираем (разделитель тысяч по умолчанию)
+                s = s.replace(/,/g, '');
+            }
+            // Только точка — оставляем как есть (десятичный разделитель)
+
             var n = parseFloat(s);
             if (isNaN(n)) return val;
             return n.toFixed(2);

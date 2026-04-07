@@ -169,6 +169,23 @@ $initData = [
         </a>
     </div>
 
+    <!-- Сброс локального хранилища -->
+    <div class="pf-sec">
+        <div class="pf-stitle"><i class="fas fa-database"></i>Локальное хранилище</div>
+        <p style="font-size:13px;color:#6b7a99;margin:0 0 12px">
+            Здесь хранятся настройки интерфейса: выбранная группа, состояние сайдбара, фильтры и др.
+            Очистка не затрагивает данные на сервере.
+        </p>
+        <button class="pf-btn-add" style="background:#6b7280" @click="clearStorage"
+                :disabled="storageClearDone">
+            <i :class="storageClearDone ? 'fas fa-check' : 'fas fa-trash-alt'"></i>
+            {{ storageClearDone ? 'Очищено' : 'Очистить localStorage' }}
+        </button>
+        <span v-if="storageSize !== null" style="font-size:12px;color:#9ca3af;margin-left:12px">
+            Ключей приложения: {{ storageSize }}
+        </span>
+    </div>
+
 </div>
 
 <style>
@@ -213,6 +230,9 @@ $initData = [
 
                     busy:  false,
                     flash: { msg: null, type: 'success' },
+
+                    storageSize:      null,
+                    storageClearDone: false,
                 },
 
                 computed: {
@@ -221,6 +241,10 @@ $initData = [
                         if (!self.user.companyId) return null;
                         return self.companies.find(function (c) { return c.id === self.user.companyId; }) || null;
                     },
+                },
+
+                created: function () {
+                    this.storageSize = this.countStorageKeys();
                 },
 
                 methods: {
@@ -236,6 +260,7 @@ $initData = [
                             .then(function (r) {
                                 if (r.data.success) {
                                     self.user.companyId = comp.id;
+                                    self.updateHeaderCompany(comp);
                                     self.showFlash('success', r.data.message);
                                 } else {
                                     self.showFlash('error', r.data.message || 'Ошибка');
@@ -254,6 +279,7 @@ $initData = [
                             .then(function (r) {
                                 if (r.data.success) {
                                     self.user.companyId = null;
+                                    self.updateHeaderCompany(null);
                                     self.showFlash('success', r.data.message);
                                 } else {
                                     self.showFlash('error', r.data.message || 'Ошибка');
@@ -261,6 +287,58 @@ $initData = [
                             })
                             .catch(function () { self.showFlash('error', 'Ошибка сети'); })
                             .finally(function () { self.busy = false; });
+                    },
+
+                    updateHeaderCompany: function (comp) {
+                        // Badge рядом с именем пользователя
+                        var badge = document.getElementById('navbar-company-badge');
+                        if (badge) {
+                            if (comp) {
+                                badge.textContent = comp.code;
+                                badge.style.background  = '#4f46e5';
+                                badge.style.fontWeight  = '600';
+                            } else {
+                                badge.textContent = '!';
+                                badge.style.background  = '#f59e0b';
+                                badge.style.fontWeight  = '';
+                            }
+                        }
+                        // Название компании в дропдауне
+                        var nameEl = document.getElementById('navbar-company-name');
+                        if (nameEl) nameEl.textContent = comp ? comp.name : '';
+                        // Переключаем блоки
+                        var withComp = document.getElementById('navbar-with-company');
+                        var noComp   = document.getElementById('navbar-no-company');
+                        if (withComp) withComp.style.display = comp ? 'block' : 'none';
+                        if (noComp)   noComp.style.display   = comp ? 'none'  : 'block';
+                    },
+
+                    // ── localStorage ─────────────────────────────────────
+
+                    countStorageKeys: function () {
+                        var prefix = 'smartmatch_ui_';
+                        var count = 0;
+                        try {
+                            for (var i = 0; i < localStorage.length; i++) {
+                                if (localStorage.key(i).indexOf(prefix) === 0) count++;
+                            }
+                        } catch (e) {}
+                        return count;
+                    },
+
+                    clearStorage: function () {
+                        var prefix = 'smartmatch_ui_';
+                        var keys = [];
+                        try {
+                            for (var i = 0; i < localStorage.length; i++) {
+                                if (localStorage.key(i).indexOf(prefix) === 0) {
+                                    keys.push(localStorage.key(i));
+                                }
+                            }
+                            keys.forEach(function (k) { localStorage.removeItem(k); });
+                        } catch (e) {}
+                        this.storageSize      = 0;
+                        this.storageClearDone = true;
                     },
 
                     // ── Утилиты ──────────────────────────────────────────

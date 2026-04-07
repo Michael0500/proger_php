@@ -444,7 +444,8 @@
 </div>
 
 <!-- ════════════════ МОДАЛ ДОБАВЛЕНИЯ/РЕДАКТИРОВАНИЯ ЗАПИСИ ════════════════ -->
-<div class="modal fade" id="entryModal" tabindex="-1" aria-labelledby="entryModalLabel">
+<div class="modal fade" id="entryModal" tabindex="-1" aria-labelledby="entryModalLabel"
+     data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable" style="max-width: 1000px">
         <div class="modal-content">
             <div class="modal-header">

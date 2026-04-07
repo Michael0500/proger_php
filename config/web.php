@@ -68,6 +68,7 @@ $config = [
                 'nostro-entry/<action>' => 'nostro-entry/<action>',
                 'matching/<action>'     => 'matching/<action>',
 
+                'balance'                           => 'nostro-balance/page',
                 'nostro-balance'                    => 'nostro-balance/index',
                 'nostro-balance/<action>'           => 'nostro-balance/<action>',
 
@@ -76,6 +77,7 @@ $config = [
                 'recon-report/generate'  => 'recon-report/generate',
                 'recon-report/accounts'  => 'recon-report/accounts',
 
+                'archive'          => 'archive/page',
                 'archive/<action>' => 'archive/<action>',
             ],
         ],

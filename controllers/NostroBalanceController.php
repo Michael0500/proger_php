@@ -19,6 +19,13 @@ class NostroBalanceController extends BaseController
         return parent::beforeAction($action);
     }
 
+    /** GET /balance — отдельная страница баланса */
+    public function actionPage()
+    {
+        $this->view->title = 'Баланс';
+        return $this->render('page');
+    }
+
     private function cid(): ?int
     {
         $u = Yii::$app->user->identity;

@@ -43,7 +43,9 @@ var ArchiveMixin = {
             archiveProgressAll:   0,
             archiveProgressPct:   0,
 
-            _archiveDebounceTimer: null,
+            _archiveDebounceTimer:        null,
+            _archivePoolSelect2Inited:    false,
+            _archiveAccountSelect2Inited: false,
         };
     },
 
@@ -140,6 +142,10 @@ var ArchiveMixin = {
 
         clearAllArchiveFilters: function () {
             this.archiveFilters = {};
+            var $fp = $('#archive-pool-select2');
+            if ($fp.length && $fp.data('select2')) $fp.val(null).trigger('change');
+            var $fa = $('#archive-account-select2');
+            if ($fa.length && $fa.data('select2')) $fa.val(null).trigger('change');
             this.loadArchive(true);
         },
 
@@ -159,6 +165,67 @@ var ArchiveMixin = {
 
         toggleArchiveFilters: function () {
             this.archiveFiltersOpen = !this.archiveFiltersOpen;
+            if (this.archiveFiltersOpen) {
+                var self = this;
+                setTimeout(function () {
+                    self.initArchivePoolSelect2();
+                    self.initArchiveAccountSelect2();
+                }, 120);
+            }
+        },
+
+        initArchivePoolSelect2: function () {
+            var self = this;
+            var $el  = $('#archive-pool-select2');
+            if (!$el.length || self._archivePoolSelect2Inited) return;
+            self._archivePoolSelect2Inited = true;
+
+            var poolData = (self.accountPools || []).map(function (p) {
+                return { id: String(p.id), text: p.name };
+            });
+
+            $el.select2({
+                theme:       'bootstrap-5',
+                placeholder: 'Все банки...',
+                allowClear:  true,
+                data:        poolData,
+                language: { noResults: function () { return 'Нет ностробанков'; } }
+            });
+            $el.val(null).trigger('change.select2');
+
+            $el.on('select2:select', function (e) {
+                self.applyArchiveFilter('account_pool_id', e.params.data.id);
+            });
+            $el.on('select2:clear', function () {
+                self.clearArchiveFilter('account_pool_id');
+            });
+        },
+
+        initArchiveAccountSelect2: function () {
+            var self = this;
+            var $el  = $('#archive-account-select2');
+            if (!$el.length || self._archiveAccountSelect2Inited) return;
+            self._archiveAccountSelect2Inited = true;
+
+            var accData = (self.archiveAccounts || []).map(function (a) {
+                return { id: String(a.id), text: a.name + (a.currency ? ' (' + a.currency + ')' : '') };
+            });
+
+            $el.select2({
+                theme:       'bootstrap-5',
+                placeholder: 'Все счета...',
+                allowClear:  true,
+                data:        accData,
+                language: { noResults: function () { return 'Нет счетов'; } }
+            });
+            $el.val(null).trigger('change.select2');
+
+            $el.on('select2:select', function (e) {
+                self.applyArchiveFilter('account_id', e.params.data.id);
+            });
+            $el.on('select2:clear', function () {
+                self.clearArchiveFilter('account_id');
+            });
         },
 
         // ══════════════════════════════════════════════════

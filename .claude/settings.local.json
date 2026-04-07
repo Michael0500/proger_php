@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php yii:*)",
+      "Bash(php:*)",
+      "Bash(php -r \":*)",
+      "Bash(grep:*)"
+    ]
+  }
+}

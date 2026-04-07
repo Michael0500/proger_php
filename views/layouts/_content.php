@@ -2,31 +2,6 @@
 
 <div>
 
-    <!-- ══ ТАБЫ ══════════════════════════════════════════════════ -->
-    <div style="display:flex;gap:2px;margin-bottom:14px;border-bottom:2px solid #e8eaf0">
-        <button class="section-tab" :class="{active: activeSection==='entries'}"
-                @click="activeSection='entries'">
-            <i class="fas fa-exchange-alt me-1"></i>Выверка
-        </button>
-        <button class="section-tab" :class="{active: activeSection==='balance'}"
-                @click="switchToBalance">
-            <i class="fas fa-balance-scale me-1"></i>Баланс
-            <span v-if="balancesTotal>0"
-                  style="background:#e0e7ff;color:#4338ca;border-radius:10px;padding:0 6px;font-size:10px;font-weight:700;margin-left:4px">
-                {{ balancesTotal }}
-            </span>
-        </button>
-        <button class="section-tab" :class="{active: activeSection==='archive'}"
-                @click="switchToArchive">
-            <i class="fas fa-archive me-1"></i>Архив
-            <span v-if="archiveStats && archiveStats.pending_archive > 0"
-                  style="background:#7c3aed;color:#fff;border-radius:10px;
-                    padding:0 6px;font-size:10px;margin-left:3px">
-           {{ archiveStats.pending_archive }}
-       </span>
-        </button>
-    </div>
-
     <!-- ══ СЕКЦИЯ: ВЫВЕРКА ═══════════════════════════════════════ -->
     <div v-show="activeSection==='entries'">
 
@@ -119,6 +94,12 @@
                     </button>
                 </div>
                 <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px">
+
+                    <!-- Ностро банк -->
+                    <div class="filter-field" style="grid-column:span 2">
+                        <label class="filter-label">Ностро банк</label>
+                        <select id="filter-pool-select2" style="width:100%"></select>
+                    </div>
 
                     <!-- Счёт Select2 -->
                     <div class="filter-field" style="grid-column:span 2">
@@ -679,11 +660,12 @@
                             </select>
                         </div>
                         <div style="grid-column:span 2">
+                            <label class="filter-label">Ностро банк</label>
+                            <select id="balance-form-pool-select2" style="width:100%"></select>
+                        </div>
+                        <div style="grid-column:span 2">
                             <label class="filter-label">Счёт *</label>
-                            <select class="filter-input" v-model.number="editingBalance.account_id" style="width:100%">
-                                <option :value="null">— выберите —</option>
-                                <option v-for="a in balanceAccounts" :key="a.id" :value="a.id">{{ a.name }}</option>
-                            </select>
+                            <select id="balance-form-account-select2" style="width:100%"></select>
                         </div>
                         <div>
                             <label class="filter-label">Валюта *</label>
@@ -1092,17 +1074,16 @@
         <div v-show="archiveFiltersOpen" class="filters-panel" style="margin-bottom:14px">
             <div style="display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-end">
 
-                <!-- Счёт / Ностро банк -->
+                <!-- Ностро банк Select2 -->
                 <div class="filter-field" style="min-width:200px">
                     <label class="filter-label">Ностро банк</label>
-                    <select class="filter-input" style="padding-right:24px"
-                            :value="archiveFilters.account_id||''"
-                            @change="applyArchiveFilter('account_id',$event.target.value)">
-                        <option value="">— Все банки —</option>
-                        <option v-for="a in archiveAccounts" :key="a.id" :value="a.id">
-                            {{ a.name }} ({{ a.currency }})
-                        </option>
-                    </select>
+                    <select id="archive-pool-select2" style="width:100%"></select>
+                </div>
+
+                <!-- Ностро счёт Select2 -->
+                <div class="filter-field" style="min-width:200px">
+                    <label class="filter-label">Ностро счёт</label>
+                    <select id="archive-account-select2" style="width:100%"></select>
                 </div>
 
                 <!-- L/S -->

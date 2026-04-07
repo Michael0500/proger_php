@@ -39,7 +39,7 @@
                 groupFiltersLoading: false,
 
                 // Активная секция: 'entries' | 'balance' | 'archive'
-                activeSection: 'entries',
+                activeSection: (window.AppConfig && window.AppConfig.initialSection) || 'entries',
 
                 newCategory:     { name: '', description: '' },
                 editingCategory: { id: null, name: '', description: '' },
@@ -58,7 +58,15 @@
 
             mounted: function () {
                 this.flyoutTimer = null;
-                this.loadCategories();
+                var forcedSection = window.AppConfig && window.AppConfig.initialSection &&
+                                    window.AppConfig.initialSection !== 'entries';
+
+                // Категории и группы нужны только в основном приложении с sidebar
+                if (!forcedSection) {
+                    this.loadCategories();
+                }
+
+                this.loadAccountPools();
                 this.loadBalanceAccounts();
                 this.loadArchiveAccounts();
                 this.loadArchiveStats();

@@ -124,6 +124,9 @@ class NostroEntryController extends BaseController
                 $q->andWhere(['ilike', "ne.$f", $filters[$f]]);
             }
         }
+        if (isset($filters['account_pool_id']) && $filters['account_pool_id'] !== '') {
+            $q->andWhere(['a.pool_id' => (int)$filters['account_pool_id']]);
+        }
         if (isset($filters['account_id']) && $filters['account_id'] !== '') {
             $q->andWhere(['ne.account_id' => (int)$filters['account_id']]);
         }

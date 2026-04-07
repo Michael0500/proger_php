@@ -35,6 +35,7 @@ var BalanceMixin = {
                 section:  section,   // ← дефолт из компании
                 source:  'MANUAL', comment: '', status: 'normal',
             },
+            editingBalancePoolId: null, // выбранный банк в форме (не сохраняется, только для фильтра счетов)
             balanceModalOpen: false,
             balanceSaving:    false,
 
@@ -215,7 +216,9 @@ var BalanceMixin = {
                 section:  section,
                 source:  'MANUAL', comment: '', status: 'normal',
             };
+            this.editingBalancePoolId = null;
             this.balanceModalOpen = true;
+            this.$nextTick(function () { this.initBalanceFormSelects(); }.bind(this));
         },
 
         openEditBalanceModal: function (row) {
@@ -224,11 +227,115 @@ var BalanceMixin = {
                 opening_balance: row.opening_balance,
                 closing_balance: row.closing_balance,
             });
+            // Определяем банк по pool_id счёта
+            var acc = (this.balanceAccounts || []).find(function (a) {
+                return String(a.id) === String(row.account_id);
+            });
+            this.editingBalancePoolId = acc && acc.pool_id ? String(acc.pool_id) : null;
             this.balanceModalOpen = true;
+            this.$nextTick(function () { this.initBalanceFormSelects(); }.bind(this));
         },
 
         closeBalanceModal: function () {
             this.balanceModalOpen = false;
+        },
+
+        /** Инициализирует оба Select2 в форме баланса */
+        initBalanceFormSelects: function () {
+            this.initBalanceFormPoolSelect2();
+            this.initBalanceFormAccountSelect2(this.editingBalancePoolId);
+        },
+
+        initBalanceFormPoolSelect2: function () {
+            var self = this;
+            var $el  = $('#balance-form-pool-select2');
+            if (!$el.length) return;
+
+            if ($el.data('select2')) {
+                $el.off('select2:select select2:clear');
+                $el.select2('destroy');
+            }
+
+            var poolData = (self.balancePools || []).map(function (p) {
+                return { id: String(p.id), text: p.name };
+            });
+
+            $el.select2({
+                dropdownParent: $(document.body),
+                theme:          'bootstrap-5',
+                placeholder:    'Выберите банк...',
+                allowClear:     true,
+                data:           poolData,
+                language: { noResults: function () { return 'Нет ностробанков'; } }
+            });
+
+            // Явно сбрасываем / устанавливаем значение после инита
+            if (self.editingBalancePoolId) {
+                $el.val(String(self.editingBalancePoolId)).trigger('change.select2');
+            } else {
+                $el.val(null).trigger('change.select2');
+            }
+
+            $el.on('select2:select', function (e) {
+                self.editingBalancePoolId = e.params.data.id;
+                self.editingBalance.account_id   = null;
+                self.editingBalance.account_name = '';
+                self.initBalanceFormAccountSelect2(self.editingBalancePoolId);
+            });
+            $el.on('select2:clear', function () {
+                self.editingBalancePoolId = null;
+                self.editingBalance.account_id   = null;
+                self.editingBalance.account_name = '';
+                self.initBalanceFormAccountSelect2(null);
+            });
+        },
+
+        initBalanceFormAccountSelect2: function (poolId) {
+            var self = this;
+            var $el  = $('#balance-form-account-select2');
+            if (!$el.length) return;
+
+            if ($el.data('select2')) {
+                $el.off('select2:select select2:clear');
+                $el.select2('destroy');
+                $el.empty();
+            }
+
+            var accounts = (self.balanceAccounts || []).filter(function (a) {
+                return !poolId || String(a.pool_id) === String(poolId);
+            });
+
+            var accData = accounts.map(function (a) {
+                return { id: String(a.id), text: a.name };
+            });
+
+            $el.select2({
+                dropdownParent: $(document.body),
+                theme:          'bootstrap-5',
+                placeholder:    poolId ? 'Выберите счёт...' : 'Сначала выберите банк...',
+                allowClear:     true,
+                data:           accData,
+                language: { noResults: function () { return 'Нет счетов'; } }
+            });
+
+            // Явно сбрасываем / устанавливаем значение после инита
+            if (self.editingBalance.account_id) {
+                $el.val(String(self.editingBalance.account_id)).trigger('change.select2');
+            } else {
+                $el.val(null).trigger('change.select2');
+            }
+
+            $el.on('select2:select', function (e) {
+                var found = (self.balanceAccounts || []).find(function (a) {
+                    return String(a.id) === String(e.params.data.id);
+                });
+                self.editingBalance.account_id   = parseInt(e.params.data.id);
+                self.editingBalance.account_name = found ? found.name : e.params.data.text;
+            });
+            $el.on('select2:clear', function () {
+                self.editingBalance.account_id   = null;
+                self.editingBalance.account_name = '';
+            });
         },
 
         saveBalance: function () {

@@ -6,6 +6,7 @@ use app\widgets\Alert;
 use yii\bootstrap5\Html;
 use yii\bootstrap5\Nav;
 use yii\bootstrap5\NavBar;
+use yii\helpers\Url;
 
 AppAsset::register($this);
 $this->registerCsrfMetaTags();
@@ -30,6 +31,12 @@ $isAccountsPage   = ($currentRoute === 'account/index');
 
 // Объединяем: страницы без основного Vue-приложения
 $isStandalonePage = $isProfilePage || $isReconPage || $isNostroBankPage || $isAccountsPage;
+
+// Отдельные страницы секций (Vue без sidebar)
+$isArchivePage  = ($currentRoute === 'archive/page');
+$isBalancePage  = ($currentRoute === 'nostro-balance/page');
+$isSectionPage  = $isArchivePage || $isBalancePage;
+$initialSection = $isArchivePage ? 'archive' : ($isBalancePage ? 'balance' : 'entries');
 
 $currentUser = $isGuest ? null : Yii::$app->user->identity;
 $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->company : null;
@@ -72,6 +79,18 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
                         'active' => $isNostroBankPage,
                 ];
                 $menuItems[] = [
+                        'label'  => '<i class="fas fa-balance-scale me-1"></i>Баланс',
+                        'encode' => false,
+                        'url'    => ['/balance'],
+                        'active' => $isBalancePage,
+                ];
+                $menuItems[] = [
+                        'label'  => '<i class="fas fa-archive me-1"></i>Архив',
+                        'encode' => false,
+                        'url'    => ['/archive'],
+                        'active' => $isArchivePage,
+                ];
+                $menuItems[] = [
                         'label'  => '<i class="fas fa-file-alt me-1"></i>Раккорд',
                         'encode' => false,
                         'url'    => ['/recon-report/index'],
@@ -87,29 +106,24 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
                     ],
             ];
 
-            if ($currentComp) {
-                $userMenuItems[] = '<div class="dropdown-divider"></div>';
-                $userMenuItems[] = '<div class="dropdown-header" style="font-size:11px;color:#6b7a99;padding:6px 16px 2px">
-                <i class="fas fa-building me-1"></i>Компания: <strong>' . Html::encode($currentComp->name) . '</strong>
-            </div>';
-                $userMenuItems[] = [
-                        'label'  => '<i class="fas fa-exchange-alt me-1"></i>Сменить компанию',
-                        'encode' => false,
-                        'url'    => ['/user/view', 'id' => $currentUser->id],
-                ];
-                $userMenuItems[] = [
-                        'label'  => '<i class="fas fa-times me-1" style="color:#ef4444"></i><span style="color:#ef4444">Сбросить компанию</span>',
-                        'encode' => false,
-                        'url'    => ['/company/reset'],
-                ];
-            } else {
-                $userMenuItems[] = '<div class="dropdown-divider"></div>';
-                $userMenuItems[] = [
-                        'label'  => '<i class="fas fa-building me-1" style="color:#f59e0b"></i><span style="color:#f59e0b">Выбрать компанию</span>',
-                        'encode' => false,
-                        'url'    => ['/user/view', 'id' => $currentUser->id],
-                ];
-            }
+            // Оба блока всегда в DOM — JS переключает display при смене компании
+            $userMenuItems[] = '<div class="dropdown-divider"></div>';
+            $userMenuItems[] = '<div id="navbar-with-company" style="display:' . ($currentComp ? 'block' : 'none') . '">'
+                . '<div class="dropdown-header" style="font-size:11px;color:#6b7a99;padding:6px 16px 2px">'
+                . '<i class="fas fa-building me-1"></i>Компания: <strong id="navbar-company-name">' . ($currentComp ? Html::encode($currentComp->name) : '') . '</strong>'
+                . '</div>'
+                . '<a class="dropdown-item" href="' . Url::to(['/user/view', 'id' => $currentUser->id]) . '">'
+                . '<i class="fas fa-exchange-alt me-1"></i>Сменить компанию'
+                . '</a>'
+                . '<a class="dropdown-item" href="' . Url::to(['/company/reset']) . '" data-method="post">'
+                . '<i class="fas fa-times me-1" style="color:#ef4444"></i><span style="color:#ef4444">Сбросить компанию</span>'
+                . '</a>'
+                . '</div>';
+            $userMenuItems[] = '<div id="navbar-no-company" style="display:' . ($currentComp ? 'none' : 'block') . '">'
+                . '<a class="dropdown-item" href="' . Url::to(['/user/view', 'id' => $currentUser->id]) . '">'
+                . '<i class="fas fa-building me-1" style="color:#f59e0b"></i><span style="color:#f59e0b">Выбрать компанию</span>'
+                . '</a>'
+                . '</div>';
 
             $userMenuItems[] = '<div class="dropdown-divider"></div>';
             $userMenuItems[] = [
@@ -119,9 +133,9 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
             ];
 
             $companyBadge = $currentComp
-                    ? '<span style="font-size:10px;background:#4f46e5;color:#fff;border-radius:10px;padding:1px 7px;margin-left:6px;font-weight:600">'
+                    ? '<span id="navbar-company-badge" style="font-size:10px;background:#4f46e5;color:#fff;border-radius:10px;padding:1px 7px;margin-left:6px;font-weight:600">'
                     . Html::encode($currentComp->code) . '</span>'
-                    : '<span style="font-size:10px;background:#f59e0b;color:#fff;border-radius:10px;padding:1px 7px;margin-left:6px">!</span>';
+                    : '<span id="navbar-company-badge" style="font-size:10px;background:#f59e0b;color:#fff;border-radius:10px;padding:1px 7px;margin-left:6px">!</span>';
 
             $menuItems[] = [
                     'label'  => '<i class="fas fa-user-circle me-1"></i>' . Html::encode($currentUser->username) . $companyBadge,
@@ -135,7 +149,18 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
         ?>
     </header>
 
-    <?php if ($showApp && !$isStandalonePage): ?>
+    <?php if ($showApp && $isSectionPage): ?>
+        <!-- ── Отдельная страница секции (архив / баланс) без sidebar ── -->
+        <div id="app">
+            <main id="main" class="section-page-main" role="main">
+                <?= Alert::widget() ?>
+                <?= $this->render('_content') ?>
+            </main>
+            <?= $this->render('_modals') ?>
+        </div>
+        <?= $this->render('_vue-scripts', ['initialSection' => $initialSection]) ?>
+
+    <?php elseif ($showApp && !$isStandalonePage): ?>
         <!-- ── Основное приложение с sidebar (NRE/INV) ──── -->
         <div id="app" class="d-flex">
             <?= $this->render('_sidebar') ?>

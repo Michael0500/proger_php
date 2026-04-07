@@ -47,6 +47,16 @@ body {
 
 #footer { display: none; }
 
+/* Отдельные страницы секций (архив, баланс) без sidebar */
+.section-page-main {
+    margin-top: 52px;
+    padding: 20px 28px;
+    max-width: 1600px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+}
+
 /* ═══════════════════════════════════════════════════════════════
    SIDEBAR
    ═══════════════════════════════════════════════════════════════ */
@@ -1674,6 +1684,12 @@ select.form-control-sm-custom {
     align-items: center;
     justify-content: center;
     padding: 16px;
+}
+
+/* Select2 дропдаун поверх кастомного модала */
+.modal-backdrop-custom ~ .select2-container--open,
+body > .select2-container--open {
+    z-index: 1070 !important;
 }
 
 .modal-card {

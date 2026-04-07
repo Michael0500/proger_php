@@ -28,6 +28,13 @@ class ArchiveController extends BaseController
         return parent::beforeAction($action);
     }
 
+    /** GET /archive — отдельная страница архива */
+    public function actionPage()
+    {
+        $this->view->title = 'Архив';
+        return $this->render('page');
+    }
+
     private function cid(): ?int
     {
         $u = Yii::$app->user->identity;
@@ -64,6 +71,9 @@ class ArchiveController extends BaseController
         // ── Фильтры ──────────────────────────────────────────────
 
         // Ностро банк / счёт
+        if (!empty($filters['account_pool_id'])) {
+            $q->andWhere(['a.pool_id' => (int)$filters['account_pool_id']]);
+        }
         if (!empty($filters['account_id'])) {
             $q->andWhere(['na.account_id' => (int)$filters['account_id']]);
         }

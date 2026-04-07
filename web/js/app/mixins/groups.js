@@ -12,6 +12,24 @@ var GroupsMixin = {
             StateStorage.set('selectedGroupId',    group    ? group.id    : null);
             StateStorage.set('selectedCategoryId', category ? category.id : null);
 
+            // Авто-определяем ностробанк из фильтров группы
+            var autoPool = null;
+            if (group && Array.isArray(group.filters)) {
+                for (var i = 0; i < group.filters.length; i++) {
+                    var f = group.filters[i];
+                    if (f.field === 'account_pool_id' && f.operator === 'eq' && f.value) {
+                        autoPool = String(f.value);
+                        break;
+                    }
+                }
+            }
+            if (autoPool) {
+                this.$set(this.filters, 'account_pool_id', autoPool);
+            } else {
+                this.$delete(this.filters, 'account_pool_id');
+            }
+            this.updateFilterPoolSelect2(autoPool || null);
+
             this.loadEntries(true);
         },
 
