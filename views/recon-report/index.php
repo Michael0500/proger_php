@@ -48,10 +48,19 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
         <div class="sm-card-body">
             <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end">
 
+                <!-- Категория -->
+                <div style="min-width:180px;flex:1">
+                    <label class="form-label">Категория</label>
+                    <select class="form-select" v-model="form.categoryId" @change="onCategoryChange">
+                        <option value="">— Все —</option>
+                        <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
+                    </select>
+                </div>
+
                 <!-- Группа -->
                 <div style="min-width:200px;flex:1">
                     <label class="form-label">Группа</label>
-                    <select class="form-select" v-model="form.groupId" @change="onGroupChange">
+                    <select class="form-select" v-model="form.groupId" @change="onGroupChange" :disabled="!!form.categoryId">
                         <option value="">— Без группы —</option>
                         <optgroup v-for="cat in categoriesWithGroups" :key="cat.id" :label="cat.name">
                             <option v-for="g in cat.groups" :key="g.id" :value="g.id">{{ g.name }}</option>
@@ -62,7 +71,7 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                 <!-- Ностро-банк -->
                 <div style="min-width:180px;flex:1">
                     <label class="form-label">Ностро-банк</label>
-                    <select class="form-select" v-model="form.poolId" @change="onPoolChange" :disabled="!!form.groupId">
+                    <select class="form-select" v-model="form.poolId" @change="onPoolChange" :disabled="!!form.groupId || !!form.categoryId">
                         <option value="">— Все —</option>
                         <option v-for="p in pools" :key="p.id" :value="p.id">{{ p.name }}</option>
                     </select>
@@ -70,9 +79,9 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
 
                 <!-- Счёт -->
                 <div style="min-width:220px;flex:2">
-                    <label class="form-label">Счёт <span v-if="!form.groupId && !form.poolId" style="color:#ef4444">*</span></label>
-                    <select class="form-select" v-model="form.accountId" :disabled="filteredAccounts.length===0 || !!form.groupId">
-                        <option value="">{{ form.groupId || form.poolId ? '— Все счета —' : '— Выберите счёт —' }}</option>
+                    <label class="form-label">Счёт <span v-if="!form.groupId && !form.poolId && !form.categoryId" style="color:#ef4444">*</span></label>
+                    <select class="form-select" v-model="form.accountId" :disabled="filteredAccounts.length===0 || !!form.groupId || !!form.categoryId">
+                        <option value="">{{ form.groupId || form.poolId || form.categoryId ? '— Все счета —' : '— Выберите счёт —' }}</option>
                         <option v-for="a in filteredAccounts" :key="a.id" :value="a.id">
                             {{ a.name }} ({{ a.currency }})
                         </option>
@@ -108,9 +117,10 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
             </div>
 
             <!-- Подсказка о формировании -->
-            <div v-if="form.groupId || (form.poolId && !form.accountId)" style="margin-top:10px;padding:8px 12px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;font-size:12px;color:#4338ca">
+            <div v-if="form.categoryId || form.groupId || (form.poolId && !form.accountId)" style="margin-top:10px;padding:8px 12px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;font-size:12px;color:#4338ca">
                 <i class="fas fa-info-circle me-1"></i>
-                <template v-if="form.groupId">Отчёт будет сформирован по всем счетам группы</template>
+                <template v-if="form.categoryId">Отчёт будет сформирован по всем счетам всех групп категории</template>
+                <template v-else-if="form.groupId">Отчёт будет сформирован по всем счетам группы</template>
                 <template v-else>Отчёт будет сформирован по всем счетам ностро-банка</template>
             </div>
 
@@ -136,11 +146,11 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
     <div v-if="reports.length > 1 && reportLevel" class="sm-card" style="margin-bottom:14px">
         <div class="sm-card-body" style="padding:16px 24px;display:flex;align-items:center;gap:12px">
             <div style="width:32px;height:32px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border-radius:8px;display:flex;align-items:center;justify-content:center">
-                <i :class="reportLevel.type==='group' ? 'fas fa-layer-group' : 'fas fa-university'" style="color:#fff;font-size:14px"></i>
+                <i :class="reportLevel.type==='group' ? 'fas fa-layer-group' : reportLevel.type==='category' ? 'fas fa-tags' : 'fas fa-university'" style="color:#fff;font-size:14px"></i>
             </div>
             <div>
                 <div style="font-size:15px;font-weight:800;color:#1a1f36">
-                    {{ reportLevel.type === 'group' ? 'Группа' : 'Ностро-банк' }}: {{ reportLevel.label }}
+                    {{ reportLevel.type === 'group' ? 'Группа' : reportLevel.type === 'category' ? 'Категория' : 'Ностро-банк' }}: {{ reportLevel.label }}
                 </div>
                 <div style="font-size:12px;color:#9ca3af">{{ reports.length }} {{ declAccounts(reports.length) }}</div>
             </div>
@@ -527,6 +537,7 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                     categories: _init.categories || [],
                     groups:     _init.groups     || [],
                     form: {
+                        categoryId: '',
                         groupId:    '',
                         poolId:     '',
                         accountId:  '',
@@ -566,7 +577,7 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                         return this.accounts.filter(function (a) { return a.pool_id === pid; });
                     },
                     canGenerate: function () {
-                        var hasScope = !!this.form.accountId || !!this.form.poolId || !!this.form.groupId;
+                        var hasScope = !!this.form.accountId || !!this.form.poolId || !!this.form.groupId || !!this.form.categoryId;
                         var hasDate = this.form.periodMode === 'auto'
                             ? !!this.form.dateRecon
                             : (!!this.form.dateFrom && !!this.form.dateTo);
@@ -585,10 +596,18 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                 },
 
                 methods: {
+                    onCategoryChange: function () {
+                        if (this.form.categoryId) {
+                            this.form.groupId   = '';
+                            this.form.poolId    = '';
+                            this.form.accountId = '';
+                        }
+                    },
                     onGroupChange: function () {
                         if (this.form.groupId) {
-                            this.form.poolId = '';
-                            this.form.accountId = '';
+                            this.form.categoryId = '';
+                            this.form.poolId     = '';
+                            this.form.accountId  = '';
                         }
                     },
                     onPoolChange: function () {
@@ -606,6 +625,8 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                             payload.pool_id = this.form.poolId;
                         } else if (this.form.groupId) {
                             payload.group_id = this.form.groupId;
+                        } else if (this.form.categoryId) {
+                            payload.category_id = this.form.categoryId;
                         }
                         if (isCustom && this.form.dateFrom && this.form.dateTo) {
                             payload.date_from = this.form.dateFrom;

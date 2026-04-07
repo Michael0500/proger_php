@@ -93,13 +93,14 @@ class ReconReportController extends BaseController
         $cid = $this->cid();
         if (!$cid) return ['success' => false, 'message' => 'Компания не выбрана'];
 
-        $r         = Yii::$app->request;
-        $accountId = (int)$r->post('account_id');
-        $poolId    = (int)$r->post('pool_id');
-        $groupId   = (int)$r->post('group_id');
-        $dateRecon = $r->post('date_recon');
-        $dateFrom  = $r->post('date_from');
-        $dateTo    = $r->post('date_to');
+        $r          = Yii::$app->request;
+        $accountId  = (int)$r->post('account_id');
+        $poolId     = (int)$r->post('pool_id');
+        $groupId    = (int)$r->post('group_id');
+        $categoryId = (int)$r->post('category_id');
+        $dateRecon  = $r->post('date_recon');
+        $dateFrom   = $r->post('date_from');
+        $dateTo     = $r->post('date_to');
 
         if (!$dateRecon) {
             return ['success' => false, 'message' => 'Не указана дата формирования'];
@@ -111,14 +112,14 @@ class ReconReportController extends BaseController
         }
 
         // Определяем список счетов для отчёта
-        $accounts = $this->resolveAccounts($accountId, $poolId, $groupId, $cid);
+        $accounts = $this->resolveAccounts($accountId, $poolId, $groupId, $categoryId, $cid);
 
         if (empty($accounts)) {
             return ['success' => false, 'message' => 'Не найдено ни одного счёта для формирования отчёта'];
         }
 
         // Определяем label для уровня отчёта
-        $reportLevel = $this->resolveReportLevel($accountId, $poolId, $groupId, $cid);
+        $reportLevel = $this->resolveReportLevel($accountId, $poolId, $groupId, $categoryId, $cid);
 
         $reports = [];
         foreach ($accounts as $account) {
@@ -169,7 +170,7 @@ class ReconReportController extends BaseController
      * Определяет список счетов по переданным параметрам.
      * @return Account[]
      */
-    private function resolveAccounts(int $accountId, int $poolId, int $groupId, int $cid): array
+    private function resolveAccounts(int $accountId, int $poolId, int $groupId, int $categoryId, int $cid): array
     {
         // 1) Конкретный счёт
         if ($accountId > 0) {
@@ -187,48 +188,83 @@ class ReconReportController extends BaseController
 
         // 3) По группе (через GroupFilter)
         if ($groupId > 0) {
-            $group = Group::findOne(['id' => $groupId, 'company_id' => $cid]);
-            if (!$group) return [];
+            return $this->resolveAccountsByGroup($groupId, $cid);
+        }
 
-            $filters = GroupFilter::find()
-                ->where(['group_id' => $groupId])
-                ->orderBy(['sort_order' => SORT_ASC])
+        // 4) По категории — объединяем счета всех групп категории
+        if ($categoryId > 0) {
+            $category = Category::findOne(['id' => $categoryId, 'company_id' => $cid]);
+            if (!$category) return [];
+
+            $groups = Group::find()
+                ->where(['category_id' => $categoryId, 'company_id' => $cid, 'is_active' => true])
                 ->all();
 
-            $query = Account::find()->where(['company_id' => $cid]);
+            if (empty($groups)) return [];
 
-            if (!empty($filters)) {
-                $accountFilters = array_values(array_filter($filters, function ($f) { return $f->isAccountField(); }));
-
-                if (!empty($accountFilters)) {
-                    $first = true;
-                    foreach ($accountFilters as $pf) {
-                        $condition = $pf->buildAccountCondition();
-                        if ($condition === null) continue;
-                        if ($first) {
-                            $query->andWhere($condition);
-                            $first = false;
-                        } else {
-                            if ($pf->logic === 'OR') {
-                                $query->orWhere($condition);
-                            } else {
-                                $query->andWhere($condition);
-                            }
-                        }
+            $seen = [];
+            $accounts = [];
+            foreach ($groups as $group) {
+                foreach ($this->resolveAccountsByGroup($group->id, $cid) as $account) {
+                    if (!isset($seen[$account->id])) {
+                        $seen[$account->id] = true;
+                        $accounts[] = $account;
                     }
                 }
             }
 
-            return $query->orderBy(['name' => SORT_ASC])->all();
+            usort($accounts, function ($a, $b) { return strcmp($a->name, $b->name); });
+            return $accounts;
         }
 
         return [];
     }
 
     /**
+     * Возвращает счета по одной группе через её GroupFilter-ы.
+     * @return Account[]
+     */
+    private function resolveAccountsByGroup(int $groupId, int $cid): array
+    {
+        $group = Group::findOne(['id' => $groupId, 'company_id' => $cid]);
+        if (!$group) return [];
+
+        $filters = GroupFilter::find()
+            ->where(['group_id' => $groupId])
+            ->orderBy(['sort_order' => SORT_ASC])
+            ->all();
+
+        $query = Account::find()->where(['company_id' => $cid]);
+
+        if (!empty($filters)) {
+            $accountFilters = array_values(array_filter($filters, function ($f) { return $f->isAccountField(); }));
+
+            if (!empty($accountFilters)) {
+                $first = true;
+                foreach ($accountFilters as $pf) {
+                    $condition = $pf->buildAccountCondition();
+                    if ($condition === null) continue;
+                    if ($first) {
+                        $query->andWhere($condition);
+                        $first = false;
+                    } else {
+                        if ($pf->logic === 'OR') {
+                            $query->orWhere($condition);
+                        } else {
+                            $query->andWhere($condition);
+                        }
+                    }
+                }
+            }
+        }
+
+        return $query->orderBy(['name' => SORT_ASC])->all();
+    }
+
+    /**
      * Формирует описание уровня отчёта для шапки.
      */
-    private function resolveReportLevel(int $accountId, int $poolId, int $groupId, int $cid): array
+    private function resolveReportLevel(int $accountId, int $poolId, int $groupId, int $categoryId, int $cid): array
     {
         if ($accountId > 0) {
             return ['type' => 'account', 'label' => ''];
@@ -240,6 +276,10 @@ class ReconReportController extends BaseController
         if ($groupId > 0) {
             $group = Group::findOne(['id' => $groupId, 'company_id' => $cid]);
             return ['type' => 'group', 'label' => $group ? $group->name : ''];
+        }
+        if ($categoryId > 0) {
+            $category = Category::findOne(['id' => $categoryId, 'company_id' => $cid]);
+            return ['type' => 'category', 'label' => $category ? $category->name : ''];
         }
         return ['type' => 'unknown', 'label' => ''];
     }
