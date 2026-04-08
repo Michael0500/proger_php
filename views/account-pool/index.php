@@ -116,7 +116,7 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
 
     <!-- ══ МОДАЛКА: Создать / Редактировать ностро-банк ═══════ -->
     <div class="modal fade" id="poolModal" tabindex="-1">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">
@@ -133,6 +133,48 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                     <div class="mb-3">
                         <label class="form-label">Описание</label>
                         <textarea class="form-control" v-model="formPool.description" rows="2" placeholder="Необязательное описание"></textarea>
+                    </div>
+
+                    <!-- Привязка счетов (создание и редактирование) -->
+                    <hr style="border-color:#e5e7eb;margin:16px 0 12px">
+                    <div style="font-size:12px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;margin-bottom:12px">
+                        <i class="fas fa-link me-1"></i> Привязка счетов
+                        <span v-if="formPool.id" style="font-weight:400;text-transform:none;font-size:11px;color:#9ca3af"> — будут добавлены к уже привязанным</span>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-6">
+                            <label class="form-label" style="font-size:13px">
+                                <span class="nb-ls-badge nb-ls-l">L</span> Ledger счета
+                            </label>
+                            <div v-if="loadingCreateAccounts" style="font-size:12px;color:#9ca3af;padding:6px 0">
+                                <i class="fas fa-spinner fa-spin me-1"></i> Загрузка...
+                            </div>
+                            <select v-else id="create-ledger-select2" style="width:100%"></select>
+                            <div style="font-size:11px;color:#9ca3af;margin-top:3px">Необязательно · можно выбрать несколько</div>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label" style="font-size:13px">
+                                <span class="nb-ls-badge nb-ls-s">S</span> Statement счета
+                            </label>
+                            <div v-if="loadingCreateAccounts" style="font-size:12px;color:#9ca3af;padding:6px 0">
+                                <i class="fas fa-spinner fa-spin me-1"></i> Загрузка...
+                            </div>
+                            <select v-else id="create-statement-select2" style="width:100%"></select>
+                            <div style="font-size:11px;color:#9ca3af;margin-top:3px">Необязательно · можно выбрать несколько</div>
+                        </div>
+                    </div>
+
+                    <hr style="border-color:#e5e7eb;margin:16px 0 12px">
+                    <div style="font-size:12px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;margin-bottom:12px">
+                        <i class="fas fa-layer-group me-1"></i> Привязка к категории
+                    </div>
+                    <div class="mb-1">
+                        <label class="form-label" style="font-size:13px">Категория <span style="color:#9ca3af;font-weight:400">(необязательно)</span></label>
+                        <select id="create-category-select2" style="width:100%"></select>
+                        <div style="font-size:11px;color:#9ca3af;margin-top:3px">
+                            Создаст новую группу «{{ formPool.name || 'Ностро-банк' }}» в выбранной категории с фильтром по этому банку
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -249,6 +291,25 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
 .nb-pool-header:hover {
     background: #f9fafb;
 }
+.nb-ls-badge {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    line-height: 18px;
+    text-align: center;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 800;
+    margin-right: 4px;
+}
+.nb-ls-l {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+.nb-ls-s {
+    background: #dcfce7;
+    color: #15803d;
+}
 </style>
 
 <script>
@@ -259,6 +320,7 @@ new Vue({
         var init = <?= $initJson ?>;
         return {
             pools: init.pools || [],
+            categories: init.categories || [],
             loading: false,
             saving: false,
 
@@ -268,11 +330,19 @@ new Vue({
             // Свёрнутые/развёрнутые банки
             expandedPools: {},
 
-            // Привязка счёта
+            // Привязка счёта (существующий modal)
             assignTarget: null,
             availableAccounts: [],
             loadingAvailable: false,
             selectedAccountId: '',
+
+            // Данные для create modal
+            loadingCreateAccounts: false,
+            createLedgerAccounts: [],
+            createStatementAccounts: [],
+            createSelectedLedger: [],
+            createSelectedStatement: [],
+            createSelectedCategoryId: '',
         };
     },
 
@@ -310,24 +380,129 @@ new Vue({
 
         // ── CRUD ностро-банков ───────────────────────────
         showCreateModal: function () {
-            this.formPool = { id: null, name: '', description: '' };
-            this._modal('poolModal', 'show');
+            var self = this;
+            self.formPool = { id: null, name: '', description: '' };
+            self.createSelectedLedger = [];
+            self.createSelectedStatement = [];
+            self.createSelectedCategoryId = '';
+            self._modal('poolModal', 'show');
+
+            // Загружаем свободные счета и инициализируем select2
+            self.loadingCreateAccounts = true;
+            axios.get('<?= Url::to(['/account-pool/available-accounts']) ?>').then(function (r) {
+                var accounts = r.data.success ? r.data.data : [];
+                self.createLedgerAccounts    = accounts.filter(function (a) { return a.account_type === 'L'; });
+                self.createStatementAccounts = accounts.filter(function (a) { return a.account_type === 'S'; });
+            }).finally(function () {
+                self.loadingCreateAccounts = false;
+                self.$nextTick(function () { self._initCreateSelects(); });
+            });
+        },
+
+        _initCreateSelects: function () {
+            var self = this;
+
+            // Ledger
+            var $l = $('#create-ledger-select2');
+            if ($l.length) {
+                if ($l.data('select2')) $l.off('change.ledger').select2('destroy');
+                $l.empty().select2({
+                    theme: 'bootstrap-5',
+                    placeholder: '— Выберите Ledger счета —',
+                    allowClear: true,
+                    multiple: true,
+                    data: self.createLedgerAccounts.map(function (a) {
+                        return { id: String(a.id), text: a.name + (a.currency ? ' (' + a.currency + ')' : '') };
+                    }),
+                    dropdownParent: $('#poolModal'),
+                }).val(null).trigger('change');
+                $l.on('change.ledger', function () {
+                    self.createSelectedLedger = $l.val() || [];
+                });
+            }
+
+            // Statement
+            var $s = $('#create-statement-select2');
+            if ($s.length) {
+                if ($s.data('select2')) $s.off('change.stmt').select2('destroy');
+                $s.empty().select2({
+                    theme: 'bootstrap-5',
+                    placeholder: '— Выберите Statement счета —',
+                    allowClear: true,
+                    multiple: true,
+                    data: self.createStatementAccounts.map(function (a) {
+                        return { id: String(a.id), text: a.name + (a.currency ? ' (' + a.currency + ')' : '') };
+                    }),
+                    dropdownParent: $('#poolModal'),
+                }).val(null).trigger('change');
+                $s.on('change.stmt', function () {
+                    self.createSelectedStatement = $s.val() || [];
+                });
+            }
+
+            // Category
+            var $c = $('#create-category-select2');
+            if ($c.length) {
+                if ($c.data('select2')) $c.off('change.cat').select2('destroy');
+                $c.empty().select2({
+                    theme: 'bootstrap-5',
+                    placeholder: '— Не привязывать к категории —',
+                    allowClear: true,
+                    data: self.categories.map(function (c) {
+                        return { id: String(c.id), text: c.name };
+                    }),
+                    dropdownParent: $('#poolModal'),
+                }).val(null).trigger('change');
+                $c.on('change.cat', function () {
+                    self.createSelectedCategoryId = $c.val() || '';
+                });
+            }
         },
 
         editPool: function (pool) {
-            this.formPool = { id: pool.id, name: pool.name, description: pool.description || '' };
-            this._modal('poolModal', 'show');
+            var self = this;
+            self.formPool = { id: pool.id, name: pool.name, description: pool.description || '' };
+            self.createSelectedLedger = [];
+            self.createSelectedStatement = [];
+            self.createSelectedCategoryId = '';
+            self._modal('poolModal', 'show');
+
+            self.loadingCreateAccounts = true;
+            axios.get('<?= Url::to(['/account-pool/available-accounts']) ?>').then(function (r) {
+                var accounts = r.data.success ? r.data.data : [];
+                self.createLedgerAccounts    = accounts.filter(function (a) { return a.account_type === 'L'; });
+                self.createStatementAccounts = accounts.filter(function (a) { return a.account_type === 'S'; });
+            }).finally(function () {
+                self.loadingCreateAccounts = false;
+                self.$nextTick(function () { self._initCreateSelects(); });
+            });
         },
 
         savePool: function () {
             var self = this;
             self.saving = true;
-            var url = self.formPool.id
-                ? '<?= Url::to(['/account-pool/update']) ?>'
-                : '<?= Url::to(['/account-pool/create']) ?>';
-            var data = self.formPool.id
-                ? { id: self.formPool.id, name: self.formPool.name, description: self.formPool.description }
-                : { name: self.formPool.name, description: self.formPool.description };
+            var url, data;
+
+            if (self.formPool.id) {
+                url  = '<?= Url::to(['/account-pool/update']) ?>';
+                data = {
+                    id:                 self.formPool.id,
+                    name:               self.formPool.name,
+                    description:        self.formPool.description,
+                    ledger_accounts:    self.createSelectedLedger,
+                    statement_accounts: self.createSelectedStatement,
+                    category_id:        self.createSelectedCategoryId || '',
+                };
+            } else {
+                url  = '<?= Url::to(['/account-pool/create']) ?>';
+                data = {
+                    name:               self.formPool.name,
+                    description:        self.formPool.description,
+                    ledger_accounts:    self.createSelectedLedger,
+                    statement_accounts: self.createSelectedStatement,
+                    category_id:        self.createSelectedCategoryId || '',
+                };
+            }
 
             axios.post(url, data).then(function (r) {
                 if (r.data.success) {

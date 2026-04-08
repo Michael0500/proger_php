@@ -25,12 +25,17 @@ class Company extends ActiveRecord
     public function attributeLabels()
     {
         return [
-            'id' => 'ID',
-            'name' => 'Наименование',
-            'code' => 'Код',
+            'id'         => 'ID',
+            'name'       => 'Наименование',
+            'code'       => 'Код',
             'created_at' => 'Создано',
             'updated_at' => 'Обновлено',
         ];
+    }
+
+    public function isInv(): bool
+    {
+        return strtoupper($this->code) === 'INV';
     }
 
     /**

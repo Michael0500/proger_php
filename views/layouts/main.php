@@ -91,10 +91,14 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
                         'active' => $isArchivePage,
                 ];
                 $menuItems[] = [
-                        'label'  => '<i class="fas fa-file-alt me-1"></i>Раккорд',
-                        'encode' => false,
-                        'url'    => ['/recon-report/index'],
-                        'active' => Yii::$app->controller->id === 'recon-report',
+                        'label'   => '<i class="fas fa-file-alt me-1"></i>Раккорд',
+                        'encode'  => false,
+                        'url'     => ['/recon-report/index'],
+                        'active'  => Yii::$app->controller->id === 'recon-report',
+                        'options' => [
+                            'id'    => 'navbar-recon-item',
+                            'style' => ($currentComp && $currentComp->isInv()) ? 'display:none' : '',
+                        ],
                 ];
             }
 

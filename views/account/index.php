@@ -144,10 +144,14 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                             <div class="form-text">Необязательно. Можно привязать позже.</div>
                         </div>
 
-                        <!-- Тип счёта -->
+                        <!-- Тип счёта Ledger/Statement -->
                         <div class="col-md-3">
                             <label class="form-label">Тип счёта</label>
-                            <input type="text" class="form-control" v-model="form.account_type" placeholder="Nostro, Vostro...">
+                            <select class="form-select" v-model="form.account_type">
+                                <option value="">— не указан —</option>
+                                <option value="L">L — Ledger</option>
+                                <option value="S">S — Statement</option>
+                            </select>
                         </div>
 
                         <!-- Страна -->

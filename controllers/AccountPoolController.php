@@ -5,6 +5,9 @@ use Yii;
 use yii\web\Response;
 use app\models\AccountPool;
 use app\models\Account;
+use app\models\Category;
+use app\models\Group;
+use app\models\GroupFilter;
 
 /**
  * CRUD для ностро-банков (AccountPool) + управление привязанными счетами.
@@ -41,7 +44,15 @@ class AccountPoolController extends BaseController
             ->orderBy(['name' => SORT_ASC])
             ->all();
 
+        $categories = Category::find()
+            ->where(['company_id' => $cid])
+            ->orderBy(['name' => SORT_ASC])
+            ->all();
+
         $initData = [
+            'categories' => array_map(function ($c) {
+                return ['id' => $c->id, 'name' => $c->name];
+            }, $categories),
             'pools' => array_map(function ($p) {
                 return [
                     'id'          => $p->id,
@@ -104,6 +115,10 @@ class AccountPoolController extends BaseController
 
     /**
      * POST /account-pool/create
+     * Дополнительно принимает:
+     *   ledger_accounts[]   — ID счетов с load_status='L' для привязки
+     *   statement_accounts[] — ID счетов с load_status='S' для привязки
+     *   category_id          — (необязательно) создать Group+GroupFilter в этой категории
      */
     public function actionCreate(): array
     {
@@ -111,39 +126,153 @@ class AccountPoolController extends BaseController
         $cid = $this->cid();
         if (!$cid) return ['success' => false, 'message' => 'Компания не выбрана'];
 
-        $model = new AccountPool();
-        $model->company_id  = $cid;
-        $model->name        = Yii::$app->request->post('name');
-        $model->description = Yii::$app->request->post('description');
+        $req            = Yii::$app->request;
+        $ledgerIds      = array_filter(array_map('intval', (array)$req->post('ledger_accounts', [])));
+        $statementIds   = array_filter(array_map('intval', (array)$req->post('statement_accounts', [])));
+        $categoryId     = $req->post('category_id') ? (int)$req->post('category_id') : null;
 
-        if ($model->save()) {
+        $db = Yii::$app->db;
+        $transaction = $db->beginTransaction();
+        try {
+            $model = new AccountPool();
+            $model->company_id  = $cid;
+            $model->name        = $req->post('name');
+            $model->description = $req->post('description');
+
+            if (!$model->save()) {
+                $transaction->rollBack();
+                return ['success' => false, 'message' => 'Ошибка создания', 'errors' => $model->errors];
+            }
+
+            // Привязка счетов (только те, что принадлежат компании и не привязаны к другому банку)
+            $allAccountIds = array_merge($ledgerIds, $statementIds);
+            if ($allAccountIds) {
+                Account::updateAll(
+                    ['pool_id' => $model->id],
+                    ['id' => $allAccountIds, 'company_id' => $cid, 'pool_id' => null]
+                );
+            }
+
+            // Создание группы в категории с фильтром по этому ностробанку
+            if ($categoryId) {
+                $category = Category::findOne(['id' => $categoryId, 'company_id' => $cid]);
+                if (!$category) {
+                    $transaction->rollBack();
+                    return ['success' => false, 'message' => 'Категория не найдена'];
+                }
+
+                $group = new Group();
+                $group->company_id  = $cid;
+                $group->category_id = $categoryId;
+                $group->name        = $model->name;
+                $group->is_active   = true;
+                if (!$group->save()) {
+                    $transaction->rollBack();
+                    return ['success' => false, 'message' => 'Ошибка создания группы', 'errors' => $group->errors];
+                }
+
+                $filter = new GroupFilter();
+                $filter->group_id   = $group->id;
+                $filter->field      = 'account_pool_id';
+                $filter->operator   = 'eq';
+                $filter->value      = (string)$model->id;
+                $filter->logic      = 'AND';
+                $filter->sort_order = 0;
+                if (!$filter->save()) {
+                    $transaction->rollBack();
+                    return ['success' => false, 'message' => 'Ошибка создания фильтра группы', 'errors' => $filter->errors];
+                }
+            }
+
+            $transaction->commit();
             return ['success' => true, 'message' => 'Ностро-банк создан', 'data' => ['id' => $model->id, 'name' => $model->name]];
-        }
 
-        return ['success' => false, 'message' => 'Ошибка создания', 'errors' => $model->errors];
+        } catch (\Exception $e) {
+            $transaction->rollBack();
+            return ['success' => false, 'message' => 'Внутренняя ошибка: ' . $e->getMessage()];
+        }
     }
 
     /**
      * POST /account-pool/update
+     * Дополнительно принимает:
+     *   ledger_accounts[]    — ID новых счетов типа L для привязки
+     *   statement_accounts[] — ID новых счетов типа S для привязки
+     *   category_id          — (необязательно) создать Group+GroupFilter в этой категории
      */
     public function actionUpdate(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
         $cid = $this->cid();
 
-        $id    = Yii::$app->request->post('id');
+        $req  = Yii::$app->request;
+        $id   = (int)$req->post('id');
         $model = AccountPool::findOne(['id' => $id, 'company_id' => $cid]);
 
         if (!$model) return ['success' => false, 'message' => 'Ностро-банк не найден'];
 
-        $model->name        = Yii::$app->request->post('name', $model->name);
-        $model->description = Yii::$app->request->post('description', $model->description);
+        $ledgerIds    = array_filter(array_map('intval', (array)$req->post('ledger_accounts', [])));
+        $statementIds = array_filter(array_map('intval', (array)$req->post('statement_accounts', [])));
+        $categoryId   = $req->post('category_id') ? (int)$req->post('category_id') : null;
 
-        if ($model->save()) {
+        $db = Yii::$app->db;
+        $transaction = $db->beginTransaction();
+        try {
+            $model->name        = $req->post('name', $model->name);
+            $model->description = $req->post('description', $model->description);
+
+            if (!$model->save()) {
+                $transaction->rollBack();
+                return ['success' => false, 'message' => 'Ошибка обновления', 'errors' => $model->errors];
+            }
+
+            // Привязываем только свободные счета (pool_id = null)
+            $allAccountIds = array_merge($ledgerIds, $statementIds);
+            if ($allAccountIds) {
+                Account::updateAll(
+                    ['pool_id' => $model->id],
+                    ['id' => $allAccountIds, 'company_id' => $cid, 'pool_id' => null]
+                );
+            }
+
+            // Создание группы в категории
+            if ($categoryId) {
+                $category = Category::findOne(['id' => $categoryId, 'company_id' => $cid]);
+                if (!$category) {
+                    $transaction->rollBack();
+                    return ['success' => false, 'message' => 'Категория не найдена'];
+                }
+
+                $group = new Group();
+                $group->company_id  = $cid;
+                $group->category_id = $categoryId;
+                $group->name        = $model->name;
+                $group->is_active   = true;
+                if (!$group->save()) {
+                    $transaction->rollBack();
+                    return ['success' => false, 'message' => 'Ошибка создания группы', 'errors' => $group->errors];
+                }
+
+                $filter = new GroupFilter();
+                $filter->group_id   = $group->id;
+                $filter->field      = 'account_pool_id';
+                $filter->operator   = 'eq';
+                $filter->value      = (string)$model->id;
+                $filter->logic      = 'AND';
+                $filter->sort_order = 0;
+                if (!$filter->save()) {
+                    $transaction->rollBack();
+                    return ['success' => false, 'message' => 'Ошибка создания фильтра группы', 'errors' => $filter->errors];
+                }
+            }
+
+            $transaction->commit();
             return ['success' => true, 'message' => 'Ностро-банк обновлён'];
-        }
 
-        return ['success' => false, 'message' => 'Ошибка обновления', 'errors' => $model->errors];
+        } catch (\Exception $e) {
+            $transaction->rollBack();
+            return ['success' => false, 'message' => 'Внутренняя ошибка: ' . $e->getMessage()];
+        }
     }
 
     /**
@@ -216,9 +345,10 @@ class AccountPoolController extends BaseController
 
         $data = array_map(function ($a) {
             return [
-                'id'       => $a->id,
-                'name'     => $a->name,
-                'currency' => $a->currency ?? null,
+                'id'           => $a->id,
+                'name'         => $a->name,
+                'currency'     => $a->currency ?? null,
+                'account_type' => $a->account_type ?? '',
             ];
         }, $accounts);
 

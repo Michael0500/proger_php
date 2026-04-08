@@ -311,6 +311,12 @@ $initData = [
                         var noComp   = document.getElementById('navbar-no-company');
                         if (withComp) withComp.style.display = comp ? 'block' : 'none';
                         if (noComp)   noComp.style.display   = comp ? 'none'  : 'block';
+                        // Скрываем/показываем пункт Раккорд для INV компаний
+                        var reconItem = document.getElementById('navbar-recon-item');
+                        if (reconItem) {
+                            var isInv = comp && comp.code.toUpperCase() === 'INV';
+                            reconItem.style.display = isInv ? 'none' : '';
+                        }
                     },
 
                     // ── localStorage ─────────────────────────────────────
