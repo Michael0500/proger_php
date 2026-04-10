@@ -110,7 +110,7 @@ $initData = [
 <!-- ════════════════════════════════════════
      Vue2 Profile App
      ════════════════════════════════════════ -->
-<div id="profile-app">
+<div id="profile-app" v-cloak>
 
     <!-- Header -->
     <div class="pf-head">

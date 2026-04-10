@@ -15,7 +15,7 @@ class AppAsset extends AssetBundle
         'css/select2.min.css',
         'css/select2-bootstrap-5-theme.min.css',
         'css/sweetalert2.min.css',
-        'css/app.css?v1',
+        'css/app.css?v6',
         'fontawesome/css/all.min.css',
     ];
 

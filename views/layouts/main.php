@@ -47,6 +47,7 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
     <head>
         <title><?= Html::encode($this->title) ?></title>
         <?php $this->head() ?>
+        <style>[v-cloak]{display:none!important}</style>
     </head>
     <body>
     <?php $this->beginBody() ?>
@@ -155,7 +156,7 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
 
     <?php if ($showApp && $isSectionPage): ?>
         <!-- ── Отдельная страница секции (архив / баланс) без sidebar ── -->
-        <div id="app">
+        <div id="app" v-cloak>
             <main id="main" class="section-page-main" role="main">
                 <?= Alert::widget() ?>
                 <?= $this->render('_content') ?>
@@ -166,7 +167,7 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
 
     <?php elseif ($showApp && !$isStandalonePage): ?>
         <!-- ── Основное приложение с sidebar (NRE/INV) ──── -->
-        <div id="app" class="d-flex">
+        <div id="app" class="d-flex" v-cloak>
             <?= $this->render('_sidebar') ?>
             <main id="main" :class="{ 'sidebar-collapsed': isSidebarCollapsed }" role="main">
                 <?= Alert::widget() ?>

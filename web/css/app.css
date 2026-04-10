@@ -2,6 +2,9 @@
    SmartMatch — Main Stylesheet
    ═══════════════════════════════════════════════════════════════ */
 
+/* ── Vue cloak — скрыть приложение до инициализации Vue ────────── */
+[v-cloak] { display: none !important; }
+
 /* ── Base ──────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 

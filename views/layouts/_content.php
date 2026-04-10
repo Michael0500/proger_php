@@ -84,7 +84,7 @@
             </div>
 
             <!-- ПАНЕЛЬ ФИЛЬТРОВ -->
-            <div v-show="filtersOpen" class="filters-panel">
+            <div v-show="filtersOpen" class="filters-panel" style="display:none">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
                 <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280">
                     <i class="fas fa-filter me-1"></i>Фильтры
@@ -458,7 +458,7 @@
         </div>
 
         <!-- ФИЛЬТРЫ -->
-        <div v-show="balanceFiltersOpen" class="filters-panel" style="margin-bottom:14px">
+        <div v-show="balanceFiltersOpen" class="filters-panel" style="display:none;margin-bottom:14px">
             <div style="display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-end">
                 <div class="filter-field">
                     <label class="filter-label">Тип</label>
@@ -634,7 +634,7 @@
         </div>
 
         <!-- МОДАЛ: Создать/Редактировать -->
-        <div v-if="balanceModalOpen" class="modal-backdrop-custom" @click.self="closeBalanceModal">
+        <div v-show="balanceModalOpen" class="modal-backdrop-custom" style="display:none" @click.self="closeBalanceModal">
             <div class="modal-card" style="max-width:600px">
                 <div class="modal-card-header">
                     <span>{{ editingBalance.id ? 'Редактировать баланс' : 'Новая запись баланса' }}</span>
@@ -734,7 +734,7 @@
         </div>
 
         <!-- МОДАЛ: Подтвердить ошибку -->
-        <div v-if="confirmModalOpen" class="modal-backdrop-custom" @click.self="closeConfirmModal">
+        <div v-show="confirmModalOpen" class="modal-backdrop-custom" style="display:none" @click.self="closeConfirmModal">
             <div class="modal-card" style="max-width:460px">
                 <div class="modal-card-header">
                     <span>🔴 Подтверждение корректировки</span>
@@ -762,7 +762,7 @@
         </div>
 
         <!-- МОДАЛ: История баланса -->
-        <div v-if="historyModalOpen" class="modal-backdrop-custom" @click.self="closeHistoryModal">
+        <div v-show="historyModalOpen" class="modal-backdrop-custom" style="display:none" @click.self="closeHistoryModal">
             <div class="modal-card" style="max-width:900px">
                 <div class="modal-card-header">
                     <span>
@@ -920,7 +920,7 @@
         </div>
 
         <!-- МОДАЛ: Импорт -->
-        <div v-if="importModalOpen" class="modal-backdrop-custom" @click.self="closeImportModal">
+        <div v-show="importModalOpen" class="modal-backdrop-custom" style="display:none" @click.self="closeImportModal">
             <div class="modal-card" style="max-width:460px">
                 <div class="modal-card-header">
                     <span><i class="fas fa-upload me-2"></i>Импорт {{ importType==='bnd'?'Банк-клиент БНД (XML)':'Банк-клиент АСБ (TXT)' }}</span>
@@ -976,7 +976,7 @@
              СЕКЦИЯ: АРХИВ
              Вставить после секции balance в _content.php
              ═══════════════════════════════════════════════════ -->
-    <div v-if="activeSection === 'archive'">
+    <div v-show="activeSection === 'archive'">
 
         <!-- Тулбар -->
         <div class="section-toolbar">
@@ -1011,7 +1011,7 @@
         </div>
 
         <!-- МОДАЛКА ПРОГРЕССА АРХИВИРОВАНИЯ -->
-        <div v-if="archiveProgressOpen" class="modal-backdrop-custom" style="z-index:9999">
+        <div v-show="archiveProgressOpen" class="modal-backdrop-custom" style="display:none;z-index:9999">
             <div class="modal-card" style="max-width:420px;text-align:center">
                 <div class="modal-card-header" style="justify-content:center;border-bottom:0">
                         <span style="font-size:15px;font-weight:700">
@@ -1071,7 +1071,7 @@
         </div>
 
         <!-- ФИЛЬТРЫ -->
-        <div v-show="archiveFiltersOpen" class="filters-panel" style="margin-bottom:14px">
+        <div v-show="archiveFiltersOpen" class="filters-panel" style="display:none;margin-bottom:14px">
             <div style="display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-end">
 
                 <!-- Ностро банк Select2 -->
@@ -1347,7 +1347,7 @@
         </div>
 
         <!-- МОДАЛ: Настройки архивирования -->
-        <div v-if="archiveSettingsOpen" class="modal-backdrop-custom" @click.self="archiveSettingsOpen=false">
+        <div v-show="archiveSettingsOpen" class="modal-backdrop-custom" style="display:none" @click.self="archiveSettingsOpen=false">
             <div class="modal-card" style="max-width:440px">
                 <div class="modal-card-header">
                     <span><i class="fas fa-cog me-2"></i>Настройки архивирования</span>

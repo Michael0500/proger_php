@@ -8,7 +8,7 @@ $this->title = 'Счета — SmartMatch';
 $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
 ?>
 
-<div id="accounts-app">
+<div id="accounts-app" v-cloak>
 
     <!-- ══ TOOLBAR ══════════════════════════════════════════════ -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">

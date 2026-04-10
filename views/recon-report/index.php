@@ -11,7 +11,7 @@ $this->title = 'Раккорд — Reconciliation Report';
 $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
 ?>
 
-<div id="recon-app">
+<div id="recon-app" v-cloak>
 
     <!-- ══════════════════════════════════════
          TOOLBAR
