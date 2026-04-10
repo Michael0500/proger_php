@@ -88,7 +88,7 @@
             </div>
 
             <!-- ПАНЕЛЬ ФИЛЬТРОВ -->
-            <div v-show="filtersOpen" class="filters-panel" style="display:none">
+            <div v-show="filtersOpen" class="filters-panel">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
                 <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280">
                     <i class="fas fa-filter me-1"></i>Фильтры
