@@ -32,6 +32,23 @@ class MatchingController extends BaseController
         return $user ? $user->company_id : null;
     }
 
+    /**
+     * Определить секцию (NRE/INV) по коду компании текущего пользователя.
+     */
+    private function companySection(): ?string
+    {
+        $user = User::findOne(Yii::$app->user->id);
+        if (!$user || !$user->company_id) {
+            return null;
+        }
+        $company = \app\models\Company::findOne($user->company_id);
+        if (!$company) {
+            return null;
+        }
+        $code = strtoupper($company->code);
+        return in_array($code, ['NRE', 'INV']) ? $code : null;
+    }
+
     // ── Ручное квитование ─────────────────────────────────────────────
 
     /**
@@ -104,13 +121,15 @@ class MatchingController extends BaseController
             ? (int) Yii::$app->request->post('account_id')
             : null;
 
-        return $this->service()->autoMatch($companyId, $accountId);
+        $section = Yii::$app->request->post('section') ?: $this->companySection();
+
+        return $this->service()->autoMatch($companyId, $accountId, null, $section);
     }
 
     /**
      * POST /matching/auto-match-start
      * Инициализация пошагового автоквитования с прогрессом.
-     * body: account_id=X (опционально)
+     * body: account_id=X (опционально), section=NRE|INV (опционально, по умолчанию из компании)
      * Возвращает job_id и количество правил.
      */
     public function actionAutoMatchStart(): array
@@ -126,7 +145,11 @@ class MatchingController extends BaseController
             ? (int) Yii::$app->request->post('account_id')
             : null;
 
-        return $this->service()->autoMatchStart($companyId, $accountId);
+        $section   = Yii::$app->request->post('section') ?: $this->companySection();
+        $scopeType = Yii::$app->request->post('scope_type') ?: 'all';
+        $scopeId   = Yii::$app->request->post('scope_id') ? (int) Yii::$app->request->post('scope_id') : null;
+
+        return $this->service()->autoMatchStart($companyId, $accountId, $section, $scopeType, $scopeId);
     }
 
     /**

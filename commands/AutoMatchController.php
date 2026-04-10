@@ -103,6 +103,11 @@ class AutoMatchController extends Controller
                 continue;
             }
 
+            // Определяем секцию по коду компании
+            $section = in_array(strtoupper($company->code), ['NRE', 'INV'])
+                ? strtoupper($company->code)
+                : null;
+
             // Запускаем с callback прогресса
             $result = $service->autoMatch($company->id, $accountId, function (
                 int $ruleIndex, string $ruleName, int $matchedInRule, int $totalMatched
@@ -113,7 +118,7 @@ class AutoMatchController extends Controller
                 $this->stdout("{$ruleName}");
                 $this->stdout(" → пар: {$matchedInRule}", Console::BOLD);
                 $this->stdout(" (итого: {$totalMatched})\n");
-            });
+            }, $section);
 
             $matched = $result['matched'] ?? 0;
             $grandTotal += $matched;

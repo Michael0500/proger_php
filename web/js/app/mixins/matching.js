@@ -17,7 +17,12 @@ var MatchingMixin = {
                 cross_id_search: false, is_active: true, priority: 100, description: ''
             },
             autoMatchRunning: false,
-            autoMatchProgress: null  // { job_id, total_steps, current_step, total_matched, rules, step_results, unmatched_count }
+            autoMatchProgress: null,  // { job_id, total_steps, current_step, total_matched, rules, step_results, unmatched_count }
+            autoMatchScope: {
+                type: 'all',   // 'all' | 'pool' | 'group' | 'category'
+                poolId: null,
+                poolName: ''
+            }
         };
     },
 
@@ -122,46 +127,73 @@ var MatchingMixin = {
             });
         },
 
-        // ─── Автоквитование с прогрессом ─────────────────────────
+        // ─── Автоквитование — открыть модалку выбора области ─────
         runAutoMatch: function () {
             var self = this;
             if (!self.selectedGroup) return;
 
-            Swal.fire({
-                title: 'Автоквитование',
-                html: 'Запустить по всем записям группы <b>' + self.selectedGroup.name + '</b>?',
-                icon: 'question', showCancelButton: true,
-                confirmButtonText: '<i class="fas fa-magic me-1"></i>Запустить',
-                cancelButtonText: 'Отмена', confirmButtonColor: '#6366f1'
-            }).then(function (r) {
-                if (!r.isConfirmed) return;
-                self.autoMatchRunning = true;
-                self.autoMatchProgress = null;
-
-                // Шаг 1: инициализация
-                SmartMatchApi.post(window.AppRoutes.autoMatchStart, {}).then(function (res) {
-                    if (!res.success) {
-                        Swal.fire({ icon: 'error', title: 'Ошибка', text: res.message });
-                        self.autoMatchRunning = false;
-                        return;
+            // Определяем ностробанк из фильтров текущей группы
+            var poolId = null;
+            var poolName = '';
+            if (self.selectedGroup && Array.isArray(self.selectedGroup.filters)) {
+                for (var i = 0; i < self.selectedGroup.filters.length; i++) {
+                    var f = self.selectedGroup.filters[i];
+                    if (f.field === 'account_pool_id' && f.operator === 'eq' && f.value) {
+                        poolId = parseInt(f.value, 10);
+                        var foundPool = (self.accountPools || []).find(function (p) { return p.id === poolId; });
+                        poolName = foundPool ? foundPool.name : ('Ностробанк #' + poolId);
+                        break;
                     }
+                }
+            }
 
-                    self.autoMatchProgress = {
-                        job_id:          res.job_id,
-                        total_steps:     res.total_steps,
-                        current_step:    0,
-                        total_matched:   0,
-                        rules:           res.rules,
-                        step_results:    [],
-                        unmatched_count: res.unmatched_count
-                    };
+            self.autoMatchScope = { type: 'all', poolId: poolId, poolName: poolName };
 
-                    // Шаг 2: выполняем правила по одному
-                    self._runAutoMatchNextStep();
-                }).catch(function () {
+            // Дефолтная опция: если есть ностробанк — по ностробанку, иначе — по категории
+            if (poolId) {
+                self.autoMatchScope.type = 'pool';
+            } else {
+                self.autoMatchScope.type = 'category';
+            }
+
+            self._showModal('autoMatchScopeModal');
+        },
+
+        // ─── Автоквитование — подтвердить и запустить ─────────────
+        confirmAutoMatch: function () {
+            var self = this;
+            self._hideModal('autoMatchScopeModal');
+            self.autoMatchRunning = true;
+            self.autoMatchProgress = null;
+
+            var payload = { scope_type: self.autoMatchScope.type };
+            if (self.autoMatchScope.type === 'pool' && self.autoMatchScope.poolId) {
+                payload.scope_id = self.autoMatchScope.poolId;
+            } else if (self.autoMatchScope.type === 'category' && self.selectedCategory) {
+                payload.scope_id = self.selectedCategory.id;
+            }
+
+            SmartMatchApi.post(window.AppRoutes.autoMatchStart, payload).then(function (res) {
+                if (!res.success) {
+                    Swal.fire({ icon: 'error', title: 'Ошибка', text: res.message });
                     self.autoMatchRunning = false;
-                    Swal.fire({ icon: 'error', title: 'Ошибка сети' });
-                });
+                    return;
+                }
+
+                self.autoMatchProgress = {
+                    job_id:          res.job_id,
+                    total_steps:     res.total_steps,
+                    current_step:    0,
+                    total_matched:   0,
+                    rules:           res.rules,
+                    step_results:    [],
+                    unmatched_count: res.unmatched_count
+                };
+
+                self._runAutoMatchNextStep();
+            }).catch(function () {
+                self.autoMatchRunning = false;
+                Swal.fire({ icon: 'error', title: 'Ошибка сети' });
             });
         },
 

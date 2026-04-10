@@ -825,3 +825,73 @@
         </div>
     </div>
 </div>
+
+<!-- ══════════════════════════ Автоквитование — выбор области ══════════════════════════ -->
+<div class="modal fade" id="autoMatchScopeModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:460px">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <span class="modal-icon indigo"><i class="fas fa-magic"></i></span>
+                    Автоквитование
+                </h5>
+                <button type="button" class="btn-close" @click="_hideModal('autoMatchScopeModal')"></button>
+            </div>
+            <div class="modal-body" style="padding:20px 24px">
+                <p style="font-size:13px;color:#6b7280;margin-bottom:16px">
+                    Выберите область записей для автоквитования:
+                </p>
+
+                <!-- Опция: по всем записям -->
+                <label class="automatch-scope-option" :class="{ active: autoMatchScope.type === 'all' }"
+                       @click="autoMatchScope.type = 'all'">
+                    <div class="automatch-scope-radio">
+                        <div class="automatch-scope-dot" v-if="autoMatchScope.type === 'all'"></div>
+                    </div>
+                    <div>
+                        <div class="automatch-scope-title">Все записи</div>
+                        <div class="automatch-scope-desc">Квитовать по всем незаквитованным записям раздела</div>
+                    </div>
+                </label>
+
+                <!-- Опция: по категории -->
+                <label class="automatch-scope-option" :class="{ active: autoMatchScope.type === 'category' }"
+                       @click="autoMatchScope.type = 'category'"
+                       v-if="selectedCategory">
+                    <div class="automatch-scope-radio">
+                        <div class="automatch-scope-dot" v-if="autoMatchScope.type === 'category'"></div>
+                    </div>
+                    <div>
+                        <div class="automatch-scope-title">По категории</div>
+                        <div class="automatch-scope-desc">
+                            Только записи категории <b>{{ selectedCategory ? selectedCategory.name : '' }}</b>
+                        </div>
+                    </div>
+                </label>
+
+                <!-- Опция: по ностробанку -->
+                <label class="automatch-scope-option" :class="{ active: autoMatchScope.type === 'pool' }"
+                       @click="autoMatchScope.type = 'pool'"
+                       v-if="autoMatchScope.poolId">
+                    <div class="automatch-scope-radio">
+                        <div class="automatch-scope-dot" v-if="autoMatchScope.type === 'pool'"></div>
+                    </div>
+                    <div>
+                        <div class="automatch-scope-title">По ностробанку</div>
+                        <div class="automatch-scope-desc">
+                            Только записи ностробанка <b>{{ autoMatchScope.poolName }}</b>
+                        </div>
+                    </div>
+                </label>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn cancel" @click="_hideModal('autoMatchScopeModal')">
+                    <i class="fas fa-times"></i>Отмена
+                </button>
+                <button class="modal-btn save" @click="confirmAutoMatch" style="background:#6366f1">
+                    <i class="fas fa-magic"></i>Запустить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

@@ -5,6 +5,9 @@ namespace app\services;
 use Yii;
 use app\models\NostroEntry;
 use app\models\MatchingRule;
+use app\models\Account;
+use app\models\Group;
+use app\models\GroupFilter;
 
 /**
  * Сервис квитования записей Ностро.
@@ -143,10 +146,14 @@ class MatchingService
      * @param callable|null $onProgress  callback(int $ruleIndex, string $ruleName, int $matchedInRule, int $totalMatched)
      * @return array ['success'=>bool, 'matched'=>int, 'rules_count'=>int, 'message'=>string]
      */
-    public function autoMatch(int $companyId, ?int $accountId = null, ?callable $onProgress = null): array
+    public function autoMatch(int $companyId, ?int $accountId = null, ?callable $onProgress = null, ?string $section = null): array
     {
+        $where = ['company_id' => $companyId, 'is_active' => true];
+        if ($section) {
+            $where['section'] = $section;
+        }
         $rules = MatchingRule::find()
-            ->where(['company_id' => $companyId, 'is_active' => true])
+            ->where($where)
             ->orderBy(['priority' => SORT_ASC])
             ->all();
 
@@ -187,13 +194,83 @@ class MatchingService
     // ── Пошаговое автоквитование (для UI с прогрессом) ──────────────
 
     /**
+     * Разрешить scope в список account_id.
+     * scope_type: 'all' | 'pool' | 'group' | 'category'
+     * scope_id:   id соответствующей сущности (null для 'all')
+     * Возвращает null = без ограничений, [] = нет подходящих счетов.
+     */
+    public function resolveScopeAccounts(int $companyId, string $scopeType, ?int $scopeId): ?array
+    {
+        if ($scopeType === 'all' || !$scopeId) {
+            return null; // без ограничений
+        }
+
+        if ($scopeType === 'pool') {
+            return Account::find()
+                ->select('id')
+                ->where(['pool_id' => $scopeId, 'company_id' => $companyId])
+                ->column();
+        }
+
+        if ($scopeType === 'group') {
+            $group = Group::findOne(['id' => $scopeId, 'company_id' => $companyId]);
+            if (!$group) return [];
+
+            $groupFilters = GroupFilter::find()
+                ->where(['group_id' => $scopeId])
+                ->orderBy(['sort_order' => SORT_ASC])
+                ->all();
+
+            if (empty($groupFilters)) {
+                // Нет фильтров — берём все счета компании
+                return Account::find()->select('id')->where(['company_id' => $companyId])->column();
+            }
+
+            $accountFilters = array_values(array_filter($groupFilters, fn($f) => $f->isAccountField()));
+            if (empty($accountFilters)) {
+                return Account::find()->select('id')->where(['company_id' => $companyId])->column();
+            }
+
+            $q = Account::find()->select('id')->where(['company_id' => $companyId]);
+            foreach ($accountFilters as $f) {
+                $cond = $f->buildAccountCondition();
+                if ($cond === null) continue;
+                if ($f->logic === 'OR') $q->orWhere($cond);
+                else $q->andWhere($cond);
+            }
+            return $q->column();
+        }
+
+        if ($scopeType === 'category') {
+            $groups = Group::find()
+                ->where(['category_id' => $scopeId, 'company_id' => $companyId])
+                ->all();
+            if (empty($groups)) return [];
+
+            $allIds = [];
+            foreach ($groups as $group) {
+                $ids = $this->resolveScopeAccounts($companyId, 'group', $group->id);
+                if ($ids === null) return null;
+                $allIds = array_merge($allIds, $ids);
+            }
+            return array_values(array_unique($allIds));
+        }
+
+        return null;
+    }
+
+    /**
      * Инициализация пошагового автоквитования.
      * Возвращает job_id и информацию о правилах.
      */
-    public function autoMatchStart(int $companyId, ?int $accountId = null): array
+    public function autoMatchStart(int $companyId, ?int $accountId = null, ?string $section = null, string $scopeType = 'all', ?int $scopeId = null): array
     {
+        $where = ['company_id' => $companyId, 'is_active' => true];
+        if ($section) {
+            $where['section'] = $section;
+        }
         $rules = MatchingRule::find()
-            ->where(['company_id' => $companyId, 'is_active' => true])
+            ->where($where)
             ->orderBy(['priority' => SORT_ASC])
             ->all();
 
@@ -201,10 +278,16 @@ class MatchingService
             return ['success' => false, 'message' => 'Нет активных правил квитования'];
         }
 
+        // Разрешаем scope в список account_id
+        $scopeAccountIds = $this->resolveScopeAccounts($companyId, $scopeType, $scopeId);
+
         // Считаем незаквитованные записи
         $query = NostroEntry::find()
             ->where(['company_id' => $companyId, 'match_status' => NostroEntry::STATUS_UNMATCHED]);
-        if ($accountId) {
+        if ($scopeAccountIds !== null) {
+            if (empty($scopeAccountIds)) return ['success' => false, 'message' => 'Нет счетов в выбранной области'];
+            $query->andWhere(['account_id' => $scopeAccountIds]);
+        } elseif ($accountId) {
             $query->andWhere(['account_id' => $accountId]);
         }
         $unmatchedCount = (int) $query->count();
@@ -220,15 +303,19 @@ class MatchingService
 
         // Сохраняем состояние в кэш
         $state = [
-            'company_id'      => $companyId,
-            'account_id'      => $accountId,
-            'rules'           => array_map(fn($r) => $r->id, $rules),
-            'current_step'    => 0,
-            'total_steps'     => count($rules),
-            'total_matched'   => 0,
-            'step_results'    => [],
-            'is_finished'     => false,
-            'started_at'      => date('Y-m-d H:i:s'),
+            'company_id'       => $companyId,
+            'account_id'       => $accountId,
+            'section'          => $section,
+            'scope_type'       => $scopeType,
+            'scope_id'         => $scopeId,
+            'scope_account_ids'=> $scopeAccountIds,
+            'rules'            => array_map(fn($r) => $r->id, $rules),
+            'current_step'     => 0,
+            'total_steps'      => count($rules),
+            'total_matched'    => 0,
+            'step_results'     => [],
+            'is_finished'      => false,
+            'started_at'       => date('Y-m-d H:i:s'),
         ];
         Yii::$app->cache->set('automatch_' . $jobId, $state, 3600);
 
@@ -285,7 +372,8 @@ class MatchingService
 
         if ($rule) {
             try {
-                $matched = $this->runRule($rule, $state['company_id'], $state['account_id']);
+                $scopeIds = $state['scope_account_ids'] ?? null;
+                $matched = $this->runRule($rule, $state['company_id'], $state['account_id'], $scopeIds);
             } catch (\Exception $e) {
                 $error = $e->getMessage();
                 Yii::error("AutoMatch step rule #{$ruleId}: " . $e->getMessage());
@@ -332,7 +420,7 @@ class MatchingService
      *
      * Возвращает количество сквитованных пар.
      */
-    public function runRule(MatchingRule $rule, int $companyId, ?int $accountId): int
+    public function runRule(MatchingRule $rule, int $companyId, ?int $accountId, ?array $limitAccountIds = null): int
     {
         $db = Yii::$app->db;
 
@@ -347,6 +435,10 @@ class MatchingService
         $dcCondition = $rule->match_dc
             ? "AND ((a.dc = 'Debit' AND b.dc = 'Credit') OR (a.dc = 'Credit' AND b.dc = 'Debit'))"
             : '';
+
+        // Для LL/SS: оба типа одинаковы → пара (a,b) и (b,a) найдутся обе.
+        // a.id < b.id гарантирует, что каждая пара найдётся ровно один раз.
+        $sameSideCondition = ($typeA === $typeB) ? 'AND a.id < b.id' : '';
 
         $now       = date('Y-m-d H:i:s');
         $userId    = (Yii::$app instanceof \yii\web\Application && !Yii::$app->user->isGuest)
@@ -365,6 +457,11 @@ class MatchingService
         if ($accountId) {
             $poolQuery .= " AND id = {$accountId}";
         }
+        if ($limitAccountIds !== null) {
+            if (empty($limitAccountIds)) return 0;
+            $limitList = implode(',', array_map('intval', $limitAccountIds));
+            $poolQuery .= " AND id IN ({$limitList})";
+        }
         $poolIds = $db->createCommand($poolQuery)->queryColumn();
 
         if (empty($poolIds)) {
@@ -377,6 +474,11 @@ class MatchingService
                 SELECT id FROM accounts
                 WHERE pool_id = {$poolId} AND company_id = {$companyId}
             ")->queryColumn();
+
+            // Применяем scope-ограничение
+            if ($limitAccountIds !== null) {
+                $accountIds = array_values(array_intersect($accountIds, $limitAccountIds));
+            }
 
             if (empty($accountIds)) {
                 continue;
@@ -404,6 +506,7 @@ class MatchingService
                        AND b.match_status = 'U'
                        AND b.account_id IN ({$accList})
                        AND b.id <> a.id
+                       {$sameSideCondition}
                        AND {$joinSql}
                        {$dcCondition}
                     WHERE
