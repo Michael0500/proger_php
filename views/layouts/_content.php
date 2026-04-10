@@ -31,6 +31,10 @@
                         {{ activeFilterCount() }}
                     </span>
                     </button>
+                    <button v-if="activeFilterCount() > 0" class="toolbar-btn outline" @click="clearAllFilters"
+                            style="border-color:#ef4444;color:#ef4444">
+                        <i class="fas fa-times"></i>Сбросить фильтры
+                    </button>
                     <button class="toolbar-btn outline" @click="showAddEntryModal()">
                         <i class="fas fa-plus"></i>Добавить запись
                     </button>
