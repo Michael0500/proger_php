@@ -139,7 +139,6 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                     <hr style="border-color:#e5e7eb;margin:16px 0 12px">
                     <div style="font-size:12px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;margin-bottom:12px">
                         <i class="fas fa-link me-1"></i> Привязка счетов
-                        <span v-if="formPool.id" style="font-weight:400;text-transform:none;font-size:11px;color:#9ca3af"> — будут добавлены к уже привязанным</span>
                     </div>
 
                     <div class="row g-3 mb-3">
@@ -415,7 +414,7 @@ new Vue({
                         return { id: String(a.id), text: a.name + (a.currency ? ' (' + a.currency + ')' : '') };
                     }),
                     dropdownParent: $('#poolModal'),
-                }).val(null).trigger('change');
+                }).val(self.createSelectedLedger.length ? self.createSelectedLedger : null).trigger('change');
                 $l.on('change.ledger', function () {
                     self.createSelectedLedger = $l.val() || [];
                 });
@@ -434,7 +433,7 @@ new Vue({
                         return { id: String(a.id), text: a.name + (a.currency ? ' (' + a.currency + ')' : '') };
                     }),
                     dropdownParent: $('#poolModal'),
-                }).val(null).trigger('change');
+                }).val(self.createSelectedStatement.length ? self.createSelectedStatement : null).trigger('change');
                 $s.on('change.stmt', function () {
                     self.createSelectedStatement = $s.val() || [];
                 });
@@ -452,7 +451,7 @@ new Vue({
                         return { id: String(c.id), text: c.name };
                     }),
                     dropdownParent: $('#poolModal'),
-                }).val(null).trigger('change');
+                }).val(self.createSelectedCategoryId || null).trigger('change');
                 $c.on('change.cat', function () {
                     self.createSelectedCategoryId = $c.val() || '';
                 });
@@ -464,14 +463,17 @@ new Vue({
             self.formPool = { id: pool.id, name: pool.name, description: pool.description || '' };
             self.createSelectedLedger = [];
             self.createSelectedStatement = [];
-            self.createSelectedCategoryId = '';
+            self.createSelectedCategoryId = pool.category_id ? String(pool.category_id) : '';
             self._modal('poolModal', 'show');
 
             self.loadingCreateAccounts = true;
-            axios.get('<?= Url::to(['/account-pool/available-accounts']) ?>').then(function (r) {
+            axios.get('<?= Url::to(['/account-pool/available-accounts']) ?>', { params: { pool_id: pool.id } }).then(function (r) {
                 var accounts = r.data.success ? r.data.data : [];
                 self.createLedgerAccounts    = accounts.filter(function (a) { return a.account_type === 'L'; });
                 self.createStatementAccounts = accounts.filter(function (a) { return a.account_type === 'S'; });
+                // Предвыбрать уже привязанные
+                self.createSelectedLedger    = accounts.filter(function (a) { return a.account_type === 'L' && a.assigned; }).map(function (a) { return String(a.id); });
+                self.createSelectedStatement = accounts.filter(function (a) { return a.account_type === 'S' && a.assigned; }).map(function (a) { return String(a.id); });
             }).finally(function () {
                 self.loadingCreateAccounts = false;
                 self.$nextTick(function () { self._initCreateSelects(); });

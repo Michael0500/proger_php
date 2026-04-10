@@ -42,6 +42,7 @@ class Account extends ActiveRecord
             [['date_open', 'date_close', 'created_at', 'updated_at'], 'safe'],
             [['name'], 'string', 'max' => 55],
             [['currency'], 'string', 'max' => 3],
+            [['account_type'], 'required', 'message' => 'Тип счёта обязателен'],
             [['account_type'], 'string', 'max' => 50],
             [['country'], 'string', 'max' => 50],
             [['load_status'], 'string', 'max' => 1],

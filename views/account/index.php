@@ -146,7 +146,7 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
 
                         <!-- Тип счёта Ledger/Statement -->
                         <div class="col-md-3">
-                            <label class="form-label">Тип счёта</label>
+                            <label class="form-label">Тип счёта <span style="color:#ef4444">*</span></label>
                             <select class="form-select" v-model="form.account_type">
                                 <option value="">— не указан —</option>
                                 <option value="L">L — Ledger</option>
@@ -199,7 +199,7 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-                    <button type="button" class="btn btn-primary" @click="saveAccount" :disabled="!form.name.trim() || saving">
+                    <button type="button" class="btn btn-primary" @click="saveAccount" :disabled="!form.name.trim() || !form.account_type || saving">
                         <i v-if="saving" class="fas fa-spinner fa-spin me-1"></i>
                         {{ form.id ? 'Сохранить' : 'Создать' }}
                     </button>

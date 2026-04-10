@@ -49,16 +49,32 @@ class AccountPoolController extends BaseController
             ->orderBy(['name' => SORT_ASC])
             ->all();
 
+        // Привязки пулов к категориям через GroupFilter
+        $poolIds = array_map(function ($p) { return $p->id; }, $pools);
+        $poolCategoryMap = [];
+        if ($poolIds) {
+            $rows = (new \yii\db\Query())
+                ->select(['gf.value AS pool_id', 'g.category_id'])
+                ->from('{{%group_filters}} gf')
+                ->innerJoin('{{%groups}} g', 'g.id = gf.group_id')
+                ->where(['gf.field' => 'account_pool_id', 'gf.value' => array_map('strval', $poolIds), 'g.company_id' => $cid])
+                ->all();
+            foreach ($rows as $row) {
+                $poolCategoryMap[(int)$row['pool_id']] = (int)$row['category_id'];
+            }
+        }
+
         $initData = [
             'categories' => array_map(function ($c) {
                 return ['id' => $c->id, 'name' => $c->name];
             }, $categories),
-            'pools' => array_map(function ($p) {
+            'pools' => array_map(function ($p) use ($poolCategoryMap) {
                 return [
                     'id'          => $p->id,
                     'name'        => $p->name,
                     'description' => $p->description,
                     'created_at'  => $p->created_at,
+                    'category_id' => $poolCategoryMap[$p->id] ?? null,
                     'accounts'    => array_map(function ($a) {
                         return [
                             'id'          => $a->id,
@@ -91,12 +107,28 @@ class AccountPoolController extends BaseController
             ->orderBy(['name' => SORT_ASC])
             ->all();
 
-        $data = array_map(function ($p) {
+        // Найти привязки пулов к категориям через GroupFilter(field='account_pool_id')
+        $poolIds = array_map(function ($p) { return $p->id; }, $pools);
+        $poolCategoryMap = [];
+        if ($poolIds) {
+            $rows = (new \yii\db\Query())
+                ->select(['gf.value AS pool_id', 'g.category_id'])
+                ->from('{{%group_filters}} gf')
+                ->innerJoin('{{%groups}} g', 'g.id = gf.group_id')
+                ->where(['gf.field' => 'account_pool_id', 'gf.value' => array_map('strval', $poolIds), 'g.company_id' => $cid])
+                ->all();
+            foreach ($rows as $row) {
+                $poolCategoryMap[(int)$row['pool_id']] = (int)$row['category_id'];
+            }
+        }
+
+        $data = array_map(function ($p) use ($poolCategoryMap) {
             return [
                 'id'          => $p->id,
                 'name'        => $p->name,
                 'description' => $p->description,
                 'created_at'  => $p->created_at,
+                'category_id' => $poolCategoryMap[$p->id] ?? null,
                 'accounts'    => array_map(function ($a) {
                     return [
                         'id'          => $a->id,
@@ -226,12 +258,24 @@ class AccountPoolController extends BaseController
                 return ['success' => false, 'message' => 'Ошибка обновления', 'errors' => $model->errors];
             }
 
-            // Привязываем только свободные счета (pool_id = null)
-            $allAccountIds = array_merge($ledgerIds, $statementIds);
-            if ($allAccountIds) {
+            // Синхронизация привязок: отвязать убранные, привязать новые
+            $newAccountIds = array_merge($ledgerIds, $statementIds);
+
+            // Отвязать счета, которых нет в новом списке
+            $condition = ['pool_id' => $model->id, 'company_id' => $cid];
+            if ($newAccountIds) {
+                $condition = ['and', $condition, ['not in', 'id', $newAccountIds]];
+            }
+            Account::updateAll(['pool_id' => null], $condition);
+
+            // Привязать новые (свободные или уже принадлежащие этому пулу)
+            if ($newAccountIds) {
                 Account::updateAll(
                     ['pool_id' => $model->id],
-                    ['id' => $allAccountIds, 'company_id' => $cid, 'pool_id' => null]
+                    ['and',
+                        ['id' => $newAccountIds, 'company_id' => $cid],
+                        ['or', ['pool_id' => null], ['pool_id' => $model->id]],
+                    ]
                 );
             }
 
@@ -331,24 +375,34 @@ class AccountPoolController extends BaseController
 
     /**
      * GET /account-pool/available-accounts
-     * Счета компании, не привязанные ни к одному ностро-банку
+     * Счета компании, не привязанные ни к одному ностро-банку.
+     * Если передан pool_id — включает также счета этого пула (для формы редактирования).
      */
     public function actionAvailableAccounts(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
         $cid = $this->cid();
+        $poolId = Yii::$app->request->get('pool_id') ? (int)Yii::$app->request->get('pool_id') : null;
 
-        $accounts = Account::find()
-            ->where(['company_id' => $cid, 'pool_id' => null])
-            ->orderBy(['name' => SORT_ASC])
-            ->all();
+        $query = Account::find()
+            ->where(['company_id' => $cid])
+            ->orderBy(['name' => SORT_ASC]);
 
-        $data = array_map(function ($a) {
+        if ($poolId) {
+            $query->andWhere(['or', ['pool_id' => null], ['pool_id' => $poolId]]);
+        } else {
+            $query->andWhere(['pool_id' => null]);
+        }
+
+        $accounts = $query->all();
+
+        $data = array_map(function ($a) use ($poolId) {
             return [
                 'id'           => $a->id,
                 'name'         => $a->name,
                 'currency'     => $a->currency ?? null,
                 'account_type' => $a->account_type ?? '',
+                'assigned'     => $poolId && (int)$a->pool_id === $poolId,
             ];
         }, $accounts);
 
