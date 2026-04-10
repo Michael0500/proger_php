@@ -50,7 +50,7 @@
                         <template v-else-if="autoMatchRunning">Запуск...</template>
                         <template v-else>Автоквитование</template>
                     </button>
-                    <button class="toolbar-btn success" :disabled="selectedIds.length < 2" @click="matchSelected">
+                    <button class="toolbar-btn success" :disabled="!hasSelection" @click="matchSelected">
                         <i class="fas fa-link"></i>
                         Сквитовать{{ selectedIds.length > 0 ? ' (' + selectedIds.length + ')' : '' }}
                     </button>
@@ -227,23 +227,39 @@
                 <i class="fas fa-check-square" style="color:#6366f1"></i>
                 <strong>{{ selectedIds.length }}</strong> выбрано
             </span>
-                <span class="summary-sep">|</span>
-                <span class="summary-item">
-                <span class="mono" style="color:#6366f1">L:</span>
-                <strong class="mono">{{ formatAmount(selectionSummary.sum_ledger) }}</strong>
-                <span style="font-size:10px;color:#9ca3af">({{ selectionSummary.cnt_ledger }})</span>
-            </span>
-                <span class="summary-sep">|</span>
-                <span class="summary-item">
-                <span class="mono" style="color:#0284c7">S:</span>
-                <strong class="mono">{{ formatAmount(selectionSummary.sum_statement) }}</strong>
-                <span style="font-size:10px;color:#9ca3af">({{ selectionSummary.cnt_statement }})</span>
-            </span>
+                <!-- NRE: показываем L / S -->
+                <template v-if="userSection !== 'INV'">
+                    <span class="summary-sep">|</span>
+                    <span class="summary-item">
+                        <span class="mono" style="color:#6366f1">L:</span>
+                        <strong class="mono">{{ formatAmount(selectionSummary.sum_ledger) }}</strong>
+                        <span style="font-size:10px;color:#9ca3af">({{ selectionSummary.cnt_ledger }})</span>
+                    </span>
+                    <span class="summary-sep">|</span>
+                    <span class="summary-item">
+                        <span class="mono" style="color:#0284c7">S:</span>
+                        <strong class="mono">{{ formatAmount(selectionSummary.sum_statement) }}</strong>
+                        <span style="font-size:10px;color:#9ca3af">({{ selectionSummary.cnt_statement }})</span>
+                    </span>
+                </template>
+                <!-- INV: показываем D / C -->
+                <template v-else>
+                    <span class="summary-sep">|</span>
+                    <span class="summary-item">
+                        <span class="mono" style="color:#ef4444">D:</span>
+                        <strong class="mono">{{ formatAmount(selectionSummary.sum_debit) }}</strong>
+                    </span>
+                    <span class="summary-sep">|</span>
+                    <span class="summary-item">
+                        <span class="mono" style="color:#10b981">C:</span>
+                        <strong class="mono">{{ formatAmount(selectionSummary.sum_credit) }}</strong>
+                    </span>
+                </template>
                 <span class="summary-sep">|</span>
                 <span class="summary-item" :style="summaryBalanced ?
                    'color:#059669;font-weight:700' : 'color:#d97706;font-weight:700'">
                 <i :class="summaryBalanced ? 'fas fa-check-circle' : 'fas fa-exclamation-triangle'"></i>
-                Разница: <span style="font-family:monospace">{{ formatAmount(selectionSummary.diff) }}</span>
+                Разница: <span style="font-family:monospace">{{ formatAmount(Math.abs(summaryDiff)) }}</span>
                 <span v-if="summaryBalanced" style="font-weight:500;margin-left:4px">— готово!</span>
             </span>
             </div>
@@ -440,6 +456,9 @@
                 <button class="toolbar-btn outline" @click="balanceFiltersOpen=!balanceFiltersOpen"
                         :style="balanceFiltersOpen?'border-color:#6366f1;color:#6366f1':''">
                     <i class="fas fa-filter"></i>Фильтры
+                </button>
+                <button class="toolbar-btn outline" @click="balanceFilters={};if(userSection){balanceFilters.section=userSection;}onBalanceFilterChange()">
+                    <i class="fas fa-times"></i>Сбросить
                 </button>
                 <button class="toolbar-btn success" @click="openCreateBalanceModal">
                     <i class="fas fa-plus"></i>Добавить
@@ -638,7 +657,7 @@
         </div>
 
         <!-- МОДАЛ: Создать/Редактировать -->
-        <div v-show="balanceModalOpen" class="modal-backdrop-custom" style="display:none" @click.self="closeBalanceModal">
+        <div v-show="balanceModalOpen" class="modal-backdrop-custom"  @click.self="closeBalanceModal">
             <div class="modal-card" style="max-width:600px">
                 <div class="modal-card-header">
                     <span>{{ editingBalance.id ? 'Редактировать баланс' : 'Новая запись баланса' }}</span>
@@ -649,6 +668,7 @@
                         <div>
                             <label class="filter-label">Тип *</label>
                             <select class="filter-input" v-model="editingBalance.ls_type" style="width:100%">
+                                <option value="" disabled>— выберите —</option>
                                 <option value="L">L — Ledger</option>
                                 <option value="S">S — Statement</option>
                             </select>
@@ -738,7 +758,7 @@
         </div>
 
         <!-- МОДАЛ: Подтвердить ошибку -->
-        <div v-show="confirmModalOpen" class="modal-backdrop-custom" style="display:none" @click.self="closeConfirmModal">
+        <div v-show="confirmModalOpen" class="modal-backdrop-custom"  @click.self="closeConfirmModal">
             <div class="modal-card" style="max-width:460px">
                 <div class="modal-card-header">
                     <span>🔴 Подтверждение корректировки</span>
@@ -766,7 +786,7 @@
         </div>
 
         <!-- МОДАЛ: История баланса -->
-        <div v-show="historyModalOpen" class="modal-backdrop-custom" style="display:none" @click.self="closeHistoryModal">
+        <div v-show="historyModalOpen" class="modal-backdrop-custom"  @click.self="closeHistoryModal">
             <div class="modal-card" style="max-width:900px">
                 <div class="modal-card-header">
                     <span>
@@ -924,7 +944,7 @@
         </div>
 
         <!-- МОДАЛ: Импорт -->
-        <div v-show="importModalOpen" class="modal-backdrop-custom" style="display:none" @click.self="closeImportModal">
+        <div v-show="importModalOpen" class="modal-backdrop-custom"  @click.self="closeImportModal">
             <div class="modal-card" style="max-width:460px">
                 <div class="modal-card-header">
                     <span><i class="fas fa-upload me-2"></i>Импорт {{ importType==='bnd'?'Банк-клиент БНД (XML)':'Банк-клиент АСБ (TXT)' }}</span>
@@ -1351,7 +1371,7 @@
         </div>
 
         <!-- МОДАЛ: Настройки архивирования -->
-        <div v-show="archiveSettingsOpen" class="modal-backdrop-custom" style="display:none" @click.self="archiveSettingsOpen=false">
+        <div v-show="archiveSettingsOpen" class="modal-backdrop-custom"  @click.self="archiveSettingsOpen=false">
             <div class="modal-card" style="max-width:440px">
                 <div class="modal-card-header">
                     <span><i class="fas fa-cog me-2"></i>Настройки архивирования</span>

@@ -60,7 +60,7 @@ class NostroEntry extends ActiveRecord
         return [
             [['account_id', 'company_id', 'ls', 'dc', 'amount', 'currency'], 'required'],
             [['account_id', 'company_id', 'created_by', 'updated_by'], 'integer'],
-            [['amount'], 'number'],
+            [['amount'], 'number', 'min' => 0],
             [['value_date', 'post_date', 'created_at', 'updated_at'], 'safe'],
             [['ls'], 'string', 'max' => 1],
             [['ls'], 'in', 'range' => [self::LS_LEDGER, self::LS_STATEMENT]],

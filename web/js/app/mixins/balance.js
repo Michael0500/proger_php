@@ -29,7 +29,7 @@ var BalanceMixin = {
 
             editingBalance: {
                 id: null, account_id: null, account_name: '',
-                ls_type: 'S', statement_number: '', currency: 'RUB',
+                ls_type: '', statement_number: '', currency: 'RUB',
                 value_date: '', opening_balance: '', opening_dc: 'C',
                 closing_balance: '', closing_dc: 'C',
                 section:  section,   // ← дефолт из компании
@@ -210,7 +210,7 @@ var BalanceMixin = {
             var section = (window.AppConfig && window.AppConfig.companySection) || 'NRE';
             this.editingBalance = {
                 id: null, account_id: null, account_name: '',
-                ls_type: 'S', statement_number: '', currency: 'RUB',
+                ls_type: '', statement_number: '', currency: 'RUB',
                 value_date: '', opening_balance: '', opening_dc: 'C',
                 closing_balance: '', closing_dc: 'C',
                 section:  section,
@@ -341,6 +341,9 @@ var BalanceMixin = {
         saveBalance: function () {
             var self = this;
             if (self.balanceSaving) return;
+            if (!self.editingBalance.ls_type) {
+                self._balanceNotify('Выберите тип (L или S)', 'warning'); return;
+            }
             if (!self.editingBalance.account_id) {
                 self._balanceNotify('Выберите счёт', 'warning'); return;
             }

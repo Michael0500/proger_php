@@ -30,59 +30,85 @@ class MatchingService
 
     /**
      * Сквитовать набор записей вручную.
-     * Правила:
-     *   - разные типы (L/S) или одинаковые — оба варианта допустимы по ТЗ
-     *   - сумма Ledger = сумма Statement (если разница != 0 — предупреждение, не ошибка)
-     *   - противоположные D/C обязательны ТОЛЬКО при смешанном L+S
      *
-     * @param int[] $ids     Массив ID записей NostroEntry
+     * Для NRE (L+S):
+     *   - сумма Ledger = сумма Statement (если разница != 0 — предупреждение)
+     *   - минимум 2 записи
+     *
+     * Для INV (только Ledger):
+     *   - балансировка по Debit/Credit (сумма D = сумма C)
+     *   - если разница D/C = 0 — разрешена даже 1 запись (например, сумма = 0)
+     *
+     * @param int[]       $ids      Массив ID записей NostroEntry
+     * @param string|null $section  'NRE' | 'INV' (null → NRE-логика)
      * @return array ['success'=>bool, 'match_id'=>string|null, 'warning'=>string|null, 'message'=>string]
      */
-    public function matchManual(array $ids): array
+    public function matchManual(array $ids, ?string $section = null): array
     {
-        if (count($ids) < 2) {
-            return ['success' => false, 'message' => 'Выберите минимум 2 записи'];
-        }
+        $isInv = ($section === 'INV');
 
         $entries = NostroEntry::find()
             ->where(['id' => $ids, 'match_status' => NostroEntry::STATUS_UNMATCHED])
             ->all();
 
-        if (count($entries) < 2) {
-            return ['success' => false, 'message' => 'Не найдено достаточно незаквитованных записей'];
+        if (empty($entries)) {
+            return ['success' => false, 'message' => 'Незаквитованные записи не найдены'];
         }
 
-        // Подсчёт сумм по типу
-        $sumLedger    = 0.0;
-        $sumStatement = 0.0;
-        $hasLedger    = false;
-        $hasStatement = false;
-
-        foreach ($entries as $e) {
-            $signed = ($e->dc === NostroEntry::DC_DEBIT) ? $e->amount : -$e->amount;
-            if ($e->ls === NostroEntry::LS_LEDGER) {
-                $sumLedger += $signed;
-                $hasLedger  = true;
-            } else {
-                $sumStatement += $signed;
-                $hasStatement = true;
+        // Для 1 записи: разрешаем только если сумма = 0
+        if (count($entries) === 1) {
+            if (round((float) $entries[0]->amount, 2) !== 0.0) {
+                return ['success' => false, 'message' => 'Выберите минимум 2 записи (одиночная запись должна иметь сумму 0)'];
             }
-        }
-
-        $warning = null;
-
-        // Если есть и Ledger и Statement — проверяем балансировку
-        if ($hasLedger && $hasStatement) {
-            $diff = round(abs($sumLedger + $sumStatement), 2);
-            if ($diff > 0) {
-                $warning = 'Разница сумм: ' . number_format($diff, 2, '.', ',');
-                // По ТЗ: если разница != 0 — предупреждение, запись остаётся на ручном разборе
+            // amount = 0 → квитуем без дополнительных проверок
+        } elseif ($isInv) {
+            // INV (2+ записей): проверяем баланс по Debit/Credit
+            $sumDebit  = 0.0;
+            $sumCredit = 0.0;
+            foreach ($entries as $e) {
+                if ($e->dc === NostroEntry::DC_DEBIT) {
+                    $sumDebit  += (float) $e->amount;
+                } else {
+                    $sumCredit += (float) $e->amount;
+                }
+            }
+            $diffDC = round(abs($sumDebit - $sumCredit), 2);
+            if ($diffDC > 0) {
                 return [
                     'success' => false,
                     'warning' => true,
-                    'diff'    => $diff,
-                    'message' => 'Суммы не сбалансированы. Разница: ' . number_format($diff, 2, '.', ',')
+                    'diff'    => $diffDC,
+                    'message' => 'Дисбаланс Debit/Credit. Разница: ' . number_format($diffDC, 2, '.', ',')
                 ];
+            }
+        } else {
+            // NRE (2+ записей): проверяем баланс по L/S
+            $sumLedger    = 0.0;
+            $sumStatement = 0.0;
+            $hasLedger    = false;
+            $hasStatement = false;
+
+            foreach ($entries as $e) {
+                $signed = ($e->dc === NostroEntry::DC_DEBIT) ? $e->amount : -$e->amount;
+                if ($e->ls === NostroEntry::LS_LEDGER) {
+                    $sumLedger += $signed;
+                    $hasLedger  = true;
+                } else {
+                    $sumStatement += $signed;
+                    $hasStatement = true;
+                }
+            }
+
+            if ($hasLedger && $hasStatement) {
+                $diff = round(abs($sumLedger + $sumStatement), 2);
+                if ($diff > 0) {
+                    return [
+                        'success' => false,
+                        'warning' => true,
+                        'diff'    => $diff,
+                        'message' => 'Суммы не сбалансированы. Разница: ' . number_format($diff, 2, '.', ',')
+                    ];
+                }
             }
         }
 

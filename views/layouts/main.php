@@ -61,7 +61,7 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
                 'options'    => ['class' => 'navbar-expand-md navbar-dark fixed-top'],
         ]);
 
-        $menuItems = [['label' => 'Главная', 'url' => ['/site/index']]];
+        $menuItems = [['label' => 'Выверка', 'url' => ['/site/index']]];
 
         if ($isGuest) {
             $menuItems[] = ['label' => 'Вход', 'url' => ['/site/login']];

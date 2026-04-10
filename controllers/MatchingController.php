@@ -53,18 +53,25 @@ class MatchingController extends BaseController
 
     /**
      * POST /matching/match-manual
-     * body: ids[]=1&ids[]=2&...
+     * body: ids[]=1&ids[]=2&...  section=INV|NRE (опционально)
      */
     public function actionMatchManual(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
 
-        $ids = Yii::$app->request->post('ids');
-        if (!is_array($ids) || count($ids) < 2) {
-            return ['success' => false, 'message' => 'Выберите минимум 2 записи'];
+        $ids     = Yii::$app->request->post('ids');
+        $section = Yii::$app->request->post('section') ?: $this->companySection();
+
+        if (!is_array($ids) || count($ids) < 1) {
+            return ['success' => false, 'message' => 'Выберите записи для квитования'];
         }
 
-        return $this->service()->matchManual(array_map('intval', $ids));
+        // Если 1 запись — сервис проверит что сумма = 0, иначе отклонит
+        if (count($ids) < 2) {
+            // разрешаем пройти в сервис, он сам проверит amount = 0
+        }
+
+        return $this->service()->matchManual(array_map('intval', $ids), $section);
     }
 
     /**

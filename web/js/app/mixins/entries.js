@@ -493,8 +493,8 @@ var EntriesMixin = {
                 return;
             }
             self.editingEntry.amount = self.normalizeAmount(self.editingEntry.amount);
-            if (!self.editingEntry.amount || parseFloat(self.editingEntry.amount) <= 0) {
-                Swal.fire({ icon: 'warning', title: 'Укажите сумму > 0', toast: true,
+            if (self.editingEntry.amount === '' || self.editingEntry.amount === null || isNaN(parseFloat(self.editingEntry.amount))) {
+                Swal.fire({ icon: 'warning', title: 'Укажите сумму', toast: true,
                     position: 'top-end', timer: 2000, showConfirmButton: false });
                 return;
             }

@@ -51,41 +51,25 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                 <!-- Категория -->
                 <div style="min-width:180px;flex:1">
                     <label class="form-label">Категория</label>
-                    <select class="form-select" v-model="form.categoryId" @change="onCategoryChange">
-                        <option value="">— Все —</option>
-                        <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
-                    </select>
+                    <select id="recon-sel-category" style="width:100%"></select>
                 </div>
 
                 <!-- Группа -->
                 <div style="min-width:200px;flex:1">
                     <label class="form-label">Группа</label>
-                    <select class="form-select" v-model="form.groupId" @change="onGroupChange" :disabled="!!form.categoryId">
-                        <option value="">— Без группы —</option>
-                        <optgroup v-for="cat in categoriesWithGroups" :key="cat.id" :label="cat.name">
-                            <option v-for="g in cat.groups" :key="g.id" :value="g.id">{{ g.name }}</option>
-                        </optgroup>
-                    </select>
+                    <select id="recon-sel-group" style="width:100%"></select>
                 </div>
 
                 <!-- Ностро-банк -->
                 <div style="min-width:180px;flex:1">
                     <label class="form-label">Ностро-банк</label>
-                    <select class="form-select" v-model="form.poolId" @change="onPoolChange" :disabled="!!form.groupId || !!form.categoryId">
-                        <option value="">— Все —</option>
-                        <option v-for="p in pools" :key="p.id" :value="p.id">{{ p.name }}</option>
-                    </select>
+                    <select id="recon-sel-pool" style="width:100%"></select>
                 </div>
 
                 <!-- Счёт -->
                 <div style="min-width:220px;flex:2">
-                    <label class="form-label">Счёт <span v-if="!form.groupId && !form.poolId && !form.categoryId" style="color:#ef4444">*</span></label>
-                    <select class="form-select" v-model="form.accountId" :disabled="filteredAccounts.length===0 || !!form.groupId || !!form.categoryId">
-                        <option value="">{{ form.groupId || form.poolId || form.categoryId ? '— Все счета —' : '— Выберите счёт —' }}</option>
-                        <option v-for="a in filteredAccounts" :key="a.id" :value="a.id">
-                            {{ a.name }} ({{ a.currency }})
-                        </option>
-                    </select>
+                    <label class="form-label">Счёт</label>
+                    <select id="recon-sel-account" style="width:100%"></select>
                 </div>
 
                 <!-- Дата раккорда (скрыта в режиме произвольного периода) -->
@@ -124,13 +108,18 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                 <template v-else>Отчёт будет сформирован по всем счетам ностро-банка</template>
             </div>
 
-            <div style="margin-top:14px">
+            <div style="margin-top:14px;display:flex;gap:8px;align-items:center">
                 <button class="btn-action btn-primary-violet"
                         @click="generateReport"
                         :disabled="loading || !canGenerate"
                         style="height:38px;padding:0 20px">
                     <span v-if="loading"><i class="fas fa-spinner fa-spin me-1"></i>Формирование...</span>
                     <span v-else><i class="fas fa-play me-1"></i>Сформировать</span>
+                </button>
+                <button class="btn-action btn-outline-secondary"
+                        @click="resetForm"
+                        style="height:38px;padding:0 16px">
+                    <i class="fas fa-times me-1"></i>Сбросить
                 </button>
             </div>
 
@@ -595,24 +584,156 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                     },
                 },
 
+                mounted: function () {
+                    this._initSelect2();
+                },
+
+                watch: {
+                    filteredAccounts: function () {
+                        var self = this;
+                        self.$nextTick(function () { self._reinitAccountSelect2(); });
+                    }
+                },
+
                 methods: {
-                    onCategoryChange: function () {
-                        if (this.form.categoryId) {
-                            this.form.groupId   = '';
-                            this.form.poolId    = '';
-                            this.form.accountId = '';
+                    // ── Select2 ────────────────────────────────────────────────
+                    _initSelect2: function () {
+                        var self = this;
+
+                        // Категория
+                        $('#recon-sel-category').select2({
+                            theme:       'bootstrap-5',
+                            placeholder: '— Все —',
+                            allowClear:  true,
+                            data: [{ id: '', text: '' }].concat(self.categories.map(function (c) {
+                                return { id: String(c.id), text: c.name };
+                            })),
+                        }).on('change', function () {
+                            var val = $(this).val() || '';
+                            self.form.categoryId = val;
+                            if (val) {
+                                self.form.groupId   = '';
+                                self.form.poolId    = '';
+                                self.form.accountId = '';
+                                $('#recon-sel-group').val(null).trigger('change.select2');
+                                $('#recon-sel-pool').val(null).trigger('change.select2');
+                                $('#recon-sel-account').val(null).trigger('change.select2');
+                            }
+                            self._updateDisabledState();
+                        });
+
+                        // Группа (с optgroup-ами)
+                        var groupData = [{ id: '', text: '' }].concat(self.categoriesWithGroups.map(function (cat) {
+                            return {
+                                text: cat.name,
+                                children: cat.groups.map(function (g) {
+                                    return { id: String(g.id), text: g.name };
+                                })
+                            };
+                        }));
+                        $('#recon-sel-group').select2({
+                            theme:       'bootstrap-5',
+                            placeholder: '— Все —',
+                            allowClear:  true,
+                            data:        groupData,
+                        }).on('change', function () {
+                            var val = $(this).val() || '';
+                            self.form.groupId = val;
+                            if (val) {
+                                self.form.categoryId = '';
+                                self.form.poolId     = '';
+                                self.form.accountId  = '';
+                                $('#recon-sel-category').val(null).trigger('change.select2');
+                                $('#recon-sel-pool').val(null).trigger('change.select2');
+                                $('#recon-sel-account').val(null).trigger('change.select2');
+                            }
+                            self._updateDisabledState();
+                        });
+
+                        // Ностро-банк
+                        $('#recon-sel-pool').select2({
+                            theme:       'bootstrap-5',
+                            placeholder: '— Все —',
+                            allowClear:  true,
+                            data: [{ id: '', text: '' }].concat(self.pools.map(function (p) {
+                                return { id: String(p.id), text: p.name };
+                            })),
+                        }).on('change', function () {
+                            var val = $(this).val() || '';
+                            self.form.poolId    = val;
+                            self.form.categoryId = '';
+                            self.form.groupId    = '';
+                            self.form.accountId  = '';
+                            $('#recon-sel-category').val(null).trigger('change.select2');
+                            $('#recon-sel-group').val(null).trigger('change.select2');
+                            $('#recon-sel-account').val(null).trigger('change.select2');
+                            self._updateDisabledState();
+                        });
+
+                        // Счёт
+                        self._reinitAccountSelect2();
+                        self._updateDisabledState();
+                    },
+
+                    _reinitAccountSelect2: function () {
+                        var self = this;
+                        var $el  = $('#recon-sel-account');
+                        if ($el.data('select2')) {
+                            $el.off('change.account').select2('destroy');
                         }
-                    },
-                    onGroupChange: function () {
-                        if (this.form.groupId) {
-                            this.form.categoryId = '';
-                            this.form.poolId     = '';
-                            this.form.accountId  = '';
+                        $el.select2({
+                            theme:       'bootstrap-5',
+                            placeholder: '— Все счета —',
+                            allowClear:  true,
+                            data: [{ id: '', text: '' }].concat(self.filteredAccounts.map(function (a) {
+                                return { id: String(a.id), text: a.name + ' (' + a.currency + ')' };
+                            })),
+                        }).on('change.account', function () {
+                            var val = $(this).val() || '';
+                            self.form.accountId = val;
+                            self._updateDisabledState();
+                        });
+                        // восстановить текущее значение если оно есть
+                        if (self.form.accountId) {
+                            $el.val(String(self.form.accountId)).trigger('change.select2');
                         }
+                        self._updateDisabledState();
                     },
-                    onPoolChange: function () {
-                        this.form.accountId = '';
+
+                    _updateDisabledState: function () {
+                        var f = this.form;
+                        $('#recon-sel-category').prop('disabled', !!(f.groupId || f.poolId || f.accountId));
+                        $('#recon-sel-group').prop('disabled',    !!(f.categoryId || f.poolId || f.accountId));
+                        $('#recon-sel-pool').prop('disabled',     !!(f.categoryId || f.groupId || f.accountId));
+                        $('#recon-sel-account').prop('disabled',  !!(f.categoryId || f.groupId || f.poolId));
                     },
+
+                    // ── Сброс ──────────────────────────────────────────────────
+                    resetForm: function () {
+                        var today = new Date().toISOString().slice(0, 10);
+                        this.form = {
+                            categoryId: '',
+                            groupId:    '',
+                            poolId:     '',
+                            accountId:  '',
+                            dateRecon:  today,
+                            periodMode: 'auto',
+                            dateFrom:   '',
+                            dateTo:     '',
+                        };
+                        this.reports     = [];
+                        this.reportLevel = null;
+                        this.error       = '';
+                        $('#recon-sel-category').val(null).trigger('change.select2');
+                        $('#recon-sel-group').val(null).trigger('change.select2');
+                        $('#recon-sel-pool').val(null).trigger('change.select2');
+                        $('#recon-sel-account').val(null).trigger('change.select2');
+                        this._updateDisabledState();
+                    },
+
+                    onCategoryChange: function () {},
+                    onGroupChange:    function () {},
+                    onPoolChange:     function () {},
 
                     _buildPayload: function () {
                         var isCustom = this.form.periodMode === 'custom';

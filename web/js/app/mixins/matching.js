@@ -27,9 +27,20 @@ var MatchingMixin = {
     },
 
     computed: {
-        hasSelection:    function () { return this.selectedIds.length >= 2; },
-        summaryDiff:     function () { return this.selectionSummary ? this.selectionSummary.diff : null; },
-        summaryBalanced: function () { return this.selectionSummary && this.selectionSummary.diff === 0; }
+        hasSelection: function () {
+            // Разрешаем 1 запись если diff = 0 (например, сумма записи = 0)
+            if (this.selectedIds.length === 1 && this.selectionSummary && this.summaryDiff === 0) {
+                return true;
+            }
+            return this.selectedIds.length >= 2;
+        },
+        summaryDiff: function () {
+            if (!this.selectionSummary) return null;
+            // В INV сравниваем по Debit/Credit, а не по L/S
+            if (this.userSection === 'INV') return this.selectionSummary.diff_dc;
+            return this.selectionSummary.diff;
+        },
+        summaryBalanced: function () { return this.selectionSummary && this.summaryDiff === 0; }
     },
 
     methods: {
@@ -54,17 +65,22 @@ var MatchingMixin = {
             var self = this;
             if (!self.selectedIds.length) { self.selectionSummary = null; return; }
             var sL = 0, sS = 0, cL = 0, cS = 0;
+            var sD = 0, sCr = 0; // Debit/Credit для INV
             (self.entries || []).forEach(function (e) {
                 if (self.selectedIds.indexOf(e.id) === -1) return;
                 var a = parseFloat(e.amount || 0);
                 if (e.ls === 'L') { sL += a; cL++; } else { sS += a; cS++; }
+                if (e.dc === 'Debit') { sD += a; } else { sCr += a; }
             });
             self.selectionSummary = {
                 sum_ledger:    Math.round(sL * 100) / 100,
                 sum_statement: Math.round(sS * 100) / 100,
                 diff:          Math.round((sL - sS) * 100) / 100,
                 cnt_ledger:    cL,
-                cnt_statement: cS
+                cnt_statement: cS,
+                sum_debit:     Math.round(sD * 100) / 100,
+                sum_credit:    Math.round(sCr * 100) / 100,
+                diff_dc:       Math.round((sD - sCr) * 100) / 100,
             };
         },
 
@@ -72,8 +88,11 @@ var MatchingMixin = {
         matchSelected: function () {
             var self = this;
             if (!self.hasSelection) {
-                Swal.fire({ icon: 'warning', title: 'Выберите минимум 2 записи', toast: true,
-                    position: 'top-end', timer: 2000, showConfirmButton: false });
+                var minMsg = (self.userSection === 'INV')
+                    ? 'Выберите минимум 1 запись (или 2+ для квитования с дисбалансом)'
+                    : 'Выберите минимум 2 записи';
+                Swal.fire({ icon: 'warning', title: minMsg, toast: true,
+                    position: 'top-end', timer: 2500, showConfirmButton: false });
                 return;
             }
             if (self.summaryDiff !== 0) {
@@ -90,9 +109,10 @@ var MatchingMixin = {
 
         _doMatch: function () {
             var self = this;
+            var payload = { ids: self.selectedIds };
+            if (self.userSection) payload.section = self.userSection;
 
-            // ИСПРАВЛЕНО: было window.window.AppRoutes
-            SmartMatchApi.post(window.AppRoutes.matchManual, { ids: self.selectedIds }).then(function (res) {
+            SmartMatchApi.post(window.AppRoutes.matchManual, payload).then(function (res) {
                 if (res.success) {
                     Swal.fire({ icon: 'success', title: res.message, toast: true,
                         position: 'top-end', timer: 2000, showConfirmButton: false });
