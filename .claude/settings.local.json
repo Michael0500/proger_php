@@ -4,7 +4,8 @@
       "Bash(php yii:*)",
       "Bash(php:*)",
       "Bash(php -r \":*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(git checkout *)"
     ]
   }
 }

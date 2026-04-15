@@ -54,6 +54,29 @@ var EntriesMixin = {
             historyLoading: false,
             historyItems:   [],
             historyEntry:   null,
+
+            // ── Управление колонками таблицы ──────────────
+            tableColumns: [
+                { key: 'id',             label: 'ID',             visible: false, width: 60  },
+                { key: 'account_id',     label: 'Счёт',           visible: false, width: 120 },
+                { key: 'match_id',       label: 'Match ID',       visible: true, width: 100 },
+                { key: 'ls',             label: 'L/S',            visible: true, width: 55  },
+                { key: 'dc',             label: 'D/C',            visible: true, width: 55  },
+                { key: 'amount',         label: 'Сумма',          visible: true, width: 110 },
+                { key: 'currency',       label: 'Вал.',           visible: true, width: 55  },
+                { key: 'value_date',     label: 'Value Date',     visible: true, width: 100 },
+                { key: 'post_date',      label: 'Post Date',      visible: true, width: 100 },
+                { key: 'instruction_id', label: 'Instr.ID',       visible: true, width: 100 },
+                { key: 'end_to_end_id',  label: 'E2E ID',         visible: true, width: 95  },
+                { key: 'transaction_id', label: 'Txn ID',         visible: true, width: 95  },
+                { key: 'message_id',     label: 'Msg ID',         visible: true, width: 95  },
+                { key: 'comment',        label: 'Комментарий',    visible: true, width: 130 },
+                { key: 'match_status',   label: 'Статус',         visible: false, width: 95  },
+            ],
+            showColsDropdown: false,
+            detailEntry:      null,
+            // ── Ширины колонок ────────────────────────────
+            colWidths: {},
         };
     },
 
@@ -729,6 +752,61 @@ var EntriesMixin = {
                 .finally(function () {
                     self.historyLoading = false;
                 });
+        },
+
+        // ── Управление колонками ──────────────────────────────────────────
+        tblColVisible: function (key) {
+            var col = this.tableColumns.find(function (c) { return c.key === key; });
+            return col ? col.visible : true;
+        },
+        toggleColsDropdown: function () {
+            this.showColsDropdown = !this.showColsDropdown;
+        },
+        openEntryDetail: function (entry) {
+            this.detailEntry = entry;
+            document.body.style.overflow = 'hidden';
+        },
+        closeEntryDetail: function () {
+            this.detailEntry = null;
+            document.body.style.overflow = '';
+        },
+        startColResize: function (e, col) {
+            e.preventDefault();
+            e.stopPropagation();
+            var startX = e.clientX;
+            var startW = col.width || 100;
+
+            var onMove = function (ev) {
+                ev.preventDefault();
+                var newW = Math.max(50, startW + (ev.clientX - startX));
+                col.width = newW;
+            };
+            var onUp = function () {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                document.body.style.userSelect = '';
+                document.body.style.cursor      = '';
+                document.body.classList.remove('resizing-col');
+            };
+            document.body.style.userSelect = 'none';
+            document.body.style.cursor     = 'col-resize';
+            document.body.classList.add('resizing-col');
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        },
+        _initColManagement: function () {
+            var self = this;
+            document.addEventListener('click', function (e) {
+                if (!self.showColsDropdown) return;
+                if (e.target.closest && (e.target.closest('.col-mgr-dropdown') || e.target.closest('[data-col-toggle]'))) return;
+                self.showColsDropdown = false;
+            });
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') {
+                    self.showColsDropdown = false;
+                    self.closeEntryDetail();
+                }
+            });
         }
     }
 };

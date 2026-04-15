@@ -58,6 +58,7 @@
 
             mounted: function () {
                 this.flyoutTimer = null;
+                this._initColManagement();
                 var forcedSection = window.AppConfig && window.AppConfig.initialSection &&
                                     window.AppConfig.initialSection !== 'entries';
 

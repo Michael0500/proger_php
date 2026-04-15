@@ -49,6 +49,7 @@ class NostroEntryController extends BaseController
         $q = NostroEntry::find()
             ->from(['ne' => NostroEntry::tableName()])
             ->leftJoin(['a' => 'accounts'], 'a.id = ne.account_id')
+            ->leftJoin(['ap' => 'account_pools'], 'ap.id = a.pool_id')
             ->where(['ne.company_id' => $cid]);
 
         // pool_id теперь означает group_id (группа с фильтрами)
@@ -164,7 +165,7 @@ class NostroEntryController extends BaseController
 
         $sortExpr = ($sort === 'account_id') ? 'ne.account_id' : "ne.{$sort}";
         $rows = $q
-            ->select(['ne.*', 'a.name AS account_name', 'a.is_suspense AS account_is_suspense'])
+            ->select(['ne.*', 'a.name AS account_name', 'a.is_suspense AS account_is_suspense', 'ap.name AS pool_name'])
             ->orderBy([$sortExpr => $dir])
             ->offset(($page - 1) * $limit)
             ->limit($limit)

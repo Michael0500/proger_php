@@ -57,6 +57,20 @@
                     <button class="toolbar-btn danger-soft" v-if="selectedIds.length > 0" @click="clearSelection">
                         <i class="fas fa-times"></i>Сбросить
                     </button>
+                    <!-- Кнопка управления колонками -->
+                    <div style="position:relative">
+                        <button class="toolbar-btn outline" @click="toggleColsDropdown" data-col-toggle
+                                :style="showColsDropdown ? 'border-color:#6366f1;color:#6366f1' : ''">
+                            <i class="fas fa-columns"></i>Столбцы
+                        </button>
+                        <div v-if="showColsDropdown" class="col-mgr-dropdown">
+                            <div class="col-mgr-title">Видимые столбцы</div>
+                            <label v-for="col in tableColumns" :key="col.key" class="col-mgr-item">
+                                <input type="checkbox" v-model="col.visible">
+                                {{ col.label }}
+                            </label>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -280,29 +294,89 @@
                     <table class="entries-table">
                         <thead>
                         <tr>
-                            <th style="width:36px;padding-left:14px">
+                            <th style="width:36px;min-width:36px;padding-left:14px">
                                 <input type="checkbox"
                                        style="width:14px;height:14px;cursor:pointer;accent-color:#6366f1"
                                        :checked="allUnmatchedSelected"
                                        :indeterminate.prop="someSelected"
                                        @change="toggleSelectAll($event.target.checked)">
                             </th>
-                            <th class="th-sort" @click="sortBy('id')">ID <i :class="sortIcon('id')"></i></th>
-                            <th class="th-sort" @click="sortBy('account_id')">Счёт <i :class="sortIcon('account_id')"></i></th>
-                            <th class="th-sort" @click="sortBy('match_id')">Match ID <i :class="sortIcon('match_id')"></i></th>
-                            <th class="th-sort" @click="sortBy('ls')">L/S <i :class="sortIcon('ls')"></i></th>
-                            <th class="th-sort" @click="sortBy('dc')">D/C <i :class="sortIcon('dc')"></i></th>
-                            <th class="th-sort" @click="sortBy('amount')" style="text-align:right">Сумма <i :class="sortIcon('amount')"></i></th>
-                            <th class="th-sort" @click="sortBy('currency')">Вал. <i :class="sortIcon('currency')"></i></th>
-                            <th class="th-sort" @click="sortBy('value_date')">Value Date <i :class="sortIcon('value_date')"></i></th>
-                            <th class="th-sort" @click="sortBy('post_date')">Post Date <i :class="sortIcon('post_date')"></i></th>
-                            <th class="th-sort" @click="sortBy('instruction_id')">Instr.ID <i :class="sortIcon('instruction_id')"></i></th>
-                            <th class="th-sort" @click="sortBy('end_to_end_id')">E2E ID <i :class="sortIcon('end_to_end_id')"></i></th>
-                            <th class="th-sort" @click="sortBy('transaction_id')">Txn ID <i :class="sortIcon('transaction_id')"></i></th>
-                            <th class="th-sort" @click="sortBy('message_id')">Msg ID <i :class="sortIcon('message_id')"></i></th>
-                            <th class="th-sort" @click="sortBy('comment')">Комментарий <i :class="sortIcon('comment')"></i></th>
-                            <th class="th-sort" @click="sortBy('match_status')">Статус <i :class="sortIcon('match_status')"></i></th>
-                            <th style="width:68px;text-align:right;padding-right:14px">
+                            <th v-show="tblColVisible('id')" class="th-sort th-resizable" @click="sortBy('id')"
+                                :style="{width: tableColumns[0].width+'px', minWidth: tableColumns[0].width+'px'}">
+                                <span>ID</span> <i :class="sortIcon('id')"></i>
+                                <div class="col-resize-handle" @mousedown.stop.prevent="startColResize($event, tableColumns[0])" @click.stop></div>
+                            </th>
+                            <th v-show="tblColVisible('account_id')" class="th-sort th-resizable" @click="sortBy('account_id')"
+                                :style="{width: tableColumns[1].width+'px', minWidth: tableColumns[1].width+'px'}">
+                                <span>Счёт</span> <i :class="sortIcon('account_id')"></i>
+                                <div class="col-resize-handle" @mousedown.stop.prevent="startColResize($event, tableColumns[1])" @click.stop></div>
+                            </th>
+                            <th v-show="tblColVisible('match_id')" class="th-sort th-resizable" @click="sortBy('match_id')"
+                                :style="{width: tableColumns[2].width+'px', minWidth: tableColumns[2].width+'px'}">
+                                <span>Match ID</span> <i :class="sortIcon('match_id')"></i>
+                                <div class="col-resize-handle" @mousedown.stop.prevent="startColResize($event, tableColumns[2])" @click.stop></div>
+                            </th>
+                            <th v-show="tblColVisible('ls')" class="th-sort th-resizable" @click="sortBy('ls')"
+                                :style="{width: tableColumns[3].width+'px', minWidth: tableColumns[3].width+'px'}">
+                                <span>L/S</span> <i :class="sortIcon('ls')"></i>
+                                <div class="col-resize-handle" @mousedown.stop.prevent="startColResize($event, tableColumns[3])" @click.stop></div>
+                            </th>
+                            <th v-show="tblColVisible('dc')" class="th-sort th-resizable" @click="sortBy('dc')"
+                                :style="{width: tableColumns[4].width+'px', minWidth: tableColumns[4].width+'px'}">
+                                <span>D/C</span> <i :class="sortIcon('dc')"></i>
+                                <div class="col-resize-handle" @mousedown.stop.prevent="startColResize($event, tableColumns[4])" @click.stop></div>
+                            </th>
+                            <th v-show="tblColVisible('amount')" class="th-sort th-resizable" @click="sortBy('amount')"
+                                :style="{width: tableColumns[5].width+'px', minWidth: tableColumns[5].width+'px', textAlign:'right'}">
+                                <span>Сумма</span> <i :class="sortIcon('amount')"></i>
+                                <div class="col-resize-handle" @mousedown.stop.prevent="startColResize($event, tableColumns[5])" @click.stop></div>
+                            </th>
+                            <th v-show="tblColVisible('currency')" class="th-sort th-resizable" @click="sortBy('currency')"
+                                :style="{width: tableColumns[6].width+'px', minWidth: tableColumns[6].width+'px'}">
+                                <span>Вал.</span> <i :class="sortIcon('currency')"></i>
+                                <div class="col-resize-handle" @mousedown.stop.prevent="startColResize($event, tableColumns[6])" @click.stop></div>
+                            </th>
+                            <th v-show="tblColVisible('value_date')" class="th-sort th-resizable" @click="sortBy('value_date')"
+                                :style="{width: tableColumns[7].width+'px', minWidth: tableColumns[7].width+'px'}">
+                                <span>Value Date</span> <i :class="sortIcon('value_date')"></i>
+                                <div class="col-resize-handle" @mousedown.stop.prevent="startColResize($event, tableColumns[7])" @click.stop></div>
+                            </th>
+                            <th v-show="tblColVisible('post_date')" class="th-sort th-resizable" @click="sortBy('post_date')"
+                                :style="{width: tableColumns[8].width+'px', minWidth: tableColumns[8].width+'px'}">
+                                <span>Post Date</span> <i :class="sortIcon('post_date')"></i>
+                                <div class="col-resize-handle" @mousedown.stop.prevent="startColResize($event, tableColumns[8])" @click.stop></div>
+                            </th>
+                            <th v-show="tblColVisible('instruction_id')" class="th-sort th-resizable" @click="sortBy('instruction_id')"
+                                :style="{width: tableColumns[9].width+'px', minWidth: tableColumns[9].width+'px'}">
+                                <span>Instr.ID</span> <i :class="sortIcon('instruction_id')"></i>
+                                <div class="col-resize-handle" @mousedown.stop.prevent="startColResize($event, tableColumns[9])" @click.stop></div>
+                            </th>
+                            <th v-show="tblColVisible('end_to_end_id')" class="th-sort th-resizable" @click="sortBy('end_to_end_id')"
+                                :style="{width: tableColumns[10].width+'px', minWidth: tableColumns[10].width+'px'}">
+                                <span>E2E ID</span> <i :class="sortIcon('end_to_end_id')"></i>
+                                <div class="col-resize-handle" @mousedown.stop.prevent="startColResize($event, tableColumns[10])" @click.stop></div>
+                            </th>
+                            <th v-show="tblColVisible('transaction_id')" class="th-sort th-resizable" @click="sortBy('transaction_id')"
+                                :style="{width: tableColumns[11].width+'px', minWidth: tableColumns[11].width+'px'}">
+                                <span>Txn ID</span> <i :class="sortIcon('transaction_id')"></i>
+                                <div class="col-resize-handle" @mousedown.stop.prevent="startColResize($event, tableColumns[11])" @click.stop></div>
+                            </th>
+                            <th v-show="tblColVisible('message_id')" class="th-sort th-resizable" @click="sortBy('message_id')"
+                                :style="{width: tableColumns[12].width+'px', minWidth: tableColumns[12].width+'px'}">
+                                <span>Msg ID</span> <i :class="sortIcon('message_id')"></i>
+                                <div class="col-resize-handle" @mousedown.stop.prevent="startColResize($event, tableColumns[12])" @click.stop></div>
+                            </th>
+                            <th v-show="tblColVisible('comment')" class="th-sort th-resizable" @click="sortBy('comment')"
+                                :style="{width: tableColumns[13].width+'px', minWidth: tableColumns[13].width+'px'}">
+                                <span>Комментарий</span> <i :class="sortIcon('comment')"></i>
+                                <div class="col-resize-handle" @mousedown.stop.prevent="startColResize($event, tableColumns[13])" @click.stop></div>
+                            </th>
+                            <th v-show="tblColVisible('match_status')" class="th-sort th-resizable" @click="sortBy('match_status')"
+                                :style="{width: tableColumns[14].width+'px', minWidth: tableColumns[14].width+'px'}">
+                                <span>Статус</span> <i :class="sortIcon('match_status')"></i>
+                                <div class="col-resize-handle" @mousedown.stop.prevent="startColResize($event, tableColumns[14])" @click.stop></div>
+                            </th>
+                            <th style="width:90px;min-width:90px;text-align:right;padding-right:14px">
                                 <i class="fas fa-cog" style="opacity:.3"></i>
                             </th>
                         </tr>
@@ -320,15 +394,15 @@
                                 <i v-else class="fas fa-lock" style="font-size:10px;color:#d1d5db" title="Сквитовано"></i>
                             </td>
 
-                            <td style="font-size:11px;color:#9ca3af;font-family:monospace">{{ entry.id }}</td>
+                            <td v-show="tblColVisible('id')" style="font-size:11px;color:#9ca3af;font-family:monospace">{{ entry.id }}</td>
 
-                            <td style="min-width:110px">
+                            <td v-show="tblColVisible('account_id')" style="min-width:110px">
                                 <span style="font-size:12px;font-weight:600;color:#374151">{{ entry.account_name || '—' }}</span>
                                 <span v-if="entry.account_is_suspense" class="badge-suspense"
                                       style="margin-left:4px;font-size:9px;padding:1px 5px">S</span>
                             </td>
 
-                            <td>
+                            <td v-show="tblColVisible('match_id')">
                             <span v-if="entry.match_id" class="match-id-badge"
                                   @click="unmatchEntry(entry.match_id)" title="Нажмите для расквитования">
                                 <i class="fas fa-link" style="font-size:8px"></i>{{ entry.match_id }}
@@ -336,27 +410,27 @@
                                 <span v-else style="color:#d1d5db;font-size:11px">—</span>
                             </td>
 
-                            <td>
+                            <td v-show="tblColVisible('ls')">
                                 <span :class="entry.ls==='L'?'badge-ls-l':'badge-ls-s'">{{ entry.ls }}</span>
                             </td>
-                            <td>
+                            <td v-show="tblColVisible('dc')">
                             <span :class="entry.dc==='Debit'?'badge-debit':'badge-credit'">
                                 {{ entry.dc==='Debit'?'D':'C' }}
                             </span>
                             </td>
-                            <td style="text-align:right;font-family:monospace;font-weight:600;color:#1a202c;white-space:nowrap">
+                            <td v-show="tblColVisible('amount')" style="text-align:right;font-family:monospace;font-weight:600;color:#1a202c;white-space:nowrap">
                                 {{ formatAmount(entry.amount) }}
                             </td>
-                            <td><span style="font-size:11px;color:#6b7280;font-weight:700">{{ entry.currency }}</span></td>
-                            <td style="white-space:nowrap;font-size:12px">{{ entry.value_date||'—' }}</td>
-                            <td style="white-space:nowrap;font-size:12px">{{ entry.post_date||'—' }}</td>
+                            <td v-show="tblColVisible('currency')"><span style="font-size:11px;color:#6b7280;font-weight:700">{{ entry.currency }}</span></td>
+                            <td v-show="tblColVisible('value_date')" style="white-space:nowrap;font-size:12px">{{ entry.value_date||'—' }}</td>
+                            <td v-show="tblColVisible('post_date')" style="white-space:nowrap;font-size:12px">{{ entry.post_date||'—' }}</td>
 
-                            <td class="td-mono-truncate" :title="entry.instruction_id">{{ entry.instruction_id||'—' }}</td>
-                            <td class="td-mono-truncate" :title="entry.end_to_end_id">{{ entry.end_to_end_id||'—' }}</td>
-                            <td class="td-mono-truncate" :title="entry.transaction_id">{{ entry.transaction_id||'—' }}</td>
-                            <td class="td-mono-truncate" :title="entry.message_id">{{ entry.message_id||'—' }}</td>
+                            <td v-show="tblColVisible('instruction_id')" class="td-mono-truncate" :title="entry.instruction_id">{{ entry.instruction_id||'—' }}</td>
+                            <td v-show="tblColVisible('end_to_end_id')" class="td-mono-truncate" :title="entry.end_to_end_id">{{ entry.end_to_end_id||'—' }}</td>
+                            <td v-show="tblColVisible('transaction_id')" class="td-mono-truncate" :title="entry.transaction_id">{{ entry.transaction_id||'—' }}</td>
+                            <td v-show="tblColVisible('message_id')" class="td-mono-truncate" :title="entry.message_id">{{ entry.message_id||'—' }}</td>
 
-                            <td style="min-width:110px">
+                            <td v-show="tblColVisible('comment')" style="min-width:110px">
                             <span v-if="editingCommentId!==entry.id"
                                   @dblclick="startEditComment(entry)"
                                   class="comment-inline" :class="{'has-value':entry.comment}"
@@ -380,7 +454,7 @@
                                 </div>
                             </td>
 
-                            <td>
+                            <td v-show="tblColVisible('match_status')">
                             <span :class="entry.match_status==='M'?'status-badge status-matched':
                                           entry.match_status==='I'?'status-badge status-ignored':
                                           'status-badge status-waiting'">
@@ -388,8 +462,11 @@
                             </span>
                             </td>
 
-                            <td style="text-align:right;padding-right:14px">
+                            <td style="text-align:right;padding-right:8px">
                                 <div style="display:flex;gap:3px;justify-content:flex-end">
+                                    <button class="row-btn info" @click="openEntryDetail(entry)" title="Подробнее">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
                                     <button class="row-btn history" @click="showHistory(entry)" title="История изменений">
                                         <i class="fas fa-history"></i>
                                     </button>
@@ -430,6 +507,103 @@
 
     </div><!-- /v-show entries -->
 
+    <!-- ══ МОДАЛ: Детали записи ══ -->
+    <div v-if="detailEntry" class="entry-detail-overlay" @click.self="closeEntryDetail">
+        <div class="entry-detail-modal">
+            <div class="entry-detail-header">
+                <div style="display:flex;align-items:center;gap:10px">
+                    <div style="width:32px;height:32px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border-radius:8px;display:flex;align-items:center;justify-content:center">
+                        <i class="fas fa-info" style="color:#fff;font-size:14px"></i>
+                    </div>
+                    <div>
+                        <div style="font-size:15px;font-weight:800;color:#1a1f36">Детали записи</div>
+                        <div style="font-size:11px;color:#9ca3af">ID: {{ detailEntry.id }}</div>
+                    </div>
+                </div>
+                <button class="entry-detail-close" @click="closeEntryDetail"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="entry-detail-body">
+                <div class="entry-detail-grid">
+                    <div class="ed-field">
+                        <div class="ed-label">L/S</div>
+                        <div class="ed-value">
+                            <span :class="detailEntry.ls==='L'?'badge-ls-l':'badge-ls-s'">{{ detailEntry.ls }}</span>
+                        </div>
+                    </div>
+                    <div class="ed-field">
+                        <div class="ed-label">D/C</div>
+                        <div class="ed-value">
+                            <span :class="detailEntry.dc==='Debit'?'badge-debit':'badge-credit'">{{ detailEntry.dc==='Debit'?'Debit':'Credit' }}</span>
+                        </div>
+                    </div>
+                    <div class="ed-field">
+                        <div class="ed-label">Сумма</div>
+                        <div class="ed-value ed-mono" style="font-size:16px;font-weight:800;color:#059669">{{ formatAmount(detailEntry.amount) }}</div>
+                    </div>
+                    <div class="ed-field">
+                        <div class="ed-label">Валюта</div>
+                        <div class="ed-value" style="font-weight:700">{{ detailEntry.currency || '—' }}</div>
+                    </div>
+                    <div class="ed-field">
+                        <div class="ed-label">Ностро-банк</div>
+                        <div class="ed-value">{{ detailEntry.pool_name || '—' }}</div>
+                    </div>
+                    <div class="ed-field">
+                        <div class="ed-label">Счёт</div>
+                        <div class="ed-value">{{ detailEntry.account_name || '—' }}</div>
+                    </div>
+                    <div class="ed-field">
+                        <div class="ed-label">Статус</div>
+                        <div class="ed-value">
+                            <span :class="detailEntry.match_status==='M'?'status-badge status-matched':detailEntry.match_status==='I'?'status-badge status-ignored':'status-badge status-waiting'">
+                                {{ detailEntry.match_status==='M'?'Сквитовано':detailEntry.match_status==='I'?'Игнорировано':'Ожидает' }}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="ed-field">
+                        <div class="ed-label">Value Date</div>
+                        <div class="ed-value">{{ detailEntry.value_date || '—' }}</div>
+                    </div>
+                    <div class="ed-field">
+                        <div class="ed-label">Post Date</div>
+                        <div class="ed-value">{{ detailEntry.post_date || '—' }}</div>
+                    </div>
+                    <div class="ed-field ed-full">
+                        <div class="ed-label">Match ID</div>
+                        <div class="ed-value ed-mono">{{ detailEntry.match_id || '—' }}</div>
+                    </div>
+                    <div class="ed-field ed-full">
+                        <div class="ed-label">Instruction ID</div>
+                        <div class="ed-value ed-mono">{{ detailEntry.instruction_id || '—' }}</div>
+                    </div>
+                    <div class="ed-field ed-full">
+                        <div class="ed-label">EndToEnd ID</div>
+                        <div class="ed-value ed-mono">{{ detailEntry.end_to_end_id || '—' }}</div>
+                    </div>
+                    <div class="ed-field ed-full">
+                        <div class="ed-label">Transaction ID</div>
+                        <div class="ed-value ed-mono">{{ detailEntry.transaction_id || '—' }}</div>
+                    </div>
+                    <div class="ed-field ed-full">
+                        <div class="ed-label">Message ID</div>
+                        <div class="ed-value ed-mono">{{ detailEntry.message_id || '—' }}</div>
+                    </div>
+                    <div class="ed-field ed-full">
+                        <div class="ed-label">Other ID</div>
+                        <div class="ed-value ed-mono">{{ detailEntry.other_id || '—' }}</div>
+                    </div>
+                    <div class="ed-field">
+                        <div class="ed-label">Источник</div>
+                        <div class="ed-value">{{ detailEntry.source || '—' }}</div>
+                    </div>
+                    <div class="ed-field">
+                        <div class="ed-label">Комментарий</div>
+                        <div class="ed-value">{{ detailEntry.comment || '—' }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- ══ СЕКЦИЯ: БАЛАНС ════════════════════════════════════════ -->
     <div v-show="activeSection==='balance'">
