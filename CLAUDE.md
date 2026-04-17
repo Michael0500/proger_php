@@ -85,6 +85,7 @@ All DB queries must include `company_id` scoping.
 | `NostroEntryAudit` | `nostro_entry_audit` | Full audit log of all NostroEntry changes (create/update/delete/archive) |
 | `NostroEntryArchive` | `nostro_entries_archive` | Matched entries moved to archive; has `original_id`, `archived_at`, `expires_at` |
 | `ArchiveSettings` | `archive_settings` | Per-company archive settings (`archive_after_days`, `retention_years`) |
+| `UserPreference` | `user_preferences` | Персональные настройки UI (JSONB). Ключи whitelist'ятся в `UserPreferenceController`. Текущий ключ: `entries_table_columns` — видимость и ширина колонок таблицы выверки |
 
 ### Matching logic (`services/MatchingService.php`)
 - **Manual matching** (`matchManual`): takes array of entry IDs, validates balance (Ledger sum = Statement sum for mixed L+S sets), assigns a `MTCH` + 8-char hex `match_id`.

@@ -59,6 +59,7 @@
             mounted: function () {
                 this.flyoutTimer = null;
                 this._initColManagement();
+                this.loadTableColumnsPrefs();
                 var forcedSection = window.AppConfig && window.AppConfig.initialSection &&
                                     window.AppConfig.initialSection !== 'entries';
 

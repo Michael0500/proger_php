@@ -241,20 +241,45 @@
                 <i class="fas fa-check-square" style="color:#6366f1"></i>
                 <strong>{{ selectedIds.length }}</strong> выбрано
             </span>
-                <!-- NRE: показываем L / S -->
+                <!-- NRE: если счета одинаковые — D/C с разницей, если разные — L/S -->
                 <template v-if="userSection !== 'INV'">
-                    <span class="summary-sep">|</span>
-                    <span class="summary-item">
-                        <span class="mono" style="color:#6366f1">L:</span>
-                        <strong class="mono">{{ formatAmount(selectionSummary.sum_ledger) }}</strong>
-                        <span style="font-size:10px;color:#9ca3af">({{ selectionSummary.cnt_ledger }})</span>
-                    </span>
-                    <span class="summary-sep">|</span>
-                    <span class="summary-item">
-                        <span class="mono" style="color:#0284c7">S:</span>
-                        <strong class="mono">{{ formatAmount(selectionSummary.sum_statement) }}</strong>
-                        <span style="font-size:10px;color:#9ca3af">({{ selectionSummary.cnt_statement }})</span>
-                    </span>
+                    <!-- Одинаковый счёт: показываем D / C с разницей -->
+                    <template v-if="selectionSummary.same_account">
+                        <span class="summary-sep">|</span>
+                        <span class="summary-item">
+                            <span class="mono" style="color:#ef4444">D:</span>
+                            <strong class="mono">{{ formatAmount(selectionSummary.sum_debit) }}</strong>
+                            <span style="font-size:10px;color:#9ca3af">({{ selectionSummary.cnt_debit }})</span>
+                        </span>
+                        <span class="summary-sep">|</span>
+                        <span class="summary-item">
+                            <span class="mono" style="color:#10b981">C:</span>
+                            <strong class="mono">{{ formatAmount(selectionSummary.sum_credit) }}</strong>
+                            <span style="font-size:10px;color:#9ca3af">({{ selectionSummary.cnt_credit }})</span>
+                        </span>
+                        <span class="summary-sep">|</span>
+                        <span class="summary-item">
+                            <span class="mono" style="color:#f59e0b">D-C:</span>
+                            <strong class="mono" :style="selectionSummary.diff_dc === 0 ? 'color:#059669' : 'color:#d97706'">
+                                {{ formatAmount(selectionSummary.diff_dc) }}
+                            </strong>
+                        </span>
+                    </template>
+                    <!-- Разные счета: показываем L / S -->
+                    <template v-else>
+                        <span class="summary-sep">|</span>
+                        <span class="summary-item">
+                            <span class="mono" style="color:#6366f1">L:</span>
+                            <strong class="mono">{{ formatAmount(selectionSummary.sum_ledger) }}</strong>
+                            <span style="font-size:10px;color:#9ca3af">({{ selectionSummary.cnt_ledger }})</span>
+                        </span>
+                        <span class="summary-sep">|</span>
+                        <span class="summary-item">
+                            <span class="mono" style="color:#0284c7">S:</span>
+                            <strong class="mono">{{ formatAmount(selectionSummary.sum_statement) }}</strong>
+                            <span style="font-size:10px;color:#9ca3af">({{ selectionSummary.cnt_statement }})</span>
+                        </span>
+                    </template>
                 </template>
                 <!-- INV: показываем D / C -->
                 <template v-else>

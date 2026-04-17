@@ -40,6 +40,9 @@ $config = [
                 'user/select-company'  => 'user/select-company',
                 'user/reset-company'   => 'user/reset-company',
 
+                // ── Пользовательские настройки UI ─────────────────
+                'user-preference/<action>' => 'user-preference/<action>',
+
                 // ── Company (старые роуты оставляем для совместимости) ─
                 'company/select' => 'company/select',
                 'company/reset'  => 'company/reset',

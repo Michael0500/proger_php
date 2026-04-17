@@ -35,10 +35,8 @@ var EntriesMixin = {
                 transaction_id: '', message_id: '', comment: ''
             },
 
-            // ── Выделение ─────────────────────────────────
-            selectedIds: [],
-            selectionSummary: null,
-            summaryBalanced: false,
+            // ── Выделение (selectedIds / selectionSummary / summaryBalanced
+            //    объявлены в MatchingMixin) ─────────────────
 
             // ── inline-комментарий ────────────────────────
             editingCommentId:    null,
@@ -77,7 +75,18 @@ var EntriesMixin = {
             detailEntry:      null,
             // ── Ширины колонок ────────────────────────────
             colWidths: {},
+
+            // Флаг: настройки колонок загружены с сервера (чтобы не сохранять до загрузки)
+            _tableColumnsLoaded: false,
+            _colsSaveTimer: null,
         };
+    },
+
+    watch: {
+        tableColumns: {
+            handler: function () { this.saveTableColumnsPrefs(); },
+            deep: true
+        }
     },
 
     computed: {
@@ -568,60 +577,13 @@ var EntriesMixin = {
 
         // ══════════════════════════════════════════════════
         // ВЫДЕЛЕНИЕ
+        // (isSelected / toggleEntrySelection / clearSelection /
+        //  updateSummary — в MatchingMixin)
         // ══════════════════════════════════════════════════
 
-        isSelected: function (id) {
-            return this.selectedIds.indexOf(id) !== -1;
-        },
-
-        toggleEntrySelection: function (id) {
-            var idx = this.selectedIds.indexOf(id);
-            if (idx === -1) {
-                this.selectedIds.push(id);
-            } else {
-                this.selectedIds.splice(idx, 1);
-            }
-            this.updateSummary();
-        },
-
         toggleSelectAll: function (checked) {
-            if (checked) {
-                this.selectedIds = this.unmatchedIds.slice();
-            } else {
-                this.selectedIds = [];
-            }
+            this.selectedIds = checked ? this.unmatchedIds.slice() : [];
             this.updateSummary();
-        },
-
-        clearSelection: function () {
-            this.selectedIds      = [];
-            this.selectionSummary = null;
-            this.summaryBalanced  = false;
-        },
-
-        updateSummary: function () {
-            if (!this.selectedIds.length) {
-                this.selectionSummary = null;
-                this.summaryBalanced  = false;
-                return;
-            }
-            var self   = this;
-            var sumL   = 0, cntL = 0, sumS = 0, cntS = 0;
-            this.entries.forEach(function (e) {
-                if (self.selectedIds.indexOf(e.id) !== -1) {
-                    var amt = parseFloat(e.amount) || 0;
-                    var sign = e.dc === 'Debit' ? 1 : -1;
-                    if (e.ls === 'L') { sumL += amt * sign; cntL++; }
-                    else              { sumS += amt * sign; cntS++; }
-                }
-            });
-            var diff = Math.abs(sumL + sumS);
-            this.selectionSummary = {
-                sum_ledger:    sumL, cnt_ledger:    cntL,
-                sum_statement: sumS, cnt_statement: cntS,
-                diff: diff
-            };
-            this.summaryBalanced = diff < 0.005 && cntL > 0 && cntS > 0;
         },
 
         // ══════════════════════════════════════════════════
@@ -794,6 +756,47 @@ var EntriesMixin = {
             document.addEventListener('mousemove', onMove);
             document.addEventListener('mouseup', onUp);
         },
+        // ── Сохранение настроек колонок в БД (user_preferences) ───────────
+        loadTableColumnsPrefs: function () {
+            var self = this;
+            SmartMatchApi.get(window.AppRoutes.userPreferenceGet, { key: 'entries_table_columns' })
+                .then(function (response) {
+                    var r = response.data !== undefined ? response.data : response;
+                    if (r && r.success && Array.isArray(r.value)) {
+                        var saved = {};
+                        r.value.forEach(function (c) {
+                            if (c && typeof c.key === 'string') saved[c.key] = c;
+                        });
+                        self.tableColumns.forEach(function (col) {
+                            var s = saved[col.key];
+                            if (!s) return;
+                            if (typeof s.visible === 'boolean') col.visible = s.visible;
+                            if (typeof s.width === 'number' && s.width >= 40) col.width = s.width;
+                        });
+                    }
+                })
+                .catch(function () { /* no-op */ })
+                .then(function () {
+                    // Флаг ставим после отрисовки, чтобы watcher не сохранял применённое состояние
+                    self.$nextTick(function () { self._tableColumnsLoaded = true; });
+                });
+        },
+
+        saveTableColumnsPrefs: function () {
+            if (!this._tableColumnsLoaded) return;
+            var self = this;
+            if (self._colsSaveTimer) clearTimeout(self._colsSaveTimer);
+            self._colsSaveTimer = setTimeout(function () {
+                var payload = self.tableColumns.map(function (c) {
+                    return { key: c.key, visible: !!c.visible, width: c.width };
+                });
+                SmartMatchApi.post(window.AppRoutes.userPreferenceSave, {
+                    key: 'entries_table_columns',
+                    value: payload
+                });
+            }, 600);
+        },
+
         _initColManagement: function () {
             var self = this;
             document.addEventListener('click', function (e) {

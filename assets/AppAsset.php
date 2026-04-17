@@ -15,7 +15,7 @@ class AppAsset extends AssetBundle
         'css/select2.min.css',
         'css/select2-bootstrap-5-theme.min.css',
         'css/sweetalert2.min.css',
-        'css/app.css?v10',
+        'css/app.css?v15',
         'fontawesome/css/all.min.css',
     ];
 
@@ -38,12 +38,12 @@ class AppAsset extends AssetBundle
         'js/app/mixins/modals.js?v2',
         'js/app/mixins/categories.js',
         'js/app/mixins/groups.js?v2',
-        'js/app/mixins/entries.js?v11',
-        'js/app/mixins/matching.js?v6',
+        'js/app/mixins/entries.js?v16',
+        'js/app/mixins/matching.js?v8',
         'js/app/mixins/balance.js?v2',
         'js/app/mixins/archive.js?v1',
         'js/app/mixins/state-persistence.js?v1',
-        'js/app/app.js?v3',
+        'js/app/app.js?v4',
     ];
 
     // POS_END чтобы скрипты грузились после DOM

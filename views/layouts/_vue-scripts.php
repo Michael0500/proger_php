@@ -68,6 +68,10 @@ $initialSection = $initialSection ?? 'entries';
         archiveStats:        '<?= Url::to(['/archive/stats']) ?>',
         archiveAccounts:     '<?= Url::to(['/archive/accounts']) ?>',
         archiveHistory:      '<?= Url::to(['/archive/history']) ?>',
+
+        // ── Пользовательские настройки UI ─────────────────────────
+        userPreferenceGet:  '<?= Url::to(['/user-preference/get']) ?>',
+        userPreferenceSave: '<?= Url::to(['/user-preference/save']) ?>',
     };
 
     window.AppConfig = {

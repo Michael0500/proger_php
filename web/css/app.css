@@ -630,30 +630,42 @@ body {
 
 /* ── Таблица записей ───────────────────────────────────────────── */
 .entries-table {
-    width: 100%;
+    /* width:auto + table-layout:fixed => таблица берёт сумму явных
+       ширин колонок и не «плавает» при изменении ширины контейнера
+       (появление скроллбара, подгрузка данных, ресайз окна). */
+    width: auto;
     border-collapse: collapse;
     font-size: 12.5px;
     table-layout: fixed;
 }
 .entries-table thead th {
     padding: 7px 10px;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: .06em;
-    color: #9ca3af;
-    background: #f8f9fc;
-    border-bottom: 1px solid #eef0f5;
+    color: #4b5563;
+    background: #f1f5f9;
+    border-bottom: 2px solid #cbd5e1;
+    border-right: 1px solid #e2e8f0;
     white-space: nowrap;
+    position: relative;
 }
+.entries-table thead th:last-child { border-right: none; }
 .entries-table tbody td {
     padding: 8px 10px;
-    border-bottom: 1px solid #f4f5f8;
+    border-bottom: 1px solid #e2e8f0;
+    border-right: 1px solid #f1f5f9;
     vertical-align: middle;
-    color: #374151;
+    color: #1e293b;
+    font-weight: 400;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
+.entries-table tbody td:last-child { border-right: none; }
 .entries-table tbody tr:last-child td { border-bottom: none; }
-.entries-table tbody tr:hover td { background: #fafbfe; }
+.entries-table tbody tr:hover td { background: #f8fafc; }
 
 .entry-selected td { background: #fffbeb !important; }
 .entry-selected td:first-child { border-left: 3px solid #f59e0b; }
@@ -712,14 +724,14 @@ body {
     white-space: nowrap;
 }
 .status-waiting {
-    background: #fffbeb; color: #92400e; border: 1px solid #fde68a;
+    background: #fef3c7; color: #78350f; border: 1px solid #fde68a;
 }
 .status-waiting::before {
     content: ''; width: 5px; height: 5px;
     background: #f59e0b; border-radius: 50%; flex-shrink: 0;
 }
 .status-matched {
-    background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0;
+    background: #d1fae5; color: #064e3b; border: 1px solid #6ee7b7;
 }
 .status-matched::before {
     content: ''; width: 5px; height: 5px;
@@ -754,10 +766,11 @@ body {
 .th-resizable { position:relative; }
 .entries-table .col-resize-handle {
     position:absolute; right:-3px; top:0; bottom:0;
-    width:7px; cursor:col-resize; background:transparent;
+    width:2px; cursor:col-resize; background:rgba(148,163,184,.15);
     z-index:5; user-select:none;
+    transition: background .15s;
 }
-.entries-table .col-resize-handle:hover { background:rgba(99,102,241,.35); }
+.entries-table .col-resize-handle:hover { background:rgba(99,102,241,.45); }
 body.resizing-col, body.resizing-col * { cursor:col-resize !important; user-select:none !important; }
 
 .col-mgr-dropdown {
@@ -766,8 +779,8 @@ body.resizing-col, body.resizing-col * { cursor:col-resize !important; user-sele
     box-shadow:0 8px 24px rgba(0,0,0,.12); padding:12px 14px;
     min-width:210px; max-height:340px; overflow-y:auto;
 }
-.col-mgr-title { font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;margin-bottom:8px; }
-.col-mgr-item { display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;color:#374151;cursor:pointer;user-select:none; }
+.col-mgr-title { font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin-bottom:8px; }
+.col-mgr-item { display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;color:#1f2937;cursor:pointer;user-select:none; }
 .col-mgr-item:hover { color:#4f46e5; }
 .col-mgr-item input { cursor:pointer;accent-color:#6366f1; }
 
@@ -797,15 +810,15 @@ body.resizing-col, body.resizing-col * { cursor:col-resize !important; user-sele
 .entry-detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .ed-field { background:#f9fafb; border-radius:8px; padding:10px 12px; }
 .ed-field.ed-full { grid-column:1/-1; }
-.ed-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#9ca3af; margin-bottom:4px; }
-.ed-value { font-size:13px; color:#1a1f36; font-weight:500; word-break:break-all; }
+.ed-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#6b7280; margin-bottom:4px; }
+.ed-value { font-size:13px; color:#0f172a; font-weight:600; word-break:break-all; }
 .ed-value.ed-mono { font-family:monospace; font-size:12px; }
 
 /* Inline-редактирование комментария */
 .comment-inline {
     cursor: pointer;
-    border-bottom: 1px dashed #d1d5db;
-    color: #6b7280;
+    border-bottom: 1px dashed #9ca3af;
+    color: #4b5563;
     transition: color .12s;
     font-size: 12px;
     white-space: nowrap;
@@ -814,13 +827,13 @@ body.resizing-col, body.resizing-col * { cursor:col-resize !important; user-sele
     overflow: hidden;
     text-overflow: ellipsis;
 }
-.comment-inline:hover { color: #374151; border-bottom-color: #6366f1; }
-.comment-inline.has-value { color: #374151; }
+.comment-inline:hover { color: #1f2937; border-bottom-color: #6366f1; }
+.comment-inline.has-value { color: #1f2937; }
 
 /* Пустые состояния */
 .empty-row {
     padding: 14px 16px;
-    color: #9ca3af;
+    color: #6b7280;
     font-size: 12.5px;
     display: flex;
     align-items: center;
@@ -832,10 +845,10 @@ body.resizing-col, body.resizing-col * { cursor:col-resize !important; user-sele
     align-items: center;
     justify-content: center;
     padding: 80px 20px;
-    color: #9ca3af;
+    color: #6b7280;
     text-align: center;
 }
-.empty-pool i { font-size: 36px; margin-bottom: 12px; opacity: .25; }
+.empty-pool i { font-size: 36px; margin-bottom: 12px; opacity: .4; }
 .empty-pool p  { font-size: 14px; margin: 0; }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1433,6 +1446,9 @@ body.resizing-col, body.resizing-col * { cursor:col-resize !important; user-sele
     max-height: calc(100vh - 180px);
     overflow-y: auto;
     overflow-x: auto;
+    /* Резервируем место под вертикальный скроллбар —
+       контейнер не «дёргается» при его появлении/исчезновении. */
+    scrollbar-gutter: stable;
 }
 .table-scroll-wrap::-webkit-scrollbar { width: 5px; height: 5px; }
 .table-scroll-wrap::-webkit-scrollbar-thumb {
