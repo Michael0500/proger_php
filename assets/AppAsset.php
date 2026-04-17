@@ -15,7 +15,8 @@ class AppAsset extends AssetBundle
         'css/select2.min.css',
         'css/select2-bootstrap-5-theme.min.css',
         'css/sweetalert2.min.css',
-        'css/app.css?v15',
+        'css/flatpickr.min.css',
+        'css/app.css?v16',
         'fontawesome/css/all.min.css',
     ];
 
@@ -32,18 +33,22 @@ class AppAsset extends AssetBundle
         'js/vue.min.js',
         // 6. Axios
         'js/axios.min.js',
-        // 7. Приложение
+        // 7. Flatpickr
+        'js/flatpickr.min.js',
+        'js/flatpickr.ru.js',
+        // 8. Приложение
         'js/app/api.js',
         'js/app/state-storage.js',
-        'js/app/mixins/modals.js?v2',
-        'js/app/mixins/categories.js',
-        'js/app/mixins/groups.js?v2',
+        'js/app/datepicker.js',
+        'js/app/mixins/modals.js?v3',
+        'js/app/mixins/categories.js?v1',
+        'js/app/mixins/groups.js?v3',
         'js/app/mixins/entries.js?v16',
-        'js/app/mixins/matching.js?v8',
+        'js/app/mixins/matching.js?v9',
         'js/app/mixins/balance.js?v2',
         'js/app/mixins/archive.js?v1',
         'js/app/mixins/state-persistence.js?v1',
-        'js/app/app.js?v4',
+        'js/app/app.js?v5',
     ];
 
     // POS_END чтобы скрипты грузились после DOM

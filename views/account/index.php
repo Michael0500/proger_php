@@ -93,8 +93,8 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                             <i v-if="acc.load_barsgl" class="fas fa-check-circle" style="color:#059669"></i>
                             <span v-else style="color:#d1d5db">—</span>
                         </td>
-                        <td style="font-size:12px">{{ acc.date_open || '—' }}</td>
-                        <td style="font-size:12px">{{ acc.date_close || '—' }}</td>
+                        <td style="font-size:12px">{{ fmtDate(acc.date_open) }}</td>
+                        <td style="font-size:12px">{{ fmtDate(acc.date_close) }}</td>
                         <td style="text-align:right">
                             <button class="acc-btn-icon" @click="editAccount(acc)" title="Редактировать">
                                 <i class="fas fa-pen" style="color:#6366f1"></i>
@@ -163,13 +163,13 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                         <!-- Дата открытия -->
                         <div class="col-md-4">
                             <label class="form-label">Дата открытия</label>
-                            <input type="date" class="form-control" v-model="form.date_open">
+                            <input type="text" v-datepicker class="form-control" v-model="form.date_open">
                         </div>
 
                         <!-- Дата закрытия -->
                         <div class="col-md-4">
                             <label class="form-label">Дата закрытия</label>
-                            <input type="date" class="form-control" v-model="form.date_close">
+                            <input type="text" v-datepicker class="form-control" v-model="form.date_close">
                         </div>
 
                         <!-- Статус загрузки -->

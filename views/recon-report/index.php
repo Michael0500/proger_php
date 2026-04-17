@@ -75,7 +75,7 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                 <!-- Дата раккорда (скрыта в режиме произвольного периода) -->
                 <div v-if="form.periodMode !== 'custom'" style="min-width:150px">
                     <label class="form-label">Дата раккорда <span style="color:#ef4444">*</span></label>
-                    <input type="date" class="form-control" v-model="form.dateRecon" :max="todayIso">
+                    <input type="text" v-datepicker class="form-control" v-model="form.dateRecon" :max="todayIso">
                 </div>
 
                 <!-- Режим периода -->
@@ -92,11 +92,11 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
             <div v-if="form.periodMode==='custom'" style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;margin-top:12px">
                 <div style="min-width:150px">
                     <label class="form-label">Период с</label>
-                    <input type="date" class="form-control" v-model="form.dateFrom" :max="form.dateTo||todayIso">
+                    <input type="text" v-datepicker class="form-control" v-model="form.dateFrom" :max="form.dateTo||todayIso">
                 </div>
                 <div style="min-width:150px">
                     <label class="form-label">Период по</label>
-                    <input type="date" class="form-control" v-model="form.dateTo" :min="form.dateFrom" :max="todayIso">
+                    <input type="text" v-datepicker class="form-control" v-model="form.dateTo" :min="form.dateFrom" :max="todayIso">
                 </div>
             </div>
 

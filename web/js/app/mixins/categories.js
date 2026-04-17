@@ -86,7 +86,7 @@ var CategoriesMixin = {
                 .then(function (response) {
                     if (response.data.success) {
                         Swal.fire('Успех', response.data.message, 'success');
-                        self.closeAddCategoryModal();
+                        self._forceCloseAddCategoryModal();
                         self.loadCategories();
                     } else {
                         Swal.fire('Ошибка', response.data.message || 'Не удалось создать категорию', 'error');
@@ -111,7 +111,7 @@ var CategoriesMixin = {
                 .then(function (response) {
                     if (response.data.success) {
                         Swal.fire('Успех', response.data.message, 'success');
-                        self.closeEditCategoryModal();
+                        self._forceCloseEditCategoryModal();
                         self.loadCategories();
                     } else {
                         Swal.fire('Ошибка', response.data.message || 'Не удалось обновить категорию', 'error');

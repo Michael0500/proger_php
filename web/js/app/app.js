@@ -54,9 +54,15 @@
                 collapsedCategories: {},
                 _pendingCategoryId: null,
                 _pendingGroupId:    null,
+
+                openRowMenu: null,
+                rowMenuStyle: {},
             },
 
             mounted: function () {
+                var self = this;
+                document.addEventListener('click', function () { self.openRowMenu = null; });
+
                 this.flyoutTimer = null;
                 this._initColManagement();
                 this.loadTableColumnsPrefs();
@@ -93,6 +99,21 @@
             methods: {
                 toggleSidebar: function () {
                     this.isSidebarCollapsed = !this.isSidebarCollapsed;
+                },
+
+                toggleRowMenu: function (type, id, event) {
+                    var key = type + '-' + id;
+                    if (this.openRowMenu === key) {
+                        this.openRowMenu = null;
+                        return;
+                    }
+                    var btn = event.currentTarget;
+                    var rect = btn.getBoundingClientRect();
+                    this.rowMenuStyle = {
+                        top: (rect.bottom + 4) + 'px',
+                        left: (rect.right - 150) + 'px'
+                    };
+                    this.openRowMenu = key;
                 },
 
                 /* ── Sidebar resize ─────────────────── */

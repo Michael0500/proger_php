@@ -5,7 +5,10 @@
       "Bash(php:*)",
       "Bash(php -r \":*)",
       "Bash(grep:*)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(curl -sL \"https://unpkg.com/flatpickr@4.6.13/dist/flatpickr.min.js\" -o C:/OSPanelNew/home/smartmatch/web/js/flatpickr.min.js)",
+      "Bash(curl -sL \"https://unpkg.com/flatpickr@4.6.13/dist/flatpickr.min.css\" -o C:/OSPanelNew/home/smartmatch/web/css/flatpickr.min.css)",
+      "Bash(curl -sL \"https://unpkg.com/flatpickr@4.6.13/dist/l10n/ru.js\" -o C:/OSPanelNew/home/smartmatch/web/js/flatpickr.ru.js)"
     ]
   }
 }

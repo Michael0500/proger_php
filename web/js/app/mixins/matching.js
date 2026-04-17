@@ -7,6 +7,9 @@ var MatchingMixin = {
         return {
             selectedIds:      [],
             selectionSummary: null,
+            matchGroupEntries: [],
+            matchGroupId:      null,
+            matchGroupLoading: false,
             matchingRules:    [],
             loadingRules:     false,
             editingRule: {
@@ -129,6 +132,48 @@ var MatchingMixin = {
                     Swal.fire({ icon: 'error', title: res.message });
                 }
             });
+        },
+
+        // ─── Просмотр сквитованной группы ─────────────────────────
+        showMatchGroup: function (matchId) {
+            if (!matchId) return;
+            var self = this;
+            self.matchGroupId = matchId;
+            self.matchGroupEntries = [];
+            self.matchGroupLoading = true;
+            self._showModal('matchGroupModal');
+
+            SmartMatchApi.get(window.AppRoutes.matchGroup, { match_id: matchId })
+                .then(function (r) {
+                    var data = r.data || r;
+                    if (data.success) {
+                        self.matchGroupEntries = data.data;
+                    } else {
+                        Swal.fire({ icon: 'error', title: data.message, toast: true,
+                            position: 'top-end', timer: 2500, showConfirmButton: false });
+                        self._hideModal('matchGroupModal');
+                    }
+                })
+                .catch(function () {
+                    Swal.fire({ icon: 'error', title: 'Ошибка загрузки', toast: true,
+                        position: 'top-end', timer: 2500, showConfirmButton: false });
+                    self._hideModal('matchGroupModal');
+                })
+                .finally(function () { self.matchGroupLoading = false; });
+        },
+
+        closeMatchGroupModal: function () {
+            this._hideModal('matchGroupModal');
+            this.matchGroupEntries = [];
+            this.matchGroupId = null;
+        },
+
+        unmatchFromGroup: function () {
+            var self = this;
+            var matchId = self.matchGroupId;
+            if (!matchId) return;
+            self._hideModal('matchGroupModal');
+            self.unmatchEntry(matchId);
         },
 
         // ─── Расквитование ─────────────────────────────────────────

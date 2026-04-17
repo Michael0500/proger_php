@@ -167,10 +167,10 @@ class ArchiveController extends BaseController
 
         // Форматирование дат
         foreach ($rows as &$row) {
-            if ($row['value_date'])   $row['value_date_fmt']   = date('d/m/Y', strtotime($row['value_date']));
-            if ($row['post_date'])    $row['post_date_fmt']    = date('d/m/Y', strtotime($row['post_date']));
-            if ($row['archived_at'])  $row['archived_at_fmt']  = date('d/m/Y H:i', strtotime($row['archived_at']));
-            if ($row['expires_at'])   $row['expires_at_fmt']   = date('d/m/Y', strtotime($row['expires_at']));
+            if ($row['value_date'])   $row['value_date_fmt']   = date('d.m.Y', strtotime($row['value_date']));
+            if ($row['post_date'])    $row['post_date_fmt']    = date('d.m.Y', strtotime($row['post_date']));
+            if ($row['archived_at'])  $row['archived_at_fmt']  = date('d.m.Y H:i', strtotime($row['archived_at']));
+            if ($row['expires_at'])   $row['expires_at_fmt']   = date('d.m.Y', strtotime($row['expires_at']));
         }
         unset($row);
 

@@ -761,6 +761,24 @@ body {
 .row-btn.delete:hover { background: #fef2f2; border-color: #fecaca; color: #dc2626; }
 .row-btn.history:hover { background: #f5f3ff; border-color: #e9d5ff; color: #7c3aed; }
 .row-btn.info:hover   { background: #ecfdf5; border-color: #a7f3d0; color: #059669; }
+.row-btn.more:hover   { background: #f3f4f6; border-color: #e5e7eb; color: #374151; }
+
+/* Dropdown-меню (три точки) */
+.row-actions-dropdown { position: relative; display: inline-block; }
+.row-actions-menu {
+    position: fixed; z-index: 9999;
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.12); min-width: 150px;
+    padding: 4px 0; white-space: nowrap;
+}
+.row-actions-menu-item {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    padding: 7px 14px; border: none; background: none; cursor: pointer;
+    font-size: 12px; color: #374151; text-align: left; line-height: 1.4;
+}
+.row-actions-menu-item:hover { background: #f3f4f6; }
+.row-actions-menu-item.danger { color: #dc2626; }
+.row-actions-menu-item.danger:hover { background: #fef2f2; }
 
 /* ── Управление колонками (выверка) ── */
 .th-resizable { position:relative; }

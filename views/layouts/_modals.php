@@ -251,11 +251,11 @@
                             <!-- Дата: between — два поля -->
                             <template v-else-if="isDateFilterField(filter) && filter.operator === 'between'">
                                 <div style="display:flex;gap:4px;align-items:center">
-                                    <input type="date" class="form-control form-control-sm"
+                                    <input type="text" v-datepicker class="form-control form-control-sm"
                                            v-model="filter.value" :disabled="!filter.field"
                                            style="flex:1">
                                     <span style="color:#9ca3af;font-size:11px;flex-shrink:0">—</span>
-                                    <input type="date" class="form-control form-control-sm"
+                                    <input type="text" v-datepicker class="form-control form-control-sm"
                                            v-model="filter.value2" :disabled="!filter.field"
                                            style="flex:1">
                                 </div>
@@ -263,7 +263,7 @@
 
                             <!-- Дата: одна дата -->
                             <template v-else-if="isDateFilterField(filter)">
-                                <input type="date" class="form-control form-control-sm"
+                                <input type="text" v-datepicker class="form-control form-control-sm"
                                        v-model="filter.value" :disabled="!filter.field">
                             </template>
 
@@ -524,11 +524,11 @@
                 <div class="row g-3 mb-3">
                     <div class="col-md-6">
                         <label class="form-label-sm">Value Date</label>
-                        <input type="date" class="form-control-sm-custom" v-model="editingEntry.value_date">
+                        <input type="text" v-datepicker class="form-control-sm-custom" v-model="editingEntry.value_date">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label-sm">Post Date</label>
-                        <input type="date" class="form-control-sm-custom" v-model="editingEntry.post_date">
+                        <input type="text" v-datepicker class="form-control-sm-custom" v-model="editingEntry.post_date">
                     </div>
                 </div>
 
@@ -890,6 +890,76 @@
                 </button>
                 <button class="modal-btn save" @click="confirmAutoMatch" style="background:#6366f1">
                     <i class="fas fa-magic"></i>Запустить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════ Просмотр сквитованной пары ══════════════════════════ -->
+<div class="modal fade" id="matchGroupModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <span class="modal-icon indigo"><i class="fas fa-link"></i></span>
+                    Сквитованная пара
+                    <code v-if="matchGroupId" style="margin-left:8px;font-size:13px">{{ matchGroupId }}</code>
+                </h5>
+                <button type="button" class="btn-close" @click="closeMatchGroupModal"></button>
+            </div>
+            <div class="modal-body" style="padding:0">
+                <div v-if="matchGroupLoading" style="text-align:center;padding:40px">
+                    <div class="spinner-border spinner-border-sm" style="color:#6366f1;width:20px;height:20px;border-width:2px"></div>
+                    <span style="margin-left:8px;font-size:13px;color:#9ca3af">Загрузка...</span>
+                </div>
+                <div v-else-if="matchGroupEntries.length">
+                    <table class="table table-sm table-bordered mb-0" style="font-size:12px">
+                        <thead>
+                            <tr style="background:#f8fafc">
+                                <th style="width:40px;text-align:center">L/S</th>
+                                <th style="width:40px;text-align:center">D/C</th>
+                                <th>Счёт</th>
+                                <th style="text-align:right">Сумма</th>
+                                <th>Валюта</th>
+                                <th>Дата валют.</th>
+                                <th>Дата пров.</th>
+                                <th>Instruction ID</th>
+                                <th>E2E ID</th>
+                                <th>Txn ID</th>
+                                <th>Msg ID</th>
+                                <th>Комментарий</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="e in matchGroupEntries" :key="e.id">
+                                <td style="text-align:center">
+                                    <span :class="e.ls==='L'?'badge-ls-l':'badge-ls-s'">{{ e.ls }}</span>
+                                </td>
+                                <td style="text-align:center">
+                                    <span :class="e.dc==='Debit'?'badge-debit':'badge-credit'">{{ e.dc==='Debit'?'D':'C' }}</span>
+                                </td>
+                                <td>{{ e.account_name || '—' }}</td>
+                                <td style="text-align:right;font-family:monospace;font-weight:600">{{ formatAmount(e.amount) }}</td>
+                                <td><span style="font-size:11px;color:#6b7280;font-weight:700">{{ e.currency }}</span></td>
+                                <td style="white-space:nowrap">{{ fmtDate(e.value_date) }}</td>
+                                <td style="white-space:nowrap">{{ fmtDate(e.post_date) }}</td>
+                                <td class="td-mono-truncate" :title="e.instruction_id" style="max-width:120px">{{ e.instruction_id||'—' }}</td>
+                                <td class="td-mono-truncate" :title="e.end_to_end_id" style="max-width:120px">{{ e.end_to_end_id||'—' }}</td>
+                                <td class="td-mono-truncate" :title="e.transaction_id" style="max-width:120px">{{ e.transaction_id||'—' }}</td>
+                                <td class="td-mono-truncate" :title="e.message_id" style="max-width:120px">{{ e.message_id||'—' }}</td>
+                                <td>{{ e.comment||'—' }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer" style="justify-content:space-between">
+                <button class="modal-btn cancel" @click="unmatchFromGroup" style="background:#ef4444;color:#fff;border-color:#ef4444">
+                    <i class="fas fa-unlink"></i>Расквитовать
+                </button>
+                <button class="modal-btn cancel" @click="closeMatchGroupModal">
+                    <i class="fas fa-times"></i>Закрыть
                 </button>
             </div>
         </div>

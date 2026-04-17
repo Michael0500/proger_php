@@ -183,7 +183,7 @@ class NostroBalance extends ActiveRecord
     public function getValueDateFormatted(): string
     {
         if (!$this->value_date) return '';
-        return date('d/m/Y', strtotime($this->value_date));
+        return date('d.m.Y', strtotime($this->value_date));
     }
 
     /**

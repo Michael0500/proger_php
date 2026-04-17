@@ -97,7 +97,7 @@ class NostroBalanceController extends BaseController
         // Форматируем даты для вывода
         foreach ($rows as &$row) {
             if ($row['value_date']) {
-                $row['value_date_fmt'] = date('d/m/Y', strtotime($row['value_date']));
+                $row['value_date_fmt'] = date('d.m.Y', strtotime($row['value_date']));
             }
         }
         unset($row);

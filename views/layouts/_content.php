@@ -190,7 +190,7 @@
                     <div class="filter-field">
                         <label class="filter-label">Value Date от</label>
                         <div class="filter-input-wrap">
-                            <input type="date" class="filter-input" :value="filters.value_date_from||''"
+                            <input type="text" v-datepicker class="filter-input" :value="filters.value_date_from||''"
                                    @change="applyFilter('value_date_from',$event.target.value)">
                             <button v-if="filters.value_date_from" class="filter-clear-btn" @click="clearFilter('value_date_from')">×</button>
                         </div>
@@ -198,7 +198,7 @@
                     <div class="filter-field">
                         <label class="filter-label">Value Date до</label>
                         <div class="filter-input-wrap">
-                            <input type="date" class="filter-input" :value="filters.value_date_to||''"
+                            <input type="text" v-datepicker class="filter-input" :value="filters.value_date_to||''"
                                    @change="applyFilter('value_date_to',$event.target.value)">
                             <button v-if="filters.value_date_to" class="filter-clear-btn" @click="clearFilter('value_date_to')">×</button>
                         </div>
@@ -429,7 +429,7 @@
 
                             <td v-show="tblColVisible('match_id')">
                             <span v-if="entry.match_id" class="match-id-badge"
-                                  @click="unmatchEntry(entry.match_id)" title="Нажмите для расквитования">
+                                  @click="showMatchGroup(entry.match_id)" title="Посмотреть сквитованную пару">
                                 <i class="fas fa-link" style="font-size:8px"></i>{{ entry.match_id }}
                             </span>
                                 <span v-else style="color:#d1d5db;font-size:11px">—</span>
@@ -447,8 +447,8 @@
                                 {{ formatAmount(entry.amount) }}
                             </td>
                             <td v-show="tblColVisible('currency')"><span style="font-size:11px;color:#6b7280;font-weight:700">{{ entry.currency }}</span></td>
-                            <td v-show="tblColVisible('value_date')" style="white-space:nowrap;font-size:12px">{{ entry.value_date||'—' }}</td>
-                            <td v-show="tblColVisible('post_date')" style="white-space:nowrap;font-size:12px">{{ entry.post_date||'—' }}</td>
+                            <td v-show="tblColVisible('value_date')" style="white-space:nowrap;font-size:12px">{{ fmtDate(entry.value_date) }}</td>
+                            <td v-show="tblColVisible('post_date')" style="white-space:nowrap;font-size:12px">{{ fmtDate(entry.post_date) }}</td>
 
                             <td v-show="tblColVisible('instruction_id')" class="td-mono-truncate" :title="entry.instruction_id">{{ entry.instruction_id||'—' }}</td>
                             <td v-show="tblColVisible('end_to_end_id')" class="td-mono-truncate" :title="entry.end_to_end_id">{{ entry.end_to_end_id||'—' }}</td>
@@ -502,9 +502,16 @@
                                             @click="unmatchEntry(entry.match_id)" title="Расквитовать">
                                         <i class="fas fa-unlink"></i>
                                     </button>
-                                    <button v-if="entry.match_status!=='M'" class="row-btn delete" @click="deleteEntry(entry)" title="Удалить">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
+                                    <div v-if="entry.match_status!=='M'" class="row-actions-dropdown">
+                                        <button class="row-btn more" @click.stop="toggleRowMenu('entry', entry.id, $event)" title="Ещё">
+                                            <i class="fas fa-ellipsis-v"></i>
+                                        </button>
+                                        <div v-if="openRowMenu==='entry-'+entry.id" class="row-actions-menu" :style="rowMenuStyle">
+                                            <button class="row-actions-menu-item danger" @click.stop="deleteEntry(entry); openRowMenu=null">
+                                                <i class="fas fa-trash"></i> Удалить
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             </td>
                         </tr>
@@ -587,11 +594,11 @@
                     </div>
                     <div class="ed-field">
                         <div class="ed-label">Value Date</div>
-                        <div class="ed-value">{{ detailEntry.value_date || '—' }}</div>
+                        <div class="ed-value">{{ fmtDate(detailEntry.value_date) }}</div>
                     </div>
                     <div class="ed-field">
                         <div class="ed-label">Post Date</div>
-                        <div class="ed-value">{{ detailEntry.post_date || '—' }}</div>
+                        <div class="ed-value">{{ fmtDate(detailEntry.post_date) }}</div>
                     </div>
                     <div class="ed-field ed-full">
                         <div class="ed-label">Match ID</div>
@@ -732,12 +739,12 @@
                 </div>
                 <div class="filter-field">
                     <label class="filter-label">Дата с</label>
-                    <input type="date" class="filter-input" v-model="balanceFilters.value_date_from"
+                    <input type="text" v-datepicker class="filter-input" v-model="balanceFilters.value_date_from"
                            @change="onBalanceFilterChange()" style="width:140px">
                 </div>
                 <div class="filter-field">
                     <label class="filter-label">по</label>
-                    <input type="date" class="filter-input" v-model="balanceFilters.value_date_to"
+                    <input type="text" v-datepicker class="filter-input" v-model="balanceFilters.value_date_to"
                            @change="onBalanceFilterChange()" style="width:140px">
                 </div>
                 <div class="filter-field">
@@ -772,7 +779,7 @@
                 </button>
             </div>
             <div v-else class="table-scroll-wrap" @scroll="onBalanceScroll">
-                <table class="entries-table">
+                <table class="entries-table" style="width:100%">
                     <thead>
                     <tr>
                         <th style="width:50px">ID</th>
@@ -834,9 +841,16 @@
                                 <button class="row-btn edit" title="Редактировать" @click="openEditBalanceModal(row)">
                                     <i class="fas fa-pen"></i>
                                 </button>
-                                <button class="row-btn delete" title="Удалить" @click="deleteBalance(row)">
-                                    <i class="fas fa-trash"></i>
-                                </button>
+                                <div class="row-actions-dropdown">
+                                    <button class="row-btn more" @click.stop="toggleRowMenu('balance', row.id, $event)" title="Ещё">
+                                        <i class="fas fa-ellipsis-v"></i>
+                                    </button>
+                                    <div v-if="openRowMenu==='balance-'+row.id" class="row-actions-menu" :style="rowMenuStyle">
+                                        <button class="row-actions-menu-item danger" @click.stop="deleteBalance(row); openRowMenu=null">
+                                            <i class="fas fa-trash"></i> Удалить
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </td>
                     </tr>
@@ -898,7 +912,7 @@
                         </div>
                         <div>
                             <label class="filter-label">Дата вал. *</label>
-                            <input type="date" class="filter-input" v-model="editingBalance.value_date" style="width:100%">
+                            <input type="text" v-datepicker class="filter-input" v-model="editingBalance.value_date" style="width:100%">
                         </div>
                         <div v-if="editingBalance.ls_type==='S'" style="grid-column:span 2">
                             <label class="filter-label">№ выписки *</label>
@@ -1375,7 +1389,7 @@
                 <div class="filter-field">
                     <label class="filter-label">Value Date от</label>
                     <div class="filter-input-wrap">
-                        <input type="date" class="filter-input"
+                        <input type="text" v-datepicker class="filter-input"
                                :value="archiveFilters.value_date_from||''"
                                @change="applyArchiveFilter('value_date_from',$event.target.value)">
                         <button v-if="archiveFilters.value_date_from" class="filter-clear-btn"
@@ -1385,7 +1399,7 @@
                 <div class="filter-field">
                     <label class="filter-label">Value Date до</label>
                     <div class="filter-input-wrap">
-                        <input type="date" class="filter-input"
+                        <input type="text" v-datepicker class="filter-input"
                                :value="archiveFilters.value_date_to||''"
                                @change="applyArchiveFilter('value_date_to',$event.target.value)">
                         <button v-if="archiveFilters.value_date_to" class="filter-clear-btn"
@@ -1397,7 +1411,7 @@
                 <div class="filter-field">
                     <label class="filter-label">Заархивирован от</label>
                     <div class="filter-input-wrap">
-                        <input type="date" class="filter-input"
+                        <input type="text" v-datepicker class="filter-input"
                                :value="archiveFilters.archived_at_from||''"
                                @change="applyArchiveFilter('archived_at_from',$event.target.value)">
                         <button v-if="archiveFilters.archived_at_from" class="filter-clear-btn"
@@ -1407,7 +1421,7 @@
                 <div class="filter-field">
                     <label class="filter-label">Заархивирован до</label>
                     <div class="filter-input-wrap">
-                        <input type="date" class="filter-input"
+                        <input type="text" v-datepicker class="filter-input"
                                :value="archiveFilters.archived_at_to||''"
                                @change="applyArchiveFilter('archived_at_to',$event.target.value)">
                         <button v-if="archiveFilters.archived_at_to" class="filter-clear-btn"
@@ -1670,7 +1684,14 @@
                         <td style="text-align:right;padding-right:16px">
                             <div style="display:flex;gap:3px;justify-content:flex-end">
                                 <button class="row-btn edit" @click="editRule(rule)"><i class="fas fa-pen"></i></button>
-                                <button class="row-btn delete" @click="deleteRule(rule)"><i class="fas fa-trash"></i></button>
+                                <div class="row-actions-dropdown">
+                                    <button class="row-btn more" @click.stop="toggleRowMenu('rule', rule.id, $event)"><i class="fas fa-ellipsis-v"></i></button>
+                                    <div v-if="openRowMenu==='rule-'+rule.id" class="row-actions-menu" :style="rowMenuStyle">
+                                        <button class="row-actions-menu-item danger" @click.stop="deleteRule(rule); openRowMenu=null">
+                                            <i class="fas fa-trash"></i> Удалить
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </td>
                     </tr>

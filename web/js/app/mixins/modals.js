@@ -23,17 +23,101 @@ var ModalsMixin = {
             }
         },
 
-        // Категории
-        closeAddCategoryModal:  function () { this._hideModal('addCategoryModal'); },
-        closeEditCategoryModal: function () { this._hideModal('editCategoryModal'); },
+        // Категории — внутренние (без подтверждения, вызываются после сохранения)
+        _forceCloseAddCategoryModal:  function () { this._hideModal('addCategoryModal'); },
+        _forceCloseEditCategoryModal: function () { this._hideModal('editCategoryModal'); },
 
-        // Группы
-        closeAddGroupModal:       function () { this._hideModal('addGroupModal'); },
-        closeEditGroupModal:      function () { this._hideModal('editGroupModal'); },
-        closeConfigureGroupModal: function () {
+        // Категории — публичные (с подтверждением, вызываются кнопкой Отмена / X)
+        closeAddCategoryModal: function () {
+            var self = this;
+            Swal.fire({
+                title: 'Отменить изменения?',
+                text: 'Введённые данные будут потеряны.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Да, отменить',
+                cancelButtonText: 'Нет, продолжить',
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#6c757d',
+                reverseButtons: true
+            }).then(function (result) {
+                if (result.isConfirmed) self._forceCloseAddCategoryModal();
+            });
+        },
+        closeEditCategoryModal: function () {
+            var self = this;
+            Swal.fire({
+                title: 'Отменить изменения?',
+                text: 'Введённые данные будут потеряны.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Да, отменить',
+                cancelButtonText: 'Нет, продолжить',
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#6c757d',
+                reverseButtons: true
+            }).then(function (result) {
+                if (result.isConfirmed) self._forceCloseEditCategoryModal();
+            });
+        },
+
+        // Группы — внутренние (без подтверждения, вызываются после сохранения)
+        _forceCloseAddGroupModal:  function () { this._hideModal('addGroupModal'); },
+        _forceCloseEditGroupModal: function () { this._hideModal('editGroupModal'); },
+        _forceCloseConfigureGroupModal: function () {
             var self = this;
             (self.groupFilters || []).forEach(function (f, i) { self._destroyFilterSelect2(i); });
             this._hideModal('configureGroupModal');
+        },
+
+        // Группы — публичные (с подтверждением, вызываются кнопкой Отмена / X)
+        closeAddGroupModal: function () {
+            var self = this;
+            Swal.fire({
+                title: 'Отменить изменения?',
+                text: 'Введённые данные будут потеряны.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Да, отменить',
+                cancelButtonText: 'Нет, продолжить',
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#6c757d',
+                reverseButtons: true
+            }).then(function (result) {
+                if (result.isConfirmed) self._forceCloseAddGroupModal();
+            });
+        },
+        closeEditGroupModal: function () {
+            var self = this;
+            Swal.fire({
+                title: 'Отменить изменения?',
+                text: 'Введённые данные будут потеряны.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Да, отменить',
+                cancelButtonText: 'Нет, продолжить',
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#6c757d',
+                reverseButtons: true
+            }).then(function (result) {
+                if (result.isConfirmed) self._forceCloseEditGroupModal();
+            });
+        },
+        closeConfigureGroupModal: function () {
+            var self = this;
+            Swal.fire({
+                title: 'Отменить изменения?',
+                text: 'Введённые данные будут потеряны.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Да, отменить',
+                cancelButtonText: 'Нет, продолжить',
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#6c757d',
+                reverseButtons: true
+            }).then(function (result) {
+                if (result.isConfirmed) self._forceCloseConfigureGroupModal();
+            });
         },
 
         // Записи — closeEntryModal переопределён в EntriesMixin с подтверждением

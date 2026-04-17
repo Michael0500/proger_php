@@ -176,6 +176,44 @@ class MatchingController extends BaseController
         return $this->service()->autoMatchStep($jobId);
     }
 
+    // ── Просмотр сквитованной группы ─────────────────────────────────
+
+    /**
+     * GET /matching/match-group?match_id=MTCHxxxxxxxx
+     * Возвращает все записи с данным match_id.
+     */
+    public function actionMatchGroup(): array
+    {
+        Yii::$app->response->format = Response::FORMAT_JSON;
+
+        $matchId = Yii::$app->request->get('match_id');
+        if (!$matchId) {
+            return ['success' => false, 'message' => 'Не указан Match ID'];
+        }
+
+        $companyId = $this->companyId();
+        $entries = NostroEntry::find()
+            ->alias('e')
+            ->select([
+                'e.id', 'e.account_id', 'e.ls', 'e.dc', 'e.amount', 'e.currency',
+                'e.value_date', 'e.post_date',
+                'e.instruction_id', 'e.end_to_end_id', 'e.transaction_id', 'e.message_id',
+                'e.match_id', 'e.match_status', 'e.comment',
+                'a.name AS account_name',
+            ])
+            ->leftJoin('accounts a', 'a.id = e.account_id')
+            ->where(['e.match_id' => $matchId, 'e.company_id' => $companyId])
+            ->orderBy(['e.ls' => SORT_ASC, 'e.dc' => SORT_ASC, 'e.amount' => SORT_DESC])
+            ->asArray()
+            ->all();
+
+        if (empty($entries)) {
+            return ['success' => false, 'message' => 'Записи не найдены'];
+        }
+
+        return ['success' => true, 'data' => $entries, 'match_id' => $matchId];
+    }
+
     // ── CRUD правил квитования ────────────────────────────────────────
 
     /**

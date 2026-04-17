@@ -54,7 +54,7 @@ var GroupsMixin = {
                 .then(function (response) {
                     if (response.data.success) {
                         Swal.fire('Успех', response.data.message, 'success');
-                        self.closeAddGroupModal();
+                        self._forceCloseAddGroupModal();
                         self.loadCategories();
                     } else {
                         Swal.fire('Ошибка', response.data.message || 'Не удалось создать группу', 'error');
@@ -83,8 +83,8 @@ var GroupsMixin = {
                 .then(function (response) {
                     if (response.data.success) {
                         Swal.fire('Успех', response.data.message, 'success');
-                        self.closeEditGroupModal();
-                        self.closeConfigureGroupModal();
+                        self._forceCloseEditGroupModal();
+                        self._forceCloseConfigureGroupModal();
                         self.loadCategories();
                         if (self.selectedGroup && self.selectedGroup.id === self.editingGroup.id) {
                             self.loadEntries(true);
@@ -265,7 +265,7 @@ var GroupsMixin = {
                 .then(function (response) {
                     if (response.data.success) {
                         Swal.fire('Сохранено', response.data.message, 'success');
-                        self.closeConfigureGroupModal();
+                        self._forceCloseConfigureGroupModal();
                         self.loadCategories();
                     } else {
                         Swal.fire('Ошибка', response.data.message || 'Ошибка сохранения', 'error');
