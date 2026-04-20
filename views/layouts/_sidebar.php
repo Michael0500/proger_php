@@ -67,9 +67,16 @@
                     <button class="tree-btn primary" @click.stop="editCategory(category)" title="Редактировать">
                         <i class="fas fa-pen"></i>
                     </button>
-                    <button class="tree-btn danger" @click.stop="deleteCategory(category)" title="Удалить">
-                        <i class="fas fa-trash"></i>
-                    </button>
+                    <div class="row-actions-dropdown">
+                        <button class="tree-btn" @click.stop="toggleRowMenu('cat', category.id, $event)" title="Ещё">
+                            <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                        <div v-if="openRowMenu==='cat-'+category.id" class="row-actions-menu" :style="rowMenuStyle">
+                            <button class="row-actions-menu-item danger" @click.stop="deleteCategory(category); openRowMenu=null">
+                                <i class="fas fa-trash"></i> Удалить
+                            </button>
+                        </div>
+                    </div>
                 </span>
             </div>
 
@@ -127,9 +134,16 @@
                         <button class="tree-btn warning" @click.stop="configureGroup(group)" title="Настройки">
                             <i class="fas fa-sliders-h"></i>
                         </button>
-                        <button class="tree-btn danger" @click.stop="deleteGroup(group)" title="Удалить">
-                            <i class="fas fa-trash"></i>
-                        </button>
+                        <div class="row-actions-dropdown">
+                            <button class="tree-btn" @click.stop="toggleRowMenu('grp', group.id, $event)" title="Ещё">
+                                <i class="fas fa-ellipsis-v"></i>
+                            </button>
+                            <div v-if="openRowMenu==='grp-'+group.id" class="row-actions-menu" :style="rowMenuStyle">
+                                <button class="row-actions-menu-item danger" @click.stop="deleteGroup(group); openRowMenu=null">
+                                    <i class="fas fa-trash"></i> Удалить
+                                </button>
+                            </div>
+                        </div>
                     </span>
                 </div>
 
