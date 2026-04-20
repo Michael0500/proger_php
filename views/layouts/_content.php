@@ -186,7 +186,7 @@
                         </div>
                     </div>
 
-                    <!-- Даты -->
+                    <!-- Даты Value Date -->
                     <div class="filter-field">
                         <label class="filter-label">Value Date от</label>
                         <div class="filter-input-wrap">
@@ -204,29 +204,86 @@
                         </div>
                     </div>
 
-                    <!-- Поле — Значение -->
+                    <!-- Даты Post Date -->
                     <div class="filter-field">
-                        <label class="filter-label">Поле поиска</label>
-                        <select class="filter-input" style="padding-right:24px"
-                                :value="filters.search_field||''"
-                                @change="applyFilter('search_field',$event.target.value)">
-                            <option value="">— Все поля —</option>
-                            <option value="match_id">Match ID</option>
-                            <option value="instruction_id">Instruction ID</option>
-                            <option value="end_to_end_id">EndToEnd ID</option>
-                            <option value="transaction_id">Transaction ID</option>
-                            <option value="message_id">Message ID</option>
-                            <option value="other_id">Other ID</option>
-                            <option value="comment">Комментарий</option>
-                        </select>
+                        <label class="filter-label">Post Date от</label>
+                        <div class="filter-input-wrap">
+                            <input type="text" v-datepicker class="filter-input" :value="filters.post_date_from||''"
+                                   @change="applyFilter('post_date_from',$event.target.value)">
+                            <button v-if="filters.post_date_from" class="filter-clear-btn" @click="clearFilter('post_date_from')">×</button>
+                        </div>
                     </div>
                     <div class="filter-field">
-                        <label class="filter-label">Значение</label>
+                        <label class="filter-label">Post Date до</label>
                         <div class="filter-input-wrap">
-                            <input type="text" class="filter-input" placeholder="Поиск..."
-                                   :value="filters.search_value||''"
-                                   @input="debouncedFilter('search_value',$event.target.value)">
-                            <button v-if="filters.search_value" class="filter-clear-btn" @click="clearFilter('search_value')">×</button>
+                            <input type="text" v-datepicker class="filter-input" :value="filters.post_date_to||''"
+                                   @change="applyFilter('post_date_to',$event.target.value)">
+                            <button v-if="filters.post_date_to" class="filter-clear-btn" @click="clearFilter('post_date_to')">×</button>
+                        </div>
+                    </div>
+
+                    <!-- Поля поиска — каждое отдельно -->
+                    <div class="filter-field">
+                        <label class="filter-label">Match ID</label>
+                        <div class="filter-input-wrap">
+                            <input type="text" class="filter-input" placeholder="Match ID..."
+                                   :value="filters.match_id||''"
+                                   @input="debouncedFilter('match_id',$event.target.value)">
+                            <button v-if="filters.match_id" class="filter-clear-btn" @click="clearFilter('match_id')">×</button>
+                        </div>
+                    </div>
+                    <div class="filter-field">
+                        <label class="filter-label">Instruction ID</label>
+                        <div class="filter-input-wrap">
+                            <input type="text" class="filter-input" placeholder="Instruction ID..."
+                                   :value="filters.instruction_id||''"
+                                   @input="debouncedFilter('instruction_id',$event.target.value)">
+                            <button v-if="filters.instruction_id" class="filter-clear-btn" @click="clearFilter('instruction_id')">×</button>
+                        </div>
+                    </div>
+                    <div class="filter-field">
+                        <label class="filter-label">EndToEnd ID</label>
+                        <div class="filter-input-wrap">
+                            <input type="text" class="filter-input" placeholder="EndToEnd ID..."
+                                   :value="filters.end_to_end_id||''"
+                                   @input="debouncedFilter('end_to_end_id',$event.target.value)">
+                            <button v-if="filters.end_to_end_id" class="filter-clear-btn" @click="clearFilter('end_to_end_id')">×</button>
+                        </div>
+                    </div>
+                    <div class="filter-field">
+                        <label class="filter-label">Transaction ID</label>
+                        <div class="filter-input-wrap">
+                            <input type="text" class="filter-input" placeholder="Transaction ID..."
+                                   :value="filters.transaction_id||''"
+                                   @input="debouncedFilter('transaction_id',$event.target.value)">
+                            <button v-if="filters.transaction_id" class="filter-clear-btn" @click="clearFilter('transaction_id')">×</button>
+                        </div>
+                    </div>
+                    <div class="filter-field">
+                        <label class="filter-label">Message ID</label>
+                        <div class="filter-input-wrap">
+                            <input type="text" class="filter-input" placeholder="Message ID..."
+                                   :value="filters.message_id||''"
+                                   @input="debouncedFilter('message_id',$event.target.value)">
+                            <button v-if="filters.message_id" class="filter-clear-btn" @click="clearFilter('message_id')">×</button>
+                        </div>
+                    </div>
+                    <div class="filter-field">
+                        <label class="filter-label">Other ID</label>
+                        <div class="filter-input-wrap">
+                            <input type="text" class="filter-input" placeholder="Other ID..."
+                                   :value="filters.other_id||''"
+                                   @input="debouncedFilter('other_id',$event.target.value)">
+                            <button v-if="filters.other_id" class="filter-clear-btn" @click="clearFilter('other_id')">×</button>
+                        </div>
+                    </div>
+                    <div class="filter-field">
+                        <label class="filter-label">Комментарий</label>
+                        <div class="filter-input-wrap">
+                            <input type="text" class="filter-input" placeholder="Комментарий..."
+                                   :value="filters.comment||''"
+                                   @input="debouncedFilter('comment',$event.target.value)">
+                            <button v-if="filters.comment" class="filter-clear-btn" @click="clearFilter('comment')">×</button>
                         </div>
                     </div>
 
