@@ -1501,7 +1501,7 @@ body.resizing-col, body.resizing-col * { cursor:col-resize !important; user-sele
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-family: Verdana, Geneva, Tahoma, sans-serif;
     font-size: 11px;
     color: #6b7280;
     cursor: help;

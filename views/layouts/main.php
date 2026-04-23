@@ -28,9 +28,10 @@ $isProfilePage    = ($currentRoute === 'user/view');
 $isReconPage      = (Yii::$app->controller->id === 'recon-report');
 $isNostroBankPage = ($currentRoute === 'account-pool/index');
 $isAccountsPage   = ($currentRoute === 'account/index');
+$isAllNostroPage  = ($currentRoute === 'all-nostro/index');
 
 // Объединяем: страницы без основного Vue-приложения
-$isStandalonePage = $isProfilePage || $isReconPage || $isNostroBankPage || $isAccountsPage;
+$isStandalonePage = $isProfilePage || $isReconPage || $isNostroBankPage || $isAccountsPage || $isAllNostroPage;
 
 // Отдельные страницы секций (Vue без sidebar)
 $isArchivePage  = ($currentRoute === 'archive/page');
@@ -61,7 +62,18 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
                 'options'    => ['class' => 'navbar-expand-md navbar-dark fixed-top'],
         ]);
 
-        $menuItems = [['label' => 'Выверка', 'url' => ['/site/index']]];
+        $menuItems = [
+            ['label' => 'Выверка', 'url' => ['/site/index']],
+        ];
+
+        if (!$isGuest && $hasCompany) {
+            $menuItems[] = [
+                'label'  => '<i class="fas fa-globe me-1"></i>Выверка по всем ностро банкам',
+                'encode' => false,
+                'url'    => ['/all-nostro'],
+                'active' => $isAllNostroPage,
+            ];
+        }
 
         if ($isGuest) {
             $menuItems[] = ['label' => 'Вход', 'url' => ['/site/login']];

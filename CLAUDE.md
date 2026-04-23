@@ -100,6 +100,9 @@ When filtering entries by `group_id` (formerly `pool_id`):
 1. Apply `GroupFilter` conditions that target `accounts` table (account-level fields, including `account_pool_id` → `accounts.pool_id`) → get matching `account_id` list.
 2. Apply `GroupFilter` conditions that target `nostro_entries` table (entry-level fields) → filter the main query.
 
+### Cross-bank reconciliation page (`AllNostroController`)
+Standalone страница `/all-nostro` — "Выверка по всем ностро-банкам". Показывает записи `NostroEntry` со всех ностро-банков компании с полным набором фильтров (как на главной выверке) + **мультивыбор ностро-банков** (`filters.pool_ids[]`) и выбор счёта (`filters.account_id`). Основная страница выверки (`site/index`) больше не содержит фильтров по ностро-банку/счёту — они перенесены сюда.
+
 ### Hierarchy: Category → Group → GroupFilter
 - **Category** (`CategoryController`): верхний уровень навигации в сайдбаре
 - **Group** (`GroupController`): набор фильтров для выборки записей. Принадлежит категории через `category_id`
@@ -110,9 +113,21 @@ When filtering entries by `group_id` (formerly `pool_id`):
 - Main layout: `views/layouts/main.php` — Bootstrap 5 navbar + conditional rendering.
 - Two rendering modes controlled by `$isStandalonePage`:
   - **Main Vue app**: sidebar (`_sidebar.php`) + content area with Vue.js components loaded via `_vue-scripts.php`.
-  - **Standalone pages**: user profile (`user/view`), recon report (`recon-report/`), and nostro banks management (`nostro-banks`) render their own full-page content.
+  - **Standalone pages**: user profile (`user/view`), recon report (`recon-report/`), nostro banks management (`nostro-banks`), accounts (`accounts`) and all-nostro reconciliation (`all-nostro`) render their own full-page content.
 - Vue scripts are inline/embedded in PHP view partials — not a separate build process.
 - Vue mixins (`web/js/app/mixins/`): `CategoriesMixin`, `GroupsMixin`, `EntriesMixin`, `MatchingMixin`, `BalanceMixin`, `ArchiveMixin`, `ModalsMixin`, `StatePersistenceMixin`.
+
+### Структура views (секции и общие partial'ы)
+`views/layouts/_content.php` — диспетчер, рендерит три секции основного Vue-приложения:
+- `views/layouts/_section-entries.php` — выверка (entries)
+- `views/layouts/_section-balance.php` — баланс
+- `views/layouts/_section-archive.php` — архив
+
+Общие partial'ы в `views/partials/` переиспользуются между главной выверкой и страницей "Выверка по всем ностро-банкам" (`views/all-nostro/index.php`):
+- `_entries-filters.php` — панель фильтров. Параметры: `showMultiPoolFilter`, `showAccountFilter`, `poolSelectId`, `accountSelectId`. По умолчанию пул/счёт скрыты (как на главной выверке); `all-nostro` передаёт `true` для мультивыбора банков и выбора счёта.
+- `_entries-detail-modal.php` — модалка деталей записи. Требует во Vue-инстансе: `data.detailEntry`, методы `closeEntryDetail`, `formatAmount`, `fmtDate`.
+
+Оба partial'а работают в любом Vue-инстансе, где есть стандартные поля `filters/filtersOpen` и методы `applyFilter/debouncedFilter/clearFilter/clearAllFilters`.
 
 ### Archive process
 Archiving is batch-processed: client calls `POST /archive/run-batch` repeatedly (300 records per call) until `is_finished = true`. Uses raw SQL `batchInsert` + `DELETE WHERE id = ANY(ARRAY[...])` for performance.

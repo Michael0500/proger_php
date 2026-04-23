@@ -120,4 +120,38 @@ class Account extends ActiveRecord
         }
         return false;
     }
+
+    /**
+     * После создания счёта — автоматически создаём записи баланса с нулевым остатком (L и S).
+     */
+    public function afterSave($insert, $changedAttributes)
+    {
+        parent::afterSave($insert, $changedAttributes);
+
+        if ($insert) {
+            $this->createInitialBalances();
+        }
+    }
+
+    /**
+     * Создаёт начальную запись баланса с нулевым остатком.
+     * Тип (L/S) определяется по load_status счёта.
+     */
+    private function createInitialBalances(): void
+    {
+        $balance = new NostroBalance();
+        $balance->company_id      = $this->company_id;
+        $balance->account_id      = $this->id;
+        $balance->ls_type         = $this->account_type ?: NostroBalance::LS_LEDGER;
+        $balance->currency        = $this->currency ?: 'RUB';
+        $balance->value_date      = $this->date_open ?: date('Y-m-d');
+        $balance->opening_balance = 0;
+        $balance->opening_dc      = NostroBalance::DC_CREDIT;
+        $balance->closing_balance = 0;
+        $balance->closing_dc      = NostroBalance::DC_CREDIT;
+        $balance->section         = $this->is_suspense ? NostroBalance::SECTION_INV : NostroBalance::SECTION_NRE;
+        $balance->source          = NostroBalance::SOURCE_MANUAL;
+        $balance->status          = NostroBalance::STATUS_NORMAL;
+        $balance->save(false);
+    }
 }
