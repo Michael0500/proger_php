@@ -964,4 +964,69 @@
             </div>
         </div>
     </div>
-</div>
+</div><!-- Модал: Список правил -->
+<div class="modal fade" id="rulesListModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <span class="modal-icon indigo"><i class="fas fa-sliders-h"></i></span>
+                    Правила автоквитования
+                </h5>
+                <button type="button" class="btn-close" @click="_hideModal('rulesListModal')"></button>
+            </div>
+            <div class="modal-body" style="padding:0 !important">
+                <div style="padding:12px 16px;border-bottom:1px solid #f1f3f7">
+                    <button class="toolbar-btn success" @click="showAddRuleModal">
+                        <i class="fas fa-plus"></i>Добавить правило
+                    </button>
+                </div>
+                <div v-if="loadingRules" style="text-align:center;padding:40px">
+                    <div class="spinner-border" style="color:#6366f1"></div>
+                </div>
+                <div v-else-if="!matchingRules||matchingRules.length===0" class="empty-pool" style="padding:48px">
+                    <i class="fas fa-inbox"></i><p>Нет правил. Создайте первое.</p>
+                </div>
+                <table v-else class="entries-table">
+                    <thead><tr>
+                        <th style="padding-left:16px">Название</th>
+                        <th>Раздел</th><th>Тип пары</th><th>Условия</th>
+                        <th style="width:55px">Приор.</th>
+                        <th style="width:80px">Статус</th>
+                        <th style="width:72px;text-align:right;padding-right:16px"></th>
+                    </tr></thead>
+                    <tbody>
+                    <tr v-for="rule in matchingRules" :key="rule.id">
+                        <td style="padding-left:16px">
+                            <span style="font-weight:600">{{ rule.name }}</span>
+                            <div v-if="rule.description" style="font-size:11px;color:#9ca3af">{{ rule.description }}</div>
+                        </td>
+                        <td><span style="background:#1e2532;color:#fff;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">{{ rule.section }}</span></td>
+                        <td style="font-size:12px">{{ rule.pair_type_label }}</td>
+                        <td style="font-size:11px;color:#6b7280">{{ rule.conditions_summary }}</td>
+                        <td style="text-align:center;font-size:12px">{{ rule.priority }}</td>
+                        <td><span :class="rule.is_active?'status-badge status-matched':'status-badge status-ignored'">{{ rule.is_active?'Активно':'Откл.' }}</span></td>
+                        <td style="text-align:right;padding-right:16px">
+                            <div style="display:flex;gap:3px;justify-content:flex-end">
+                                <button class="row-btn edit" @click="editRule(rule)"><i class="fas fa-pen"></i></button>
+                                <div class="row-actions-dropdown">
+                                    <button class="row-btn more" @click.stop="toggleRowMenu('rule', rule.id, $event)"><i class="fas fa-ellipsis-v"></i></button>
+                                    <div v-if="openRowMenu==='rule-'+rule.id" class="row-actions-menu" :style="rowMenuStyle">
+                                        <button class="row-actions-menu-item danger" @click.stop="deleteRule(rule); openRowMenu=null">
+                                            <i class="fas fa-trash"></i> Удалить
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn cancel" @click="_hideModal('rulesListModal')">
+                    <i class="fas fa-times"></i>Закрыть
+                </button>
+            </div>
+        </div>
+    </div>

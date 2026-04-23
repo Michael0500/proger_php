@@ -110,24 +110,39 @@ Standalone страница `/all-nostro` — "Выверка по всем но
 - **AccountPool**: отдельная сущность — ностро-банки. Standalone страница `/nostro-banks` (`AccountPoolController`). CRUD + привязка/отвязка счетов (`Account.pool_id` nullable). Не связан с категориями/группами напрямую
 
 ### Frontend
-- Main layout: `views/layouts/main.php` — Bootstrap 5 navbar + conditional rendering.
-- Two rendering modes controlled by `$isStandalonePage`:
-  - **Main Vue app**: sidebar (`_sidebar.php`) + content area with Vue.js components loaded via `_vue-scripts.php`.
-  - **Standalone pages**: user profile (`user/view`), recon report (`recon-report/`), nostro banks management (`nostro-banks`), accounts (`accounts`) and all-nostro reconciliation (`all-nostro`) render their own full-page content.
-- Vue scripts are inline/embedded in PHP view partials — not a separate build process.
+- Main layout: `views/layouts/main.php` — Bootstrap 5 navbar + тонкий диспетчер по типу страницы (guest / no-company / entries-page / other app / standalone).
+- Каждая страница с бизнес-логикой поднимает **свой изолированный Vue-инстанс** по id корневого элемента:
+  - `/site/index` → `#entries-app` (выверка, с sidebar)
+  - `/balance` → `#balance-app`
+  - `/archive` → `#archive-app`
+  - `/all-nostro` → `#all-nostro-app`
+  - `/recon-report`, `/nostro-banks`, `/accounts` — каждая со своим инстансом внутри view
+- Общая инфраструктура: `web/js/app/common.js` (глобальные методы `recordText`, `formatAmount` через `Vue.mixin`), `datepicker.js` (глобальная директива `v-datepicker` и метод `fmtDate`), `api.js` (`SmartMatchApi` поверх axios), `state-storage.js`.
+- `views/layouts/_vue-scripts.php` заполняет `window.AppRoutes` и `window.AppConfig` — рендерится во всех залогиненных страницах.
 - Vue mixins (`web/js/app/mixins/`): `CategoriesMixin`, `GroupsMixin`, `EntriesMixin`, `MatchingMixin`, `BalanceMixin`, `ArchiveMixin`, `ModalsMixin`, `StatePersistenceMixin`.
 
-### Структура views (секции и общие partial'ы)
-`views/layouts/_content.php` — диспетчер, рендерит три секции основного Vue-приложения:
-- `views/layouts/_section-entries.php` — выверка (entries)
-- `views/layouts/_section-balance.php` — баланс
-- `views/layouts/_section-archive.php` — архив
+### Стартеры Vue (`web/js/app/page-*.js`)
+Каждый стартер создаёт свой Vue-инстанс, но только если находит соответствующий корневой `<div id="...">`. Все три файла грузятся через `AppAsset`, но выполняется только тот, чей корень есть в DOM.
 
-Общие partial'ы в `views/partials/` переиспользуются между главной выверкой и страницей "Выверка по всем ностро-банкам" (`views/all-nostro/index.php`):
-- `_entries-filters.php` — панель фильтров. Параметры: `showMultiPoolFilter`, `showAccountFilter`, `poolSelectId`, `accountSelectId`. По умолчанию пул/счёт скрыты (как на главной выверке); `all-nostro` передаёт `true` для мультивыбора банков и выбора счёта.
+| Стартер | Корень | Mixins |
+|---|---|---|
+| `page-entries.js` | `#entries-app` | Modals, Categories, Groups, Entries, Matching, StatePersistence |
+| `page-balance.js` | `#balance-app` | Modals, Balance |
+| `page-archive.js` | `#archive-app` | Modals, Archive |
+
+Страница `/all-nostro` (`views/all-nostro/index.php`) использует свой собственный инстанс с inline-скриптом и не полагается на эти стартеры.
+
+### Views: декомпозиция секций
+Старый монолитный `_content.php` удалён. Вместо него:
+- `views/site/entries.php` — сайдбар + `_section-entries.php` + `_modals.php` (выверка)
+- `views/nostro-balance/page.php` — `_section-balance.php` (баланс)
+- `views/archive/page.php` — `_section-archive.php` (архив)
+
+Секции `views/layouts/_section-*.php` — только разметка без `v-show`, они включаются каждая на своей странице.
+
+Общие partial'ы в `views/partials/` переиспользуются между страницей выверки и `all-nostro`:
+- `_entries-filters.php` — панель фильтров. Параметры: `showMultiPoolFilter`, `showAccountFilter`, `poolSelectId`, `accountSelectId`. По умолчанию пул/счёт скрыты (как на главной выверке); `all-nostro` передаёт `true`.
 - `_entries-detail-modal.php` — модалка деталей записи. Требует во Vue-инстансе: `data.detailEntry`, методы `closeEntryDetail`, `formatAmount`, `fmtDate`.
-
-Оба partial'а работают в любом Vue-инстансе, где есть стандартные поля `filters/filtersOpen` и методы `applyFilter/debouncedFilter/clearFilter/clearAllFilters`.
 
 ### Archive process
 Archiving is batch-processed: client calls `POST /archive/run-batch` repeatedly (300 records per call) until `is_finished = true`. Uses raw SQL `batchInsert` + `DELETE WHERE id = ANY(ARRAY[...])` for performance.

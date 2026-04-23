@@ -1,12 +1,10 @@
 <?php
 /** @var yii\web\View $this */
-/** @var string $initialSection */
 use yii\helpers\Url;
 
 $currentUser = Yii::$app->user->identity;
 $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->company : null;
 $companySection = $currentComp ? strtoupper($currentComp->code) : '';
-$initialSection = $initialSection ?? 'entries';
 ?>
 <script>
     window.AppRoutes = {
@@ -78,6 +76,5 @@ $initialSection = $initialSection ?? 'entries';
     window.AppConfig = {
         companySection:  '<?= addslashes($companySection) ?>',
         userId:          <?= Yii::$app->user->isGuest ? 'null' : (int)Yii::$app->user->id ?>,
-        initialSection:  '<?= addslashes($initialSection) ?>',
     };
 </script>

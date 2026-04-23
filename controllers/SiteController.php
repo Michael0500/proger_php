@@ -41,11 +41,9 @@ class SiteController extends BaseController
     {
         $user = Yii::$app->user->identity;
 
-        // Если компания уже выбрана - показать основной контент
+        // Если компания уже выбрана — показываем страницу выверки
         if ($user && $user->hasCompany()) {
-            return $this->render('dashboard', [
-                'company' => $user->company,
-            ]);
+            return $this->render('entries');
         }
 
         // Иначе показать выбор компании

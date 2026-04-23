@@ -16,7 +16,7 @@ class AppAsset extends AssetBundle
         'css/select2-bootstrap-5-theme.min.css',
         'css/sweetalert2.min.css',
         'css/flatpickr.min.css',
-        'css/app.css?v16',
+        'css/app.css?v17',
         'fontawesome/css/all.min.css',
     ];
 
@@ -36,19 +36,23 @@ class AppAsset extends AssetBundle
         // 7. Flatpickr
         'js/flatpickr.min.js',
         'js/flatpickr.ru.js',
-        // 8. Приложение
+        // 8. Общие модули приложения
+        'js/app/common.js?v1',
         'js/app/api.js',
         'js/app/state-storage.js',
         'js/app/datepicker.js',
         'js/app/mixins/modals.js?v3',
         'js/app/mixins/categories.js?v1',
         'js/app/mixins/groups.js?v3',
-        'js/app/mixins/entries.js?v16',
+        'js/app/mixins/entries.js?v17',
         'js/app/mixins/matching.js?v9',
         'js/app/mixins/balance.js?v2',
         'js/app/mixins/archive.js?v1',
-        'js/app/mixins/state-persistence.js?v1',
-        'js/app/app.js?v5',
+        'js/app/mixins/state-persistence.js?v2',
+        // 9. Стартеры Vue — каждый активируется по наличию своего корневого элемента
+        'js/app/page-entries.js?v1',
+        'js/app/page-balance.js?v2',
+        'js/app/page-archive.js?v1',
     ];
 
     // POS_END чтобы скрипты грузились после DOM

@@ -1,7 +1,7 @@
 <?php /** @var yii\web\View $this */ ?>
 
     <!-- ══ СЕКЦИЯ: БАЛАНС ════════════════════════════════════════ -->
-    <div v-show="activeSection==='balance'">
+    <div>
 
         <!-- ТУЛБАР -->
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
@@ -571,4 +571,4 @@
             </div>
         </div>
 
-    </div><!-- /v-show balance -->
+    </div>

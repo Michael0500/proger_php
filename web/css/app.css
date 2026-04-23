@@ -34,7 +34,8 @@ body {
 #header .nav-link:hover { color: #fff !important; }
 
 /* ── Layout ────────────────────────────────────────────────────── */
-#app {
+#app,
+#entries-app {
     display: flex;
     min-height: calc(100vh - 52px);
     margin-top: 52px;

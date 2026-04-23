@@ -1,6 +1,6 @@
 <?php /** @var yii\web\View $this */ ?>
 
-    <div v-show="activeSection==='entries'">
+    <div>
 
         <!-- ─────────── Пул не выбран ─────────── -->
         <div v-if="!selectedGroup" class="empty-pool">
@@ -404,6 +404,6 @@
 
         </div>
 
-    </div><!-- /v-show entries -->
+    </div>
 
     <?= $this->render("//partials/_entries-detail-modal") ?>

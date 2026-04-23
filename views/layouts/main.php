@@ -23,21 +23,13 @@ $showNoComp  = !$isGuest && !$hasCompany;
 
 $currentRoute = Yii::$app->controller->route;
 
-// Страницы, которые рендерятся без sidebar/Vue-app (напрямую в $content)
-$isProfilePage    = ($currentRoute === 'user/view');
+// Страница выверки (site/index с компанией) сама рендерит свой sidebar — layout
+// не оборачивает её в <main>, чтобы не дублировать flex-вёрстку.
+$isEntriesPage    = ($currentRoute === 'site/index') && $hasCompany;
 $isReconPage      = (Yii::$app->controller->id === 'recon-report');
 $isNostroBankPage = ($currentRoute === 'account-pool/index');
 $isAccountsPage   = ($currentRoute === 'account/index');
 $isAllNostroPage  = ($currentRoute === 'all-nostro/index');
-
-// Объединяем: страницы без основного Vue-приложения
-$isStandalonePage = $isProfilePage || $isReconPage || $isNostroBankPage || $isAccountsPage || $isAllNostroPage;
-
-// Отдельные страницы секций (Vue без sidebar)
-$isArchivePage  = ($currentRoute === 'archive/page');
-$isBalancePage  = ($currentRoute === 'nostro-balance/page');
-$isSectionPage  = $isArchivePage || $isBalancePage;
-$initialSection = $isArchivePage ? 'archive' : ($isBalancePage ? 'balance' : 'entries');
 
 $currentUser = $isGuest ? null : Yii::$app->user->identity;
 $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->company : null;
@@ -166,30 +158,22 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
         ?>
     </header>
 
-    <?php if ($showApp && $isSectionPage): ?>
-        <!-- ── Отдельная страница секции (архив / баланс) без sidebar ── -->
-        <div id="app" v-cloak>
-            <main id="main" class="section-page-main" role="main">
-                <?= Alert::widget() ?>
-                <?= $this->render('_content') ?>
-            </main>
-            <?= $this->render('_modals') ?>
-        </div>
-        <?= $this->render('_vue-scripts', ['initialSection' => $initialSection]) ?>
-
-    <?php elseif ($showApp && !$isStandalonePage): ?>
-        <!-- ── Основное приложение с sidebar (NRE/INV) ──── -->
-        <div id="app" class="d-flex" v-cloak>
-            <?= $this->render('_sidebar') ?>
-            <main id="main" :class="{ 'sidebar-collapsed': isSidebarCollapsed }" role="main">
-                <?= Alert::widget() ?>
-                <?= $this->render('_content', ['content' => $content]) ?>
-            </main>
-            <?= $this->render('_modals') ?>
-        </div>
+    <?php if ($showApp && $isEntriesPage): ?>
+        <!-- ── Страница выверки: свой sidebar и main внутри view ── -->
+        <?= $content ?>
         <?= $this->render('_vue-scripts') ?>
 
-    <?php elseif ($showNoComp && !$isStandalonePage): ?>
+    <?php elseif ($showApp): ?>
+        <!-- ── Любая другая страница залогиненного пользователя ── -->
+        <main style="margin-top:52px; padding:24px 28px">
+            <div class="container-fluid" style="max-width:1400px">
+                <?= Alert::widget() ?>
+                <?= $content ?>
+            </div>
+        </main>
+        <?= $this->render('_vue-scripts') ?>
+
+    <?php elseif ($showNoComp): ?>
         <!-- ── Нет компании ─────────────────────────── -->
         <main style="margin-top:52px">
             <div class="company-required">
