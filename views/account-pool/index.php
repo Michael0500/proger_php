@@ -21,9 +21,29 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                 <div style="font-size:11px;color:#9ca3af;font-weight:500">Управление ностро-банками и привязанными счетами</div>
             </div>
         </div>
-        <button class="btn-action btn-primary-violet" @click="showCreateModal">
-            <i class="fas fa-plus me-1"></i> Добавить ностро-банк
-        </button>
+        <div style="display:flex;align-items:center;gap:10px">
+            <div class="nb-search-wrap">
+                <i class="fas fa-search nb-search-icon"></i>
+                <input
+                    type="text"
+                    class="form-control nb-search-input"
+                    v-model="searchQuery"
+                    placeholder="Поиск по названию, описанию, счетам…"
+                >
+                <button
+                    v-if="searchQuery"
+                    type="button"
+                    class="nb-search-clear"
+                    @click="searchQuery = ''"
+                    title="Очистить"
+                >
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <button class="btn-action btn-primary-violet" @click="showCreateModal">
+                <i class="fas fa-plus me-1"></i> Добавить ностро-банк
+            </button>
+        </div>
     </div>
 
     <!-- ══ СПИСОК НОСТРО-БАНКОВ ═══════════════════════════════ -->
@@ -39,8 +59,16 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
         </button>
     </div>
 
+    <div v-else-if="filteredPools.length === 0" class="sm-card" style="text-align:center;padding:40px">
+        <i class="fas fa-search" style="font-size:36px;color:#d1d5db;margin-bottom:12px"></i>
+        <p style="color:#9ca3af;font-size:14px;margin:0">Ничего не найдено по запросу «{{ searchQuery }}»</p>
+        <button type="button" class="btn btn-link" @click="searchQuery = ''" style="margin-top:6px">
+            Сбросить поиск
+        </button>
+    </div>
+
     <div v-else>
-        <div v-for="pool in pools" :key="pool.id" class="sm-card" style="margin-bottom:16px">
+        <div v-for="pool in filteredPools" :key="pool.id" class="sm-card" style="margin-bottom:16px">
             <!-- Заголовок ностро-банка (кликабельный для сворачивания) -->
             <div class="sm-card-header nb-pool-header" @click="togglePool(pool.id)" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none">
                 <div style="display:flex;align-items:center;gap:8px">
@@ -309,6 +337,52 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
     background: #dcfce7;
     color: #15803d;
 }
+.nb-search-wrap {
+    position: relative;
+    width: 320px;
+    max-width: 100%;
+}
+.nb-search-input {
+    padding-left: 34px;
+    padding-right: 30px;
+    height: 36px;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    font-size: 13px;
+    background: #fff;
+    transition: border-color .15s, box-shadow .15s;
+}
+.nb-search-input:focus {
+    border-color: #4f46e5;
+    box-shadow: 0 0 0 3px rgba(79,70,229,.12);
+    outline: none;
+}
+.nb-search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #9ca3af;
+    font-size: 12px;
+    pointer-events: none;
+}
+.nb-search-clear {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    border: none;
+    background: transparent;
+    color: #9ca3af;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 6px;
+    font-size: 12px;
+}
+.nb-search-clear:hover {
+    background: #f3f4f6;
+    color: #374151;
+}
 </style>
 
 <script>
@@ -322,6 +396,9 @@ new Vue({
             categories: init.categories || [],
             loading: false,
             saving: false,
+
+            // Поиск по ностро-банкам
+            searchQuery: '',
 
             // Форма создания/редактирования
             formPool: { id: null, name: '', description: '' },
@@ -343,6 +420,25 @@ new Vue({
             createSelectedStatement: [],
             createSelectedCategoryId: '',
         };
+    },
+
+    computed: {
+        filteredPools: function () {
+            var q = (this.searchQuery || '').trim().toLowerCase();
+            if (!q) return this.pools;
+            return this.pools.filter(function (p) {
+                if ((p.name || '').toLowerCase().indexOf(q) !== -1) return true;
+                if ((p.description || '').toLowerCase().indexOf(q) !== -1) return true;
+                if (Array.isArray(p.accounts)) {
+                    for (var i = 0; i < p.accounts.length; i++) {
+                        var a = p.accounts[i];
+                        if ((a.name || '').toLowerCase().indexOf(q) !== -1) return true;
+                        if ((a.currency || '').toLowerCase().indexOf(q) !== -1) return true;
+                    }
+                }
+                return false;
+            });
+        },
     },
 
     methods: {

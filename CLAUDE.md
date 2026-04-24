@@ -33,6 +33,12 @@ php yii auto-match/status                        # show stats without running
 php yii auto-match/status --company=1            # stats for one company
 ```
 
+### FCC12 merge (console)
+```bash
+php yii fcc-merge/run   # перенос выписок FCC12 из git_no_stro_extract_custom
+                        # в nostro_balance / nostro_entries (см. FccMergeController)
+```
+
 ### Console entry point
 ```bash
 php yii <command>/<action>
@@ -86,6 +92,17 @@ All DB queries must include `company_id` scoping.
 | `NostroEntryArchive` | `nostro_entries_archive` | Matched entries moved to archive; has `original_id`, `archived_at`, `expires_at` |
 | `ArchiveSettings` | `archive_settings` | Per-company archive settings (`archive_after_days`, `retention_years`) |
 | `UserPreference` | `user_preferences` | Персональные настройки UI (JSONB). Ключи whitelist'ятся в `UserPreferenceController`. Текущий ключ: `entries_table_columns` — видимость и ширина колонок таблицы выверки |
+| — | `git_no_stro_extract_custom` | Сырой приёмник выписок FCC12 (построчный разбор: баланс или транзакция). После merge очищается |
+| — | `tds_status` | Статус пакетов выписок. `type='FCC12' + is_merged=false` → забирает `fcc-merge/run` |
+
+### FCC12 ingestion (`commands/FccMergeController`)
+`php yii fcc-merge/run` — для каждой `tds_status` с `type='FCC12'` и `is_merged=false` в одной транзакции:
+1. Читает строки `git_no_stro_extract_custom` c тем же `extract_no`.
+2. Строки-транзакции (`amount IS NOT NULL`) → `nostro_entries` (ls=L, section=NRE, source=FCC12, company_id=1).
+3. Строки-балансы (`opening_bal`/`closing_bal`) → `nostro_balance` (ls_type=L, section=NRE, source=FCC12).
+4. Счёт находится через `accounts.name = git_no_stro_extract_custom.cbr_cc_no` (company_id=1).
+5. В `nostro_balance`/`nostro_entries` проставляются `extract_no` и `line_no` — трассировка до исходной строки.
+6. `tds_status.is_merged := true`, исходные строки `git_no_stro_extract_custom` удаляются. Commit.
 
 ### Matching logic (`services/MatchingService.php`)
 - **Manual matching** (`matchManual`): takes array of entry IDs, validates balance (Ledger sum = Statement sum for mixed L+S sets), assigns a `MTCH` + 8-char hex `match_id`.
