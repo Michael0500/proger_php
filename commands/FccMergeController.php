@@ -8,18 +8,18 @@ use yii\console\ExitCode;
 use yii\helpers\Console;
 
 /**
- * Перенос выписок FCC12 из git_no_stro_extract_custom
+ * Перенос выписок FCC12 из gitb_nostro_extract_custom
  * в nostro_balance и nostro_entries.
  *
  * Алгоритм:
  *   1. В tds_status ищем type = 'FCC12' И is_merged = false.
  *   2. Для каждой такой записи открываем транзакцию.
- *   3. Из git_no_stro_extract_custom выбираем строки с extract_no = tds_status.fcc_extract_no.
+ *   3. Из gitb_nostro_extract_custom выбираем строки с extract_no = tds_status.fcc_extract_no.
  *      - строка-баланс (opening_bal/closing_bal заданы, amount пустая) → nostro_balance
  *      - строка-транзакция (amount задана) → nostro_entries
  *      При этом в обе таблицы пишем extract_no и line_no.
  *   4. tds_status.is_merged := true.
- *   5. Удаляем строки из git_no_stro_extract_custom с этим extract_no.
+ *   5. Удаляем строки из gitb_nostro_extract_custom с этим extract_no.
  *   6. Commit.
  *
  * Использование:
@@ -79,7 +79,7 @@ class FccMergeController extends Controller
                     ->execute();
 
                 $db->createCommand()
-                    ->delete('{{%git_no_stro_extract_custom}}', ['extract_no' => $extractNo])
+                    ->delete('{{%gitb_nostro_extract_custom}}', ['extract_no' => $extractNo])
                     ->execute();
 
                 $tx->commit();
@@ -159,7 +159,7 @@ class FccMergeController extends Controller
         $lastLineNo = -1;
         while (true) {
             $rows = $db->createCommand(
-                "SELECT * FROM {{%git_no_stro_extract_custom}}
+                "SELECT * FROM {{%gitb_nostro_extract_custom}}
                   WHERE extract_no = :ext
                     AND line_no > :ln
                   ORDER BY line_no
@@ -176,6 +176,15 @@ class FccMergeController extends Controller
             }
 
             foreach ($rows as $r) {
+                $isEntry   = $r['amount'] !== null && $r['amount'] !== '';
+                $isBalance = $r['opening_bal'] !== null || $r['closing_bal'] !== null;
+
+                // строки-заголовки / хвостовики — без финансовых данных, пропускаем
+                if (!$isEntry && !$isBalance) {
+                    $lastLineNo = (int)$r['line_no'];
+                    continue;
+                }
+
                 $cbrCcNo = trim((string)$r['cbr_cc_no']);
                 if ($cbrCcNo === '') {
                     throw new \RuntimeException("Строка line_no={$r['line_no']}: пустой cbr_cc_no");
@@ -198,8 +207,6 @@ class FccMergeController extends Controller
                     );
                 }
 
-                $isEntry = $r['amount'] !== null && $r['amount'] !== '';
-
                 if ($isEntry) {
                     $entryBuf[] = [
                         $accountId,
@@ -207,7 +214,7 @@ class FccMergeController extends Controller
                         self::LS_LEDGER,
                         $this->mapDc($r['drcr_ind']),
                         $r['amount'],
-                        $r['ccv'],
+                        $r['ccy'],
                         $r['trn_dt'],
                         $r['value_dt'],
                         $r['ed_no'],
@@ -223,12 +230,12 @@ class FccMergeController extends Controller
                     if (count($entryBuf) >= self::INSERT_CHUNK) {
                         $flushEntries();
                     }
-                } elseif ($r['opening_bal'] !== null || $r['closing_bal'] !== null) {
+                } elseif ($isBalance) {
                     $balanceBuf[] = [
                         self::COMPANY_ID,
                         $accountId,
                         self::LS_LEDGER,
-                        $r['ccv'],
+                        $r['ccy'],
                         $r['dt'],
                         $r['opening_bal'] ?? 0,
                         $r['opening_bal_dc'] ?: 'C',
@@ -246,7 +253,6 @@ class FccMergeController extends Controller
                         $flushBalances();
                     }
                 }
-                // строка без полезной нагрузки — пропускаем
 
                 $lastLineNo = (int)$r['line_no'];
             }

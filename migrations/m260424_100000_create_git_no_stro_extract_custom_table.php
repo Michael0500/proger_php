@@ -12,14 +12,14 @@ class m260424_100000_create_git_no_stro_extract_custom_table extends Migration
 {
     public function safeUp()
     {
-        $this->createTable('{{%git_no_stro_extract_custom}}', [
+        $this->createTable('{{%gitb_nostro_extract_custom}}', [
             'extract_no'     => $this->bigInteger()->notNull(),
             'line_no'        => $this->integer()->notNull(),
             'line_content'   => $this->text(),
             'data_section'   => $this->integer(),
             'branch_code'    => $this->char(3),
             'cbr_cc_no'      => $this->string(20),
-            'ccv'            => $this->char(3),
+            'ccy'            => $this->char(3),
             'dt'             => $this->date(),
             'opening_bal'    => $this->decimal(),
             'opening_bal_dc' => $this->char(1),
@@ -44,6 +44,6 @@ class m260424_100000_create_git_no_stro_extract_custom_table extends Migration
 
     public function safeDown()
     {
-        $this->dropTable('{{%git_no_stro_extract_custom}}');
+        $this->dropTable('{{%gitb_nostro_extract_custom}}');
     }
 }
