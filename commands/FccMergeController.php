@@ -32,6 +32,11 @@ class FccMergeController extends Controller
     const SECTION    = 'NRE';
     const LS_LEDGER  = 'L';
 
+    /** Сколько строк-источников тянуть за один SELECT. */
+    const FETCH_CHUNK  = 5000;
+    /** Сколько строк копить перед batchInsert. 17 колонок × 1000 = 17000 параметров (< 65535). */
+    const INSERT_CHUNK = 1000;
+
     public function actionRun(): int
     {
         $this->stdout("=== FCC12 merge: " . date('Y-m-d H:i:s') . " ===\n", Console::BOLD);
@@ -110,104 +115,151 @@ class FccMergeController extends Controller
     {
         $db = Yii::$app->db;
 
-        $rows = $db->createCommand(
-            "SELECT * FROM {{%git_no_stro_extract_custom}}
-              WHERE extract_no = :ext
-              ORDER BY line_no",
-            [':ext' => $extractNo]
-        )->queryAll();
-
-        if (empty($rows)) {
-            return [0, 0];
-        }
+        $entryColumns = [
+            'account_id', 'company_id', 'ls', 'dc', 'amount', 'currency',
+            'value_date', 'post_date', 'instruction_id', 'end_to_end_id',
+            'transaction_id', 'source', 'match_status', 'extract_no', 'line_no',
+            'created_at', 'updated_at',
+        ];
+        $balanceColumns = [
+            'company_id', 'account_id', 'ls_type', 'currency', 'value_date',
+            'opening_balance', 'opening_dc', 'closing_balance', 'closing_dc',
+            'section', 'source', 'status', 'extract_no', 'line_no',
+            'created_at', 'updated_at',
+        ];
 
         // Кэш account_id по cbr_cc_no (accounts.name) — чтобы не искать в цикле.
         $accountCache = [];
         $now = date('Y-m-d H:i:s');
 
-        $balances = 0;
-        $entries  = 0;
+        $entryBuf   = [];
+        $balanceBuf = [];
+        $totalEntries  = 0;
+        $totalBalances = 0;
 
-        foreach ($rows as $r) {
-            $cbrCcNo = trim((string)$r['cbr_cc_no']);
-            if ($cbrCcNo === '') {
-                throw new \RuntimeException("Строка line_no={$r['line_no']}: пустой cbr_cc_no");
+        $flushEntries = function () use ($db, $entryColumns, &$entryBuf, &$totalEntries) {
+            if (empty($entryBuf)) return;
+            $db->createCommand()
+                ->batchInsert('{{%nostro_entries}}', $entryColumns, $entryBuf)
+                ->execute();
+            $totalEntries += count($entryBuf);
+            $entryBuf = [];
+        };
+
+        $flushBalances = function () use ($db, $balanceColumns, &$balanceBuf, &$totalBalances) {
+            if (empty($balanceBuf)) return;
+            $db->createCommand()
+                ->batchInsert('{{%nostro_balance}}', $balanceColumns, $balanceBuf)
+                ->execute();
+            $totalBalances += count($balanceBuf);
+            $balanceBuf = [];
+        };
+
+        // Потоковое чтение источника по (extract_no, line_no) — без OFFSET и без полного queryAll.
+        $lastLineNo = -1;
+        while (true) {
+            $rows = $db->createCommand(
+                "SELECT * FROM {{%git_no_stro_extract_custom}}
+                  WHERE extract_no = :ext
+                    AND line_no > :ln
+                  ORDER BY line_no
+                  LIMIT :lim",
+                [
+                    ':ext' => $extractNo,
+                    ':ln'  => $lastLineNo,
+                    ':lim' => self::FETCH_CHUNK,
+                ]
+            )->queryAll();
+
+            if (empty($rows)) {
+                break;
             }
 
-            if (!array_key_exists($cbrCcNo, $accountCache)) {
-                $accountCache[$cbrCcNo] = $db->createCommand(
-                    "SELECT id FROM {{%accounts}}
-                      WHERE company_id = :cid
-                        AND name = :name
-                      LIMIT 1",
-                    [':cid' => self::COMPANY_ID, ':name' => $cbrCcNo]
-                )->queryScalar();
+            foreach ($rows as $r) {
+                $cbrCcNo = trim((string)$r['cbr_cc_no']);
+                if ($cbrCcNo === '') {
+                    throw new \RuntimeException("Строка line_no={$r['line_no']}: пустой cbr_cc_no");
+                }
+
+                if (!array_key_exists($cbrCcNo, $accountCache)) {
+                    $accountCache[$cbrCcNo] = $db->createCommand(
+                        "SELECT id FROM {{%accounts}}
+                          WHERE company_id = :cid
+                            AND name = :name
+                          LIMIT 1",
+                        [':cid' => self::COMPANY_ID, ':name' => $cbrCcNo]
+                    )->queryScalar();
+                }
+
+                $accountId = $accountCache[$cbrCcNo];
+                if (!$accountId) {
+                    throw new \RuntimeException(
+                        "Строка line_no={$r['line_no']}: не найден счёт в accounts по cbr_cc_no='{$cbrCcNo}'"
+                    );
+                }
+
+                $isEntry = $r['amount'] !== null && $r['amount'] !== '';
+
+                if ($isEntry) {
+                    $entryBuf[] = [
+                        $accountId,
+                        self::COMPANY_ID,
+                        self::LS_LEDGER,
+                        $this->mapDc($r['drcr_ind']),
+                        $r['amount'],
+                        $r['ccv'],
+                        $r['trn_dt'],
+                        $r['value_dt'],
+                        $r['ed_no'],
+                        $r['trn_ref_sr_no'],
+                        $r['obj_ref'],
+                        self::SOURCE,
+                        'U',
+                        $r['extract_no'],
+                        $r['line_no'],
+                        $now,
+                        $now,
+                    ];
+                    if (count($entryBuf) >= self::INSERT_CHUNK) {
+                        $flushEntries();
+                    }
+                } elseif ($r['opening_bal'] !== null || $r['closing_bal'] !== null) {
+                    $balanceBuf[] = [
+                        self::COMPANY_ID,
+                        $accountId,
+                        self::LS_LEDGER,
+                        $r['ccv'],
+                        $r['dt'],
+                        $r['opening_bal'] ?? 0,
+                        $r['opening_bal_dc'] ?: 'C',
+                        $r['closing_bal'] ?? 0,
+                        $r['closing_bal_dc'] ?: 'C',
+                        self::SECTION,
+                        self::SOURCE,
+                        'normal',
+                        $r['extract_no'],
+                        $r['line_no'],
+                        $now,
+                        $now,
+                    ];
+                    if (count($balanceBuf) >= self::INSERT_CHUNK) {
+                        $flushBalances();
+                    }
+                }
+                // строка без полезной нагрузки — пропускаем
+
+                $lastLineNo = (int)$r['line_no'];
             }
 
-            $accountId = $accountCache[$cbrCcNo];
-            if (!$accountId) {
-                throw new \RuntimeException(
-                    "Строка line_no={$r['line_no']}: не найден счёт в accounts по cbr_cc_no='{$cbrCcNo}'"
-                );
+            if (count($rows) < self::FETCH_CHUNK) {
+                break;
             }
-
-            $isEntry = $r['amount'] !== null && $r['amount'] !== '';
-
-            if ($isEntry) {
-                $db->createCommand()->insert('{{%nostro_entries}}', [
-                    'account_id'     => $accountId,
-                    'company_id'     => self::COMPANY_ID,
-                    'ls'             => self::LS_LEDGER,
-                    'dc'             => $this->mapDc($r['drcr_ind']),
-                    'amount'         => $r['amount'],
-                    'currency'       => $r['ccv'],
-                    'value_date'     => $r['trn_dt'],
-                    'post_date'      => $r['value_dt'],
-                    'instruction_id' => $r['ed_no'],
-                    'end_to_end_id'  => $r['trn_ref_sr_no'],
-                    'transaction_id' => $r['obj_ref'],
-                    'source'         => self::SOURCE,
-                    'match_status'   => 'U',
-                    'extract_no'     => $r['extract_no'],
-                    'line_no'        => $r['line_no'],
-                    'created_at'     => $now,
-                    'updated_at'     => $now,
-                ])->execute();
-
-                $entries++;
-                continue;
-            }
-
-            // Иначе считаем строкой баланса
-            $hasBalance = $r['opening_bal'] !== null || $r['closing_bal'] !== null;
-            if (!$hasBalance) {
-                // Строка без полезной нагрузки — пропускаем.
-                continue;
-            }
-
-            $db->createCommand()->insert('{{%nostro_balance}}', [
-                'company_id'      => self::COMPANY_ID,
-                'account_id'      => $accountId,
-                'ls_type'         => self::LS_LEDGER,
-                'currency'        => $r['ccv'],
-                'value_date'      => $r['dt'],
-                'opening_balance' => $r['opening_bal'] ?? 0,
-                'opening_dc'      => $r['opening_bal_dc'] ?: 'C',
-                'closing_balance' => $r['closing_bal'] ?? 0,
-                'closing_dc'      => $r['closing_bal_dc'] ?: 'C',
-                'section'         => self::SECTION,
-                'source'          => self::SOURCE,
-                'status'          => 'normal',
-                'extract_no'      => $r['extract_no'],
-                'line_no'         => $r['line_no'],
-                'created_at'      => $now,
-                'updated_at'      => $now,
-            ])->execute();
-
-            $balances++;
         }
 
-        return [$balances, $entries];
+        $flushEntries();
+        $flushBalances();
+
+        return [$totalBalances, $totalEntries];
     }
 
     private function mapDc(?string $drcrInd): string
