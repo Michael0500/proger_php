@@ -37,9 +37,12 @@ class FccMergeController extends Controller
     /** Сколько строк копить перед batchInsert. 17 колонок × 1000 = 17000 параметров (< 65535). */
     const INSERT_CHUNK = 1000;
 
+    /** --keep-source: не удалять строки из gitb_nostro_extract_custom после обработки */
+    public bool $keepSource = false;
+
     public function actionRun(): int
     {
-        $this->stdout("=== FCC12 merge: " . date('Y-m-d H:i:s') . " ===\n", Console::BOLD);
+        $this->stdout("=== FCC12 merge: " . date('Y-m-d H:i:s') . ($this->keepSource ? " [keep-source]" : "") . " ===\n", Console::BOLD);
 
         $db = Yii::$app->db;
 
@@ -72,23 +75,42 @@ class FccMergeController extends Controller
 
             $tx = $db->beginTransaction();
             try {
-                [$balances, $entries] = $this->mergeExtract($extractNo);
+                [$balances, $entries, $skipped] = $this->mergeExtract($extractNo);
 
-                $db->createCommand()
-                    ->update('{{%tds_status}}', ['is_merged' => true], ['id' => $statusId])
-                    ->execute();
+                if (!$this->keepSource) {
+                    if (empty($skipped)) {
+                        $db->createCommand()
+                            ->delete('{{%gitb_nostro_extract_custom}}', ['extract_no' => $extractNo])
+                            ->execute();
+                    } else {
+                        // Удаляем только успешно обработанные строки; пропущенные остаются для повторной попытки
+                        $skippedStr = implode(',', array_map('intval', $skipped));
+                        $db->createCommand(
+                            "DELETE FROM {{%gitb_nostro_extract_custom}}
+                              WHERE extract_no = :ext AND line_no NOT IN ({$skippedStr})",
+                            [':ext' => $extractNo]
+                        )->execute();
+                    }
+                }
 
-                $db->createCommand()
-                    ->delete('{{%gitb_nostro_extract_custom}}', ['extract_no' => $extractNo])
-                    ->execute();
+                if (empty($skipped) && !$this->keepSource) {
+                    $db->createCommand()
+                        ->update('{{%tds_status}}', ['is_merged' => true], ['id' => $statusId])
+                        ->execute();
+                }
 
                 $tx->commit();
 
                 $totalBalances += $balances;
                 $totalEntries  += $entries;
 
-                $this->stdout("│  Балансов: {$balances}, записей: {$entries}\n", Console::FG_GREEN);
-                $this->stdout("└─ OK\n");
+                if (empty($skipped)) {
+                    $this->stdout("│  Балансов: {$balances}, записей: {$entries}\n", Console::FG_GREEN);
+                    $this->stdout("└─ OK\n");
+                } else {
+                    $this->stdout("│  Балансов: {$balances}, записей: {$entries}, пропущено строк: " . count($skipped) . " (счёт не найден)\n", Console::FG_YELLOW);
+                    $this->stdout("└─ PARTIAL (не помечен merged, будет повторён)\n", Console::FG_YELLOW);
+                }
             } catch (\Throwable $e) {
                 $tx->rollBack();
                 $errors++;
@@ -132,8 +154,9 @@ class FccMergeController extends Controller
         $accountCache = [];
         $now = date('Y-m-d H:i:s');
 
-        $entryBuf   = [];
-        $balanceBuf = [];
+        $entryBuf    = [];
+        $balanceBuf  = [];
+        $skippedLineNos = [];
         $totalEntries  = 0;
         $totalBalances = 0;
 
@@ -202,9 +225,10 @@ class FccMergeController extends Controller
 
                 $accountId = $accountCache[$cbrCcNo];
                 if (!$accountId) {
-                    throw new \RuntimeException(
-                        "Строка line_no={$r['line_no']}: не найден счёт в accounts по cbr_cc_no='{$cbrCcNo}'"
-                    );
+                    $this->stdout("│  Пропуск line_no={$r['line_no']}: счёт не найден для cbr_cc_no='{$cbrCcNo}'\n", Console::FG_YELLOW);
+                    $skippedLineNos[] = (int)$r['line_no'];
+                    $lastLineNo = (int)$r['line_no'];
+                    continue;
                 }
 
                 if ($isEntry) {
@@ -265,7 +289,7 @@ class FccMergeController extends Controller
         $flushEntries();
         $flushBalances();
 
-        return [$totalBalances, $totalEntries];
+        return [$totalBalances, $totalEntries, $skippedLineNos];
     }
 
     private function mapDc(?string $drcrInd): string
