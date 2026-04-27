@@ -30,6 +30,8 @@ $isReconPage      = (Yii::$app->controller->id === 'recon-report');
 $isNostroBankPage = ($currentRoute === 'account-pool/index');
 $isAccountsPage   = ($currentRoute === 'account/index');
 $isAllNostroPage  = ($currentRoute === 'all-nostro/index');
+$isBalancePage  = ($currentRoute === 'balance/index');
+$isArchivePage  = ($currentRoute === 'archive/page');
 
 $currentUser = $isGuest ? null : Yii::$app->user->identity;
 $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->company : null;

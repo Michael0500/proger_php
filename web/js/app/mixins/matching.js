@@ -30,6 +30,9 @@ var MatchingMixin = {
     },
 
     computed: {
+        userSection: function () {
+            return (window.AppConfig && window.AppConfig.companySection) || '';
+        },
         hasSelection: function () {
             // Разрешаем 1 запись если diff = 0 (например, сумма записи = 0)
             if (this.selectedIds.length === 1 && this.selectionSummary && this.summaryDiff === 0) {
