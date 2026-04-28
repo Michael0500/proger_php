@@ -1,6 +1,6 @@
 <?php
 
-namespace console\controllers;
+namespace app\commands;
 
 use Yii;
 use yii\console\Controller;
@@ -424,6 +424,9 @@ class XbrlConvertController extends Controller
 
         $highestRow = $sheet->getHighestDataRow();
         $rows = [];
+        $skippedEmpty = 0;
+        $skippedOpenMarker = 0;
+        $skippedMissingDim = []; // [['row'=>N, 'missing'=>['cid1','cid2']], ...]
 
         for ($row = self::SECTION_DATA_FROM; $row <= $highestRow; $row++) {
             $rowData = [];
@@ -439,27 +442,49 @@ class XbrlConvertController extends Controller
                         $isOpenMarker = false;
                     }
                 } else {
-                    $isOpenMarker = false; // пустая ячейка в Open-строке тоже бывает
+                    $isOpenMarker = false;
                 }
 
                 $rowData[$cid] = $this->normalizeValue($raw, $registry[$cid]);
             }
 
-            if ($isEmpty) continue;
-            if ($isOpenMarker) continue; // строка 5 с маркерами Open Open Open
+            if ($isEmpty) { $skippedEmpty++; continue; }
+            if ($isOpenMarker) { $skippedOpenMarker++; continue; }
 
-            // Проверка инвариантов: typed-dimension не может быть пустой
-            $skipDueToMissingDim = false;
+            // Проверка инвариантов: typed-dimension не может быть пустой (§2.3.2)
+            $missingDims = [];
             foreach ($registry as $cid => $meta) {
                 if ($meta['isDimension'] && ($rowData[$cid] ?? '') === '') {
-                    $skipDueToMissingDim = true;
-                    break;
+                    $missingDims[] = $cid;
                 }
             }
-            if ($skipDueToMissingDim) continue;
+            if (!empty($missingDims)) {
+                $skippedMissingDim[] = ['row' => $row, 'missing' => $missingDims];
+                continue;
+            }
 
             $rows[] = $rowData;
         }
+
+        // Диагностика: если пропустили строки с непустыми данными — расскажем подробно
+        if (!empty($skippedMissingDim)) {
+            $this->warn(sprintf(
+                "    ! Пропущено %d строк из-за пустых typed-dimension колонок (по §2.3.2 Правил):",
+                count($skippedMissingDim)
+            ));
+            foreach (array_slice($skippedMissingDim, 0, 5) as $info) {
+                $this->warn(sprintf(
+                    "      строка %d: пустые колонки [%s]",
+                    $info['row'],
+                    implode(', ', $info['missing'])
+                ));
+            }
+            if (count($skippedMissingDim) > 5) {
+                $this->warn('      ... и ещё ' . (count($skippedMissingDim) - 5));
+            }
+            $this->warn('      → заполните эти колонки в xlsx, иначе пакет не пройдёт валидацию ЦБ');
+        }
+
         return $rows;
     }
 
