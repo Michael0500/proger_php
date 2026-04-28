@@ -13,9 +13,9 @@ Yii2 консольная команда. Конвертирует xlsx-шабл
 1. Читает лист **`Прил 1`** xlsx-шаблона — это полный реестр concept'ов таксономии
    (раздел / QName / itemType / instant|duration / префикс / roleUri).
 2. Идёт по листам **`Раздел 1.` … `Раздел 11.`**:
-    - строка 4 — заголовки с QName в скобках `(dim-int:C_CdTaxis)`, `(purcb-dic:Cntrct_BDt)` и т.п.;
-    - строка 5 — служебная (Open Open) — пропускается;
-    - со строки 6 — данные.
+   - строка 4 — заголовки с QName в скобках `(dim-int:C_CdTaxis)`, `(purcb-dic:Cntrct_BDt)` и т.п.;
+   - строка 5 — служебная (Open Open) — пропускается;
+   - со строки 6 — данные.
 3. На каждый непустой раздел пишет `sr_R{N}.csv`. Пустые разделы в пакет не включаются
    (по §2.3.2 Правил), но отмечаются в `sr_sved_purcb.csv` как
    `mem-int:DannyeOtsutstvuyutMember`. Заполненные разделы получают флаг
@@ -33,10 +33,11 @@ composer require phpoffice/phpspreadsheet
 
 ## Запуск
 
+Положите xlsx-шаблон в **`web/uploads/report.xlsx`** (относительно корня проекта).
+Готовый пакет появится в **`web/xbrl-output/`**.
+
 ```bash
 php yii xbrl-convert/run \
-    --input=/path/to/MR_UOD_PURCB.xlsx \
-    --output=/path/to/output_dir \
     --identifier=1027700000000 \
     --report-date=2025-10-31 \
     --period-start=2025-08-01 \
@@ -44,12 +45,17 @@ php yii xbrl-convert/run \
     --request-number=00012_38
 ```
 
+Пути захардкожены в константах в начале контроллера:
+```php
+private const INPUT_RELATIVE  = 'web/uploads/report.xlsx';
+private const OUTPUT_RELATIVE = 'web/xbrl-output';
+```
+Если нужно изменить — поправьте константы.
+
 ### Параметры
 
 | Опция | Обязателен | Описание |
 |---|---|---|
-| `--input` | да | xlsx-шаблон ПУРЦБ (xlsb сначала пересохранить в xlsx) |
-| `--output` | да | каталог, куда положить пакет |
 | `--identifier` | да | ОГРН отчитывающейся организации (13 цифр) |
 | `--identifier-predecessor` | нет | ОГРН правопредшественника (для реорганизаций, §3) |
 | `--report-date` | да | дата среза `YYYY-MM-DD` (поле `reportDate`) |

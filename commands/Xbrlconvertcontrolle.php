@@ -32,18 +32,18 @@ use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
  *
  * Использование:
  *   php yii xbrl-convert/run \
- *       --input=/path/to/MR_UOD_PURCB.xlsx \
- *       --output=/path/to/output_dir \
  *       --identifier=1027700000000 \
  *       --report-date=2025-10-31 \
  *       --period-start=2024-12-15 \
  *       --period-end=2025-02-02 \
  *       --request-number=00000_11
+ *
+ * Пути:
+ *   вход:  <корень проекта>/web/uploads/report.xlsx
+ *   выход: <корень проекта>/web/xbrl-output/
  */
 class XbrlConvertController extends Controller
 {
-    public $input;
-    public $output;
     public $identifier;                // ОГРН отчитывающейся организации (13 цифр)
     public $identifierPredecessor;     // ОГРН правопредшественника (опционально)
     public $reportDate;                // дата среза, YYYY-MM-DD
@@ -52,6 +52,14 @@ class XbrlConvertController extends Controller
     public $requestNumber = '00000_00';
     public $delimiter = '|';
     public $zip = 1;
+
+    /** Полные пути, вычисляются в actionRun() */
+    private string $input;
+    private string $output;
+
+    /** Пути относительно корня проекта Yii2 (директория, где лежит yii) */
+    private const INPUT_RELATIVE  = 'web/uploads/report.xlsx';
+    private const OUTPUT_RELATIVE = 'web/xbrl-output';
 
     /** Точка входа — фиксирована для УОД ПУРЦБ */
     private const TAXONOMY_HREF      = 'http://www.cbr.ru/xbrl_csv/20250704/20250731/ep_nso_purcb_oper_nr_uod_reestr.def.json';
@@ -99,7 +107,7 @@ class XbrlConvertController extends Controller
     public function options($actionID)
     {
         return array_merge(parent::options($actionID), [
-            'input', 'output', 'identifier', 'identifierPredecessor',
+            'identifier', 'identifierPredecessor',
             'reportDate', 'periodStart', 'periodEnd', 'requestNumber',
             'delimiter', 'zip',
         ]);
@@ -108,9 +116,10 @@ class XbrlConvertController extends Controller
     public function actionRun(): int
     {
         try {
+            $this->resolvePaths();
             $this->validate();
 
-            $this->info("→ Открываем xlsx");
+            $this->info("→ Открываем xlsx: {$this->input}");
             $book = IOFactory::load($this->input);
 
             $this->info('→ Парсим лист "Прил 1"');
@@ -157,13 +166,25 @@ class XbrlConvertController extends Controller
     // ВАЛИДАЦИЯ
     // =====================================================================
 
+    /**
+     * Резолвит пути входа и выхода относительно корня Yii2-приложения.
+     * Гарантирует существование выходного каталога.
+     */
+    private function resolvePaths(): void
+    {
+        $appRoot = \Yii::getAlias('@app');
+        $this->input  = $appRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, self::INPUT_RELATIVE);
+        $this->output = $appRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, self::OUTPUT_RELATIVE);
+        FileHelper::createDirectory($this->output);
+    }
+
     private function validate(): void
     {
-        if (empty($this->input) || !is_file($this->input)) {
-            throw new \InvalidArgumentException("--input не задан или файл не найден");
-        }
-        if (empty($this->output)) {
-            throw new \InvalidArgumentException("--output не задан");
+        if (!is_file($this->input)) {
+            throw new \RuntimeException(
+                "Не найден входной файл: {$this->input}\n"
+                . "Положите xlsx в " . self::INPUT_RELATIVE . " относительно корня проекта."
+            );
         }
         if (empty($this->identifier) || !preg_match('/^\d{13}$/', $this->identifier)) {
             throw new \InvalidArgumentException("--identifier (ОГРН) должен быть 13-значным числом");
