@@ -483,7 +483,7 @@ class XbrlConvertController extends Controller
         $t = strtolower((string)$meta['itemType']);
 
         // Даты
-        if (str_contains($t, 'date')) {
+        if (strpos($t, 'date') !== false) {
             if ($value instanceof \DateTimeInterface) return $value->format('Y-m-d');
             if (is_numeric($value)) {
                 return ExcelDate::excelToDateTimeObject((float)$value)->format('Y-m-d');
@@ -495,7 +495,7 @@ class XbrlConvertController extends Controller
         }
 
         // Числа: monetary / decimal / pure / integer
-        if (str_contains($t, 'monetary') || str_contains($t, 'decimal') || str_contains($t, 'pure')) {
+        if (strpos($t, 'monetary') !== false || strpos($t, 'decimal') !== false || strpos($t, 'pure') !== false) {
             if (is_numeric($value)) {
                 $s = rtrim(rtrim(number_format((float)$value, 10, '.', ''), '0'), '.');
                 return $s === '' ? '0' : $s;
@@ -503,12 +503,12 @@ class XbrlConvertController extends Controller
             $clean = str_replace([' ', "\xc2\xa0", ','], ['', '', '.'], (string)$value);
             return is_numeric($clean) ? $clean : trim((string)$value);
         }
-        if (str_contains($t, 'integer')) {
+        if (strpos($t, 'integer') !== false) {
             return is_numeric($value) ? (string)(int)$value : trim((string)$value);
         }
 
         // boolean
-        if (str_contains($t, 'boolean')) {
+        if (strpos($t, 'boolean') !== false) {
             return filter_var($value, FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
         }
 
@@ -716,7 +716,7 @@ class XbrlConvertController extends Controller
         $t = strtolower($itemType);
 
         // monetary
-        if (str_contains($t, 'monetary')) {
+        if (strpos($t, 'monetary') !== false) {
             return [
                 'datatype' => 'decimal',
                 'http://www.cbr.ru/xbrl-csv/model#columnType' => 'xbrli:monetaryItemType',
@@ -727,7 +727,7 @@ class XbrlConvertController extends Controller
             ];
         }
         // pure / decimal — единица измерения "pure"
-        if (str_contains($t, 'pure') || ($t === 'decimalitemtype')) {
+        if (strpos($t, 'pure') !== false || ($t === 'decimalitemtype')) {
             return [
                 'datatype' => 'decimal',
                 'http://www.cbr.ru/xbrl-csv/model#columnType' => 'xbrli:decimalItemType',
@@ -738,28 +738,28 @@ class XbrlConvertController extends Controller
             ];
         }
         // integer
-        if (str_contains($t, 'integer')) {
+        if (strpos($t, 'integer') !== false) {
             return [
                 'datatype' => 'integer',
                 'http://www.cbr.ru/xbrl-csv/model#columnType' => 'xbrli:integerItemType',
             ];
         }
         // date
-        if (str_contains($t, 'date')) {
+        if (strpos($t, 'date') !== false) {
             return [
                 'datatype' => 'date',
                 'http://www.cbr.ru/xbrl-csv/model#columnType' => 'xbrli:dateItemType',
             ];
         }
         // enumeration2 (несколько значений)
-        if (str_contains($t, 'enumerationsetitemtype') || str_contains($t, 'enumeration2')) {
+        if (strpos($t, 'enumerationsetitemtype') !== false || strpos($t, 'enumeration2') !== false) {
             return [
                 'datatype' => 'string',
                 'http://www.cbr.ru/xbrl-csv/model#columnType' => 'enum2:enumerationSetItemType',
             ];
         }
         // enumeration (одно значение)
-        if (str_contains($t, 'enumeration')) {
+        if (strpos($t, 'enumeration') !== false) {
             return [
                 'datatype' => 'string',
                 'http://www.cbr.ru/xbrl-csv/model#columnType' => 'enum:enumerationItemType',
