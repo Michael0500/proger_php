@@ -82,6 +82,7 @@ $config = [
                   // ── Отчёты (Раккорд) ─────────────────────────────────────────
                 'recon-report'           => 'recon-report/index',
                 'recon-report/generate'  => 'recon-report/generate',
+                'recon-report/export'    => 'recon-report/export',
                 'recon-report/accounts'  => 'recon-report/accounts',
 
                 'archive'          => 'archive/page',
