@@ -133,7 +133,7 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                             <label class="form-label">Валюта</label>
                             <select class="form-select" v-model="form.currency">
                                 <option value="">— не указана —</option>
-                                <option v-for="c in currencies" :key="c" :value="c">{{ c }}</option>
+                                <option v-for="c in dictCurrencies" :key="c.code" :value="c.code">{{ c.code }} — {{ c.name }}</option>
                             </select>
                         </div>
 
@@ -157,7 +157,10 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                         <!-- Страна -->
                         <div class="col-md-3">
                             <label class="form-label">Страна</label>
-                            <input type="text" class="form-control" v-model="form.country" placeholder="DE, US, RU...">
+                            <select class="form-select" v-model="form.country">
+                                <option value="">— не указана —</option>
+                                <option v-for="c in dictCountries" :key="c.code" :value="c.code">{{ c.code }} — {{ c.name }}</option>
+                            </select>
                         </div>
 
                         <!-- Дата открытия -->
@@ -292,8 +295,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 // Форма
                 form: this._emptyForm(),
-
-                currencies: ['USD', 'EUR', 'RUB', 'GBP', 'CHF', 'CNY', 'JPY', 'TRY', 'AED', 'KZT'],
             };
         },
 

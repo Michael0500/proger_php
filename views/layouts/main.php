@@ -32,6 +32,7 @@ $isAccountsPage   = ($currentRoute === 'account/index');
 $isAllNostroPage  = ($currentRoute === 'all-nostro/index');
 $isBalancePage  = ($currentRoute === 'balance/index');
 $isArchivePage  = ($currentRoute === 'archive/page');
+$isReferencePage = ($currentRoute === 'reference/index');
 
 $currentUser = $isGuest ? null : Yii::$app->user->identity;
 $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->company : null;
@@ -96,6 +97,12 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
                         'encode' => false,
                         'url'    => ['/archive'],
                         'active' => $isArchivePage,
+                ];
+                $menuItems[] = [
+                        'label'  => '<i class="fas fa-book me-1"></i>Справочники',
+                        'encode' => false,
+                        'url'    => ['/references'],
+                        'active' => $isReferencePage,
                 ];
                 $menuItems[] = [
                         'label'   => '<i class="fas fa-file-alt me-1"></i>Раккорд',

@@ -1,10 +1,29 @@
 <?php
 /** @var yii\web\View $this */
 use yii\helpers\Url;
+use app\models\Currency;
+use app\models\Country;
 
 $currentUser = Yii::$app->user->identity;
 $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->company : null;
 $companySection = $currentComp ? strtoupper($currentComp->code) : '';
+
+// Справочники (общесистемные) — попадают во все Vue-инстансы через window.AppDictionaries.
+// Запрашиваются один раз на запрос.
+$dictCurrencies = [];
+$dictCountries  = [];
+try {
+    foreach (Currency::activeList() as $c) {
+        $dictCurrencies[] = ['code' => $c->code, 'name' => $c->name, 'symbol' => $c->symbol];
+    }
+    foreach (Country::activeList() as $c) {
+        $dictCountries[] = ['code' => $c->code, 'code3' => $c->code3, 'name' => $c->name];
+    }
+} catch (\Throwable $e) {
+    // Если миграции справочников ещё не накатаны — оставляем пустые массивы
+    $dictCurrencies = [];
+    $dictCountries  = [];
+}
 ?>
 <script>
     window.AppRoutes = {
@@ -15,10 +34,11 @@ $companySection = $currentComp ? strtoupper($currentComp->code) : '';
         categoryDelete:        '<?= Url::to(['/category/delete']) ?>',
 
         // Ностро банки
-        accountPoolList:            '<?= Url::to(['/account-pool/list']) ?>',
-        accountPoolQuickCreate:     '<?= Url::to(['/account-pool/quick-create']) ?>',
-        accountPoolMoveToCategory:  '<?= Url::to(['/account-pool/move-to-category']) ?>',
-        accountPoolDelete:          '<?= Url::to(['/account-pool/delete']) ?>',
+        accountPoolList:               '<?= Url::to(['/account-pool/list']) ?>',
+        accountPoolQuickCreate:        '<?= Url::to(['/account-pool/quick-create']) ?>',
+        accountPoolMoveToCategory:     '<?= Url::to(['/account-pool/move-to-category']) ?>',
+        accountPoolDelete:             '<?= Url::to(['/account-pool/delete']) ?>',
+        accountPoolAvailableAccounts:  '<?= Url::to(['/account-pool/available-accounts']) ?>',
 
         // Записи (NostroEntry)
         entryList:           '<?= Url::to(['/nostro-entry/list']) ?>',
@@ -72,5 +92,12 @@ $companySection = $currentComp ? strtoupper($currentComp->code) : '';
     window.AppConfig = {
         companySection:  '<?= addslashes($companySection) ?>',
         userId:          <?= Yii::$app->user->isGuest ? 'null' : (int)Yii::$app->user->id ?>,
+    };
+
+    // Глобальные справочники (валюты, страны) для всех Vue-инстансов и форм.
+    // Заполняется списком активных значений из таблиц {{%currencies}} / {{%countries}}.
+    window.AppDictionaries = {
+        currencies: <?= json_encode($dictCurrencies, JSON_UNESCAPED_UNICODE) ?>,
+        countries:  <?= json_encode($dictCountries,  JSON_UNESCAPED_UNICODE) ?>,
     };
 </script>

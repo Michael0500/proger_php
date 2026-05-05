@@ -77,9 +77,12 @@ $accountSelectId     = $accountSelectId     ?? 'filter-account-select2';
         <div class="filter-field">
             <label class="filter-label">Валюта</label>
             <div class="filter-input-wrap">
-                <input type="text" class="filter-input" placeholder="USD, EUR..."
-                       :value="filters.currency||''"
-                       @input="debouncedFilter('currency',$event.target.value)">
+                <select class="filter-input"
+                        :value="filters.currency||''"
+                        @change="applyFilter('currency',$event.target.value)">
+                    <option value="">Все</option>
+                    <option v-for="c in dictCurrencies" :key="c.code" :value="c.code">{{ c.code }}</option>
+                </select>
                 <button v-if="filters.currency" class="filter-clear-btn" @click="clearFilter('currency')">×</button>
             </div>
         </div>

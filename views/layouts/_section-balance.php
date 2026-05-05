@@ -93,7 +93,7 @@
                     <select class="filter-input" v-model="balanceFilters.currency"
                             @change="onBalanceFilterChange()" style="width:90px">
                         <option value="">—</option>
-                        <option>RUB</option><option>USD</option><option>EUR</option>
+                        <option v-for="c in dictCurrencies" :key="c.code" :value="c.code">{{ c.code }}</option>
                     </select>
                 </div>
                 <div class="filter-field">
@@ -266,7 +266,7 @@
                         <div>
                             <label class="filter-label">Валюта *</label>
                             <select class="filter-input" v-model="editingBalance.currency" style="width:100%">
-                                <option>RUB</option><option>USD</option><option>EUR</option><option>RUR</option>
+                                <option v-for="c in dictCurrencies" :key="c.code" :value="c.code">{{ c.code }}</option>
                             </select>
                         </div>
                         <div>

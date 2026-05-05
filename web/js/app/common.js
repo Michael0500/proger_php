@@ -6,6 +6,21 @@
     if (!window.Vue) return;
 
     Vue.mixin({
+        computed: {
+            // Глобальные справочники, доступны во всех инстансах как this.dictCurrencies / this.dictCountries
+            dictCurrencies: function () {
+                return (window.AppDictionaries && window.AppDictionaries.currencies) || [];
+            },
+            dictCountries: function () {
+                return (window.AppDictionaries && window.AppDictionaries.countries) || [];
+            },
+            // Просто список кодов для select-ов
+            dictCurrencyCodes: function () {
+                return ((window.AppDictionaries && window.AppDictionaries.currencies) || []).map(function (c) {
+                    return c.code;
+                });
+            },
+        },
         methods: {
             recordText: function (count) {
                 var n  = Math.abs(count) % 100;

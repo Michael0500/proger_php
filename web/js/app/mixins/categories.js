@@ -18,7 +18,10 @@ var CategoriesMixin = {
 
                         self.categories = response.data.data.map(function (category) {
                             var isExpanded = !!savedExpanded[category.id];
-                            return Object.assign({}, category, { expanded: isExpanded });
+                            var sortedPools = (category.pools || []).slice().sort(function (a, b) {
+                                return (a.name || '').localeCompare(b.name || '', 'ru', { sensitivity: 'base' });
+                            });
+                            return Object.assign({}, category, { pools: sortedPools, expanded: isExpanded });
                         });
 
                         if (savedCategoryId) {

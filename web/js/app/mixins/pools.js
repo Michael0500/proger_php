@@ -14,6 +14,13 @@ var PoolsMixin = {
                 category_name: '',
             },
 
+            // Привязка счетов в модалке быстрого создания
+            loadingPoolAccounts:        false,
+            availableLedgerAccounts:    [],
+            availableStatementAccounts: [],
+            selectedLedgerAccounts:     [],
+            selectedStatementAccounts:  [],
+
             // Перемещение ностро-банка
             movingPool: {
                 id:                  null,
@@ -46,10 +53,70 @@ var PoolsMixin = {
                 category_id:   category ? category.id   : null,
                 category_name: category ? category.name : '',
             };
+            self.selectedLedgerAccounts    = [];
+            self.selectedStatementAccounts = [];
+            self.availableLedgerAccounts    = [];
+            self.availableStatementAccounts = [];
             self._showModal('addPoolModal');
             self.$nextTick(function () {
                 if (self.$refs.addPoolNameInput) self.$refs.addPoolNameInput.focus();
             });
+
+            // Загружаем свободные счета и инициализируем select2
+            self.loadingPoolAccounts = true;
+            SmartMatchApi.get(window.AppRoutes.accountPoolAvailableAccounts).then(function (r) {
+                var payload  = (r && r.data) ? r.data : {};
+                var accounts = payload.success ? (payload.data || []) : [];
+                self.availableLedgerAccounts    = accounts.filter(function (a) { return a.account_type === 'L'; });
+                self.availableStatementAccounts = accounts.filter(function (a) { return a.account_type === 'S'; });
+            }).catch(function () {
+                self.availableLedgerAccounts    = [];
+                self.availableStatementAccounts = [];
+            }).then(function () {
+                self.loadingPoolAccounts = false;
+                self.$nextTick(function () { self._initAddPoolAccountSelects(); });
+            });
+        },
+
+        _initAddPoolAccountSelects: function () {
+            var self = this;
+            if (typeof $ === 'undefined' || !$.fn || !$.fn.select2) return;
+
+            var $l = $('#add-pool-ledger-select2');
+            if ($l.length) {
+                if ($l.data('select2')) $l.off('change.addPoolL').select2('destroy');
+                $l.empty().select2({
+                    theme: 'bootstrap-5',
+                    placeholder: '— Выберите Ledger счета —',
+                    allowClear: true,
+                    multiple: true,
+                    data: self.availableLedgerAccounts.map(function (a) {
+                        return { id: String(a.id), text: a.name + (a.currency ? ' (' + a.currency + ')' : '') };
+                    }),
+                    dropdownParent: $('#addPoolModal'),
+                }).val(null).trigger('change');
+                $l.on('change.addPoolL', function () {
+                    self.selectedLedgerAccounts = $l.val() || [];
+                });
+            }
+
+            var $s = $('#add-pool-statement-select2');
+            if ($s.length) {
+                if ($s.data('select2')) $s.off('change.addPoolS').select2('destroy');
+                $s.empty().select2({
+                    theme: 'bootstrap-5',
+                    placeholder: '— Выберите Statement счета —',
+                    allowClear: true,
+                    multiple: true,
+                    data: self.availableStatementAccounts.map(function (a) {
+                        return { id: String(a.id), text: a.name + (a.currency ? ' (' + a.currency + ')' : '') };
+                    }),
+                    dropdownParent: $('#addPoolModal'),
+                }).val(null).trigger('change');
+                $s.on('change.addPoolS', function () {
+                    self.selectedStatementAccounts = $s.val() || [];
+                });
+            }
         },
 
         createPoolFromSidebar: function () {
@@ -61,9 +128,11 @@ var PoolsMixin = {
                 return;
             }
             SmartMatchApi.post(window.AppRoutes.accountPoolQuickCreate, {
-                name:        name,
-                description: self.newPool.description || '',
-                category_id: self.newPool.category_id || '',
+                name:               name,
+                description:        self.newPool.description || '',
+                category_id:        self.newPool.category_id || '',
+                ledger_accounts:    self.selectedLedgerAccounts,
+                statement_accounts: self.selectedStatementAccounts,
             }).then(function (r) {
                 if (r.success) {
                     self._hideModal('addPoolModal');

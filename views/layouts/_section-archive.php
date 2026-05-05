@@ -145,7 +145,7 @@
                                 :value="archiveFilters.currency||''"
                                 @change="applyArchiveFilter('currency',$event.target.value)">
                             <option value="">Все</option>
-                            <option v-for="c in ['RUB','USD','EUR','GBP','CHF','CNY','JPY','KZT','BYR']" :key="c">{{ c }}</option>
+                            <option v-for="c in dictCurrencies" :key="c.code" :value="c.code">{{ c.code }}</option>
                         </select>
                     </div>
                 </div>

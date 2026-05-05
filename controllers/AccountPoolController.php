@@ -379,7 +379,7 @@ class AccountPoolController extends BaseController
     /**
      * POST /account-pool/quick-create
      * Быстрое создание ностро-банка из сайдбара выверки.
-     * Body: { name, description?, category_id? }
+     * Body: { name, description?, category_id?, ledger_accounts[]?, statement_accounts[]? }
      */
     public function actionQuickCreate(): array
     {
@@ -387,11 +387,13 @@ class AccountPoolController extends BaseController
         $cid = $this->cid();
         if (!$cid) return ['success' => false, 'message' => 'Компания не выбрана'];
 
-        $req         = Yii::$app->request;
-        $name        = trim((string)$req->post('name', ''));
-        $description = trim((string)$req->post('description', ''));
-        $rawCategory = $req->post('category_id', '');
-        $categoryId  = ($rawCategory !== '' && $rawCategory !== null) ? (int)$rawCategory : null;
+        $req          = Yii::$app->request;
+        $name         = trim((string)$req->post('name', ''));
+        $description  = trim((string)$req->post('description', ''));
+        $rawCategory  = $req->post('category_id', '');
+        $categoryId   = ($rawCategory !== '' && $rawCategory !== null) ? (int)$rawCategory : null;
+        $ledgerIds    = array_filter(array_map('intval', (array)$req->post('ledger_accounts', [])));
+        $statementIds = array_filter(array_map('intval', (array)$req->post('statement_accounts', [])));
 
         if ($name === '') {
             return ['success' => false, 'message' => 'Название обязательно'];
@@ -404,26 +406,44 @@ class AccountPoolController extends BaseController
             }
         }
 
-        $model = new AccountPool();
-        $model->company_id  = $cid;
-        $model->category_id = $categoryId;
-        $model->name        = $name;
-        $model->description = $description !== '' ? $description : null;
+        $db = Yii::$app->db;
+        $transaction = $db->beginTransaction();
+        try {
+            $model = new AccountPool();
+            $model->company_id  = $cid;
+            $model->category_id = $categoryId;
+            $model->name        = $name;
+            $model->description = $description !== '' ? $description : null;
 
-        if (!$model->save()) {
-            return ['success' => false, 'message' => 'Ошибка создания', 'errors' => $model->errors];
+            if (!$model->save()) {
+                $transaction->rollBack();
+                return ['success' => false, 'message' => 'Ошибка создания', 'errors' => $model->errors];
+            }
+
+            $allAccountIds = array_merge($ledgerIds, $statementIds);
+            if ($allAccountIds) {
+                Account::updateAll(
+                    ['pool_id' => $model->id],
+                    ['id' => $allAccountIds, 'company_id' => $cid, 'pool_id' => null]
+                );
+            }
+
+            $transaction->commit();
+
+            return [
+                'success' => true,
+                'message' => 'Ностро-банк создан',
+                'data'    => [
+                    'id'          => (int)$model->id,
+                    'name'        => $model->name,
+                    'description' => $model->description,
+                    'category_id' => $model->category_id ? (int)$model->category_id : null,
+                ],
+            ];
+        } catch (\Exception $e) {
+            $transaction->rollBack();
+            return ['success' => false, 'message' => 'Внутренняя ошибка: ' . $e->getMessage()];
         }
-
-        return [
-            'success' => true,
-            'message' => 'Ностро-банк создан',
-            'data'    => [
-                'id'          => (int)$model->id,
-                'name'        => $model->name,
-                'description' => $model->description,
-                'category_id' => $model->category_id ? (int)$model->category_id : null,
-            ],
-        ];
     }
 
     /**

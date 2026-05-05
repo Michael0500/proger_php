@@ -136,9 +136,6 @@
                                 <button class="row-actions-menu-item" @click.stop="detachPoolFromCategory(pool, category); openRowMenu=null">
                                     <i class="fas fa-unlink"></i> Открепить от категории
                                 </button>
-                                <button class="row-actions-menu-item danger" @click.stop="deletePool(pool); openRowMenu=null">
-                                    <i class="fas fa-trash"></i> Удалить
-                                </button>
                             </div>
                         </div>
                     </span>

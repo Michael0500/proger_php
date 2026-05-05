@@ -90,6 +90,8 @@ All DB queries must include `company_id` scoping.
 | `NostroEntryArchive` | `nostro_entries_archive` | Matched entries moved to archive; has `original_id`, `archived_at`, `expires_at` |
 | `ArchiveSettings` | `archive_settings` | Per-company archive settings (`archive_after_days`, `retention_years`) |
 | `UserPreference` | `user_preferences` | Персональные настройки UI (JSONB). Ключи whitelist'ятся в `UserPreferenceController`. Текущий ключ: `entries_table_columns` — видимость и ширина колонок таблицы выверки |
+| `Currency` | `currencies` | Справочник валют (общесистемный, не привязан к компании). ISO 4217. Поля: `code`, `name`, `symbol`, `is_active`, `sort_order`. Управление — на странице `/references` |
+| `Country` | `countries` | Справочник стран (общесистемный). ISO 3166-1 alpha-2 (+ опц. alpha-3). Поля: `code`, `code3`, `name`, `is_active`, `sort_order`. Управление — на странице `/references` |
 | — | `git_no_stro_extract_custom` | Сырой приёмник выписок FCC12 (построчный разбор: баланс или транзакция). После merge очищается |
 | — | `tds_status` | Статус пакетов выписок. `type='FCC12' + is_merged=false` → забирает `fcc-merge/run` |
 
@@ -127,6 +129,16 @@ Standalone страница `/all-nostro` — "Выверка по всем но
 - `Trial Balance = Closing Balance - Outstanding Items`;
 - серверный экспорт: `/recon-report/export?format=xlsx|pdf...`; для нескольких отчетов возвращается ZIP, для одного отчета — файл `ReconReport_<Nostro Bank>_<Date>.xlsx|pdf`;
 - XLSX строится через `phpoffice/phpspreadsheet` на основе `web/reconciliation_report_template.xlsx`, PDF — через `mpdf/mpdf`.
+
+### Reference dictionaries (`ReferenceController`)
+Standalone-страница `/references` — управление общесистемными справочниками валют и стран. Данные **не привязаны к компании** — общие для всей системы.
+
+- Таблицы: `currencies` (ISO 4217 + символ + активность + порядок) и `countries` (ISO 3166-1 alpha-2/alpha-3 + название + активность + порядок).
+- Начальное наполнение — миграция `m260506_120000_create_currencies_and_countries` (12 валют и 38 стран).
+- API: `/reference/currencies`, `/reference/currency-create|update|delete`, `/reference/countries`, `/reference/country-create|update|delete`.
+- Активные значения публикуются во все Vue-инстансы через `window.AppDictionaries.{currencies,countries}` (заполняется в `views/layouts/_vue-scripts.php`).
+- Глобальный mixin (`web/js/app/common.js`) отдаёт computed-свойства `dictCurrencies`, `dictCountries`, `dictCurrencyCodes` — они доступны во всех Vue-компонентах без явной привязки.
+- Все формы и фильтры (счета, балансы, записи выверки, архив) собирают select-ы валют/стран из этих справочников; захардкоженные списки `['USD','EUR','RUB',...]` удалены.
 
 ### Hierarchy: Category → AccountPool
 - **Category** (`CategoryController`): верхний уровень навигации в сайдбаре. CRUD на странице выверки.

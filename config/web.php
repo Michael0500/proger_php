@@ -87,6 +87,10 @@ $config = [
 
                 'archive'          => 'archive/page',
                 'archive/<action>' => 'archive/<action>',
+
+                // ── Справочники (валюты, страны) ─────────────────
+                'references'             => 'reference/index',
+                'reference/<action>'     => 'reference/<action>',
             ],
         ],
         'authManager' => [
