@@ -573,7 +573,7 @@ class ReconReportController extends BaseController
     private function prepareReconSheet($sheet): void
     {
         $widths = [
-            'A' => 13,
+            'A' => 22,
             'B' => 24,
             'C' => 24,
             'D' => 24,
