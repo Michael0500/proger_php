@@ -60,6 +60,7 @@ $companySection = $currentComp ? strtoupper($currentComp->code) : '';
         archiveList:         '<?= Url::to(['/archive/list']) ?>',
         archiveCount:        '<?= Url::to(['/archive/count']) ?>',
         archiveRunBatch:     '<?= Url::to(['/archive/run-batch']) ?>',
+        archiveRestorePreview:'<?= Url::to(['/archive/restore-preview']) ?>',
         archiveRestore:      '<?= Url::to(['/archive/restore']) ?>',
         archivePurgeExpired: '<?= Url::to(['/archive/purge-expired']) ?>',
         archiveSettings:     '<?= Url::to(['/archive/settings']) ?>',

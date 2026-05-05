@@ -352,31 +352,84 @@ var ArchiveMixin = {
             });
         },
 
-        // Восстановить запись из архива
+        archiveRestoreRowText: function (row, index) {
+            var parts = [
+                (index + 1) + '. ID=' + (row.original_id || row.id || '—'),
+                row.ls || '—',
+                row.dc === 'Debit' ? 'D' : (row.dc === 'Credit' ? 'C' : (row.dc || '—')),
+                this.formatAmount(row.amount) + ' ' + (row.currency || ''),
+            ];
+            if (row.value_date) parts.push(row.value_date);
+            return parts.join(' | ');
+        },
+
+        archiveRestoreRowsHtml: function (rows) {
+            var self = this;
+            return '<div style="max-height:220px;overflow:auto;text-align:left;margin-top:10px;' +
+                'border:1px solid #e5e7eb;border-radius:8px;padding:8px;background:#f9fafb">' +
+                rows.map(function (item, idx) {
+                    return '<div style="font-family:monospace;font-size:12px;line-height:1.5">' +
+                        self.escapeArchiveHtml(self.archiveRestoreRowText(item, idx)) +
+                        '</div>';
+                }).join('') +
+                '</div>';
+        },
+
+        escapeArchiveHtml: function (value) {
+            return String(value === null || value === undefined ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        },
+
+        // Восстановить группу записей из архива по match_id
         restoreFromArchive: function (row) {
             var self = this;
-            Swal.fire({
-                title: 'Восстановить запись?',
-                html:  'Запись <strong>ID=' + row.original_id + '</strong> (Match ID: ' +
-                    row.match_id + ') будет возвращена в активные записи.',
-                icon:  'question',
-                showCancelButton: true,
-                confirmButtonText: 'Восстановить',
-                cancelButtonText:  'Отмена',
-                confirmButtonColor: '#059669',
-            }).then(function (res) {
-                if (!res.isConfirmed) return;
-                SmartMatchApi.post(AppRoutes.archiveRestore, { id: row.id }).then(function (d) {
-                    if (d.success) {
-                        Swal.fire('Восстановлено', d.message, 'success');
-                        self.loadArchive(true);
-                        self.loadArchiveStats();
-                    } else {
-                        Swal.fire('Ошибка', d.message, 'error');
-                    }
-                }).catch(function () {
-                    Swal.fire('Ошибка', 'Ошибка соединения', 'error');
+            SmartMatchApi.get(AppRoutes.archiveRestorePreview, { id: row.id }).then(function (r) {
+                var preview = r.data;
+                if (!preview || !preview.success) {
+                    Swal.fire('Ошибка', (preview && preview.message) || 'Не удалось получить связанные строки', 'error');
+                    return;
+                }
+
+                var rows = preview.data || [];
+                var matchId = self.escapeArchiveHtml(preview.match_id || row.match_id || '—');
+                Swal.fire({
+                    title: rows.length === 1 ? 'Восстановить запись?' : 'Восстановить связанные записи?',
+                    html:  'В активные записи будут возвращены строки по Match ID: <strong>' + matchId + '</strong>.' +
+                        self.archiveRestoreRowsHtml(rows),
+                    icon:  'question',
+                    showCancelButton: true,
+                    confirmButtonText: rows.length === 1 ? 'Восстановить' : 'Восстановить все',
+                    cancelButtonText:  'Отмена',
+                    confirmButtonColor: '#059669',
+                    width: 620,
+                }).then(function (res) {
+                    if (!res.isConfirmed) return;
+                    SmartMatchApi.post(AppRoutes.archiveRestore, { id: row.id }).then(function (d) {
+                        if (d.success) {
+                            var restoredRows = d.data || rows;
+                            Swal.fire({
+                                title: 'Восстановлено',
+                                html: self.escapeArchiveHtml(d.message || 'Записи восстановлены из архива') +
+                                    self.archiveRestoreRowsHtml(restoredRows),
+                                icon: 'success',
+                                confirmButtonColor: '#4f46e5',
+                                width: 620,
+                            });
+                            self.loadArchive(true);
+                            self.loadArchiveStats();
+                        } else {
+                            Swal.fire('Ошибка', d.message, 'error');
+                        }
+                    }).catch(function () {
+                        Swal.fire('Ошибка', 'Ошибка соединения', 'error');
+                    });
                 });
+            }).catch(function () {
+                Swal.fire('Ошибка', 'Ошибка соединения', 'error');
             });
         },
 

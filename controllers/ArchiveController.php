@@ -14,7 +14,8 @@ use app\models\Account;
  *
  * GET  /archive/list            — список архивных записей (поиск + фильтры)
  * POST /archive/run             — запустить архивирование вручную
- * POST /archive/restore         — восстановить запись из архива в nostro_entries
+ * GET  /archive/restore-preview — показать связанные архивные строки по match_id
+ * POST /archive/restore         — восстановить группу записей из архива в nostro_entries
  * POST /archive/purge-expired   — удалить просроченные (истёк retention)
  * GET  /archive/settings        — получить настройки
  * POST /archive/settings        — сохранить настройки
@@ -335,53 +336,132 @@ class ArchiveController extends BaseController
     }
 
     // ─────────────────────────────────────────────────────────────
+    // GET /archive/restore-preview
+    // Показать все архивные строки, которые будут восстановлены по match_id.
+    // ─────────────────────────────────────────────────────────────
+    public function actionRestorePreview(): array
+    {
+        Yii::$app->response->format = Response::FORMAT_JSON;
+        $cid = $this->cid();
+        if (!$cid) return ['success' => false, 'message' => 'Компания не выбрана'];
+
+        $id = (int)Yii::$app->request->get('id');
+        $archived = NostroEntryArchive::findOne(['id' => $id, 'company_id' => $cid]);
+        if (!$archived) return ['success' => false, 'message' => 'Архивная запись не найдена'];
+
+        $rows = $this->findArchiveRestoreGroup($archived)->asArray()->all();
+
+        return [
+            'success'  => true,
+            'match_id' => $archived->match_id,
+            'count'    => count($rows),
+            'data'     => array_map([$this, 'formatRestorePreviewRow'], $rows),
+        ];
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // POST /archive/restore
-    // Восстановить запись из архива в nostro_entries
+    // Восстановить все архивные строки с тем же match_id в nostro_entries
     // ─────────────────────────────────────────────────────────────
     public function actionRestore(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
         $cid = $this->cid();
+        if (!$cid) return ['success' => false, 'message' => 'Компания не выбрана'];
+
         $id  = (int)Yii::$app->request->post('id');
 
         $archived = NostroEntryArchive::findOne(['id' => $id, 'company_id' => $cid]);
         if (!$archived) return ['success' => false, 'message' => 'Архивная запись не найдена'];
 
+        $archiveRows = $this->findArchiveRestoreGroup($archived)->all();
+        if (!$archiveRows) return ['success' => false, 'message' => 'Связанные архивные записи не найдены'];
+
         $db = Yii::$app->db;
         $transaction = $db->beginTransaction();
         try {
-            $entry               = new NostroEntry();
-            $entry->account_id   = $archived->account_id;
-            $entry->company_id   = $archived->company_id;
-            $entry->match_id     = $archived->match_id;
-            $entry->ls           = $archived->ls;
-            $entry->dc           = $archived->dc;
-            $entry->amount       = $archived->amount;
-            $entry->currency     = $archived->currency;
-            $entry->value_date   = $archived->value_date;
-            $entry->post_date    = $archived->post_date;
-            $entry->instruction_id = $archived->instruction_id;
-            $entry->end_to_end_id  = $archived->end_to_end_id;
-            $entry->transaction_id = $archived->transaction_id;
-            $entry->message_id     = $archived->message_id;
-            $entry->other_id       = $archived->other_id;
-            $entry->comment        = $archived->comment;
-            $entry->source         = $archived->source;
-            $entry->match_status   = NostroEntry::STATUS_MATCHED;
+            $restoredRows = [];
+            foreach ($archiveRows as $archiveRow) {
+                $entry = $this->createEntryFromArchive($archiveRow);
 
-            if (!$entry->save()) {
-                $transaction->rollBack();
-                return ['success' => false, 'message' => 'Ошибка восстановления', 'errors' => $entry->errors];
+                if (!$entry->save()) {
+                    $transaction->rollBack();
+                    return ['success' => false, 'message' => 'Ошибка восстановления', 'errors' => $entry->errors];
+                }
+
+                $restoredRows[] = $this->formatRestorePreviewRow($archiveRow->toArray(), $entry->id);
+                if ($archiveRow->delete() === false) {
+                    $transaction->rollBack();
+                    return ['success' => false, 'message' => 'Ошибка удаления записи из архива'];
+                }
             }
 
-            $archived->delete();
             $transaction->commit();
 
-            return ['success' => true, 'message' => 'Запись восстановлена из архива'];
+            $count = count($restoredRows);
+            return [
+                'success'  => true,
+                'message'  => $count === 1
+                    ? 'Запись восстановлена из архива'
+                    : "Восстановлено записей из архива: {$count}",
+                'count'    => $count,
+                'match_id' => $archived->match_id,
+                'data'     => $restoredRows,
+            ];
         } catch (\Exception $e) {
             $transaction->rollBack();
             return ['success' => false, 'message' => 'Ошибка: ' . $e->getMessage()];
         }
+    }
+
+    private function findArchiveRestoreGroup(NostroEntryArchive $archived): \yii\db\ActiveQuery
+    {
+        return NostroEntryArchive::find()
+            ->where([
+                'company_id' => $archived->company_id,
+                'match_id'   => $archived->match_id,
+            ])
+            ->orderBy(['original_id' => SORT_ASC, 'id' => SORT_ASC]);
+    }
+
+    private function createEntryFromArchive(NostroEntryArchive $archived): NostroEntry
+    {
+        $entry                   = new NostroEntry();
+        $entry->account_id       = $archived->account_id;
+        $entry->company_id       = $archived->company_id;
+        $entry->match_id         = $archived->match_id;
+        $entry->ls               = $archived->ls;
+        $entry->dc               = $archived->dc;
+        $entry->amount           = $archived->amount;
+        $entry->currency         = $archived->currency;
+        $entry->value_date       = $archived->value_date;
+        $entry->post_date        = $archived->post_date;
+        $entry->instruction_id   = $archived->instruction_id;
+        $entry->end_to_end_id    = $archived->end_to_end_id;
+        $entry->transaction_id   = $archived->transaction_id;
+        $entry->message_id       = $archived->message_id;
+        $entry->other_id         = $archived->other_id;
+        $entry->comment          = $archived->comment;
+        $entry->source           = $archived->source;
+        $entry->match_status     = NostroEntry::STATUS_MATCHED;
+
+        return $entry;
+    }
+
+    private function formatRestorePreviewRow(array $row, ?int $newId = null): array
+    {
+        return [
+            'id'          => isset($row['id']) ? (int)$row['id'] : null,
+            'original_id' => isset($row['original_id']) ? (int)$row['original_id'] : null,
+            'new_id'      => $newId,
+            'match_id'    => $row['match_id'] ?? null,
+            'ls'          => $row['ls'] ?? null,
+            'dc'          => $row['dc'] ?? null,
+            'amount'      => isset($row['amount']) ? (float)$row['amount'] : null,
+            'currency'    => $row['currency'] ?? null,
+            'value_date'  => $row['value_date'] ?? null,
+            'account_id'  => isset($row['account_id']) ? (int)$row['account_id'] : null,
+        ];
     }
 
     // ─────────────────────────────────────────────────────────────
