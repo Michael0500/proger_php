@@ -16,11 +16,12 @@ var ArchiveMixin = {
             archiveSortCol: 'archived_at',
             archiveSortDir: 'desc',
 
-            archiveFilters:     {},
+            archiveFilters:     StateStorage.get('archive_filters', {}),
             archiveFiltersOpen: false,
 
             // Список счетов для фильтра
             archiveAccounts: [],
+            archiveAccountPools: [],
 
             // ── Статистика ────────────────────────────────────────
             archiveStats:        null,
@@ -46,6 +47,7 @@ var ArchiveMixin = {
             _archiveDebounceTimer:        null,
             _archivePoolSelect2Inited:    false,
             _archiveAccountSelect2Inited: false,
+            _archiveSubmitGuardBound:     false,
         };
     },
 
@@ -61,7 +63,26 @@ var ArchiveMixin = {
         // ЗАГРУЗКА АРХИВА
         // ══════════════════════════════════════════════════
 
-        loadArchive: function (reset) {
+        bindArchiveSubmitGuard: function () {
+            if (this._archiveSubmitGuardBound) return;
+            this._archiveSubmitGuardBound = true;
+
+            document.addEventListener('submit', function (e) {
+                var root = document.getElementById('archive-app');
+                if (!root || !e.target) return;
+                if (!root.contains(e.target) && !e.target.contains(root)) return;
+
+                e.preventDefault();
+                e.stopPropagation();
+            }, true);
+        },
+
+        loadArchive: function (reset, keepFiltersOpen) {
+            if (keepFiltersOpen) {
+                this.archiveFiltersOpen = true;
+                this.saveArchiveFilterState();
+            }
+
             if (reset) {
                 this.archiveRows  = [];
                 this.archivePage  = 1;
@@ -86,6 +107,10 @@ var ArchiveMixin = {
             }).finally(function () {
                 self.archiveLoading     = false;
                 self.archiveLoadingMore = false;
+                if (keepFiltersOpen) {
+                    self.archiveFiltersOpen = true;
+                    self.saveArchiveFilterState();
+                }
             });
         },
 
@@ -126,27 +151,33 @@ var ArchiveMixin = {
         // ══════════════════════════════════════════════════
 
         applyArchiveFilter: function (field, value) {
+            this.archiveFiltersOpen = true;
             var v = (value === null || value === undefined) ? '' : String(value).trim();
             if (v === '') {
                 this.$delete(this.archiveFilters, field);
             } else {
                 this.$set(this.archiveFilters, field, v);
             }
-            this.loadArchive(true);
+            this.saveArchiveFilterState();
+            this.loadArchive(true, true);
         },
 
         clearArchiveFilter: function (field) {
+            this.archiveFiltersOpen = true;
             this.$delete(this.archiveFilters, field);
-            this.loadArchive(true);
+            this.saveArchiveFilterState();
+            this.loadArchive(true, true);
         },
 
         clearAllArchiveFilters: function () {
+            this.archiveFiltersOpen = true;
             this.archiveFilters = {};
+            this.saveArchiveFilterState();
             var $fp = $('#archive-pool-select2');
             if ($fp.length && $fp.data('select2')) $fp.val(null).trigger('change');
             var $fa = $('#archive-account-select2');
             if ($fa.length && $fa.data('select2')) $fa.val(null).trigger('change');
-            this.loadArchive(true);
+            this.loadArchive(true, true);
         },
 
         debouncedArchiveFilter: function (field, value) {
@@ -163,15 +194,43 @@ var ArchiveMixin = {
             }, this).length;
         },
 
+        saveArchiveFilterState: function () {
+            StateStorage.set('archive_filters', this.archiveFilters || {});
+        },
+
         toggleArchiveFilters: function () {
-            this.archiveFiltersOpen = !this.archiveFiltersOpen;
             if (this.archiveFiltersOpen) {
-                var self = this;
-                setTimeout(function () {
-                    self.initArchivePoolSelect2();
-                    self.initArchiveAccountSelect2();
-                }, 120);
+                this.destroyArchiveFilterSelect2();
+                this.archiveFiltersOpen = false;
+                return;
             }
+
+            this.archiveFiltersOpen = !this.archiveFiltersOpen;
+            this.saveArchiveFilterState();
+            this._archivePoolSelect2Inited = false;
+            this._archiveAccountSelect2Inited = false;
+            var self = this;
+            this.$nextTick(function () {
+                self.initArchivePoolSelect2();
+                self.initArchiveAccountSelect2();
+            });
+        },
+
+        destroyArchiveFilterSelect2: function () {
+            var $pool = $('#archive-pool-select2');
+            if ($pool.length && $pool.data('select2')) {
+                $pool.off('select2:select select2:clear');
+                $pool.select2('destroy');
+            }
+
+            var $account = $('#archive-account-select2');
+            if ($account.length && $account.data('select2')) {
+                $account.off('select2:select select2:clear');
+                $account.select2('destroy');
+            }
+
+            this._archivePoolSelect2Inited = false;
+            this._archiveAccountSelect2Inited = false;
         },
 
         initArchivePoolSelect2: function () {
@@ -180,7 +239,7 @@ var ArchiveMixin = {
             if (!$el.length || self._archivePoolSelect2Inited) return;
             self._archivePoolSelect2Inited = true;
 
-            var poolData = (self.accountPools || []).map(function (p) {
+            var poolData = (self.archiveAccountPools || []).map(function (p) {
                 return { id: String(p.id), text: p.name };
             });
 
@@ -191,7 +250,7 @@ var ArchiveMixin = {
                 data:        poolData,
                 language: { noResults: function () { return 'Нет ностробанков'; } }
             });
-            $el.val(null).trigger('change.select2');
+            $el.val(self.archiveFilters.account_pool_id || null).trigger('change.select2');
 
             $el.on('select2:select', function (e) {
                 self.applyArchiveFilter('account_pool_id', e.params.data.id);
@@ -199,6 +258,16 @@ var ArchiveMixin = {
             $el.on('select2:clear', function () {
                 self.clearArchiveFilter('account_pool_id');
             });
+        },
+
+        refreshArchivePoolSelect2: function () {
+            var $el = $('#archive-pool-select2');
+            if (!$el.length || !$el.data('select2')) return;
+            $el.empty();
+            (this.archiveAccountPools || []).forEach(function (p) {
+                $el.append(new Option(p.name, String(p.id), false, false));
+            });
+            $el.val(this.archiveFilters.account_pool_id || null).trigger('change.select2');
         },
 
         initArchiveAccountSelect2: function () {
@@ -218,7 +287,7 @@ var ArchiveMixin = {
                 data:        accData,
                 language: { noResults: function () { return 'Нет счетов'; } }
             });
-            $el.val(null).trigger('change.select2');
+            $el.val(self.archiveFilters.account_id || null).trigger('change.select2');
 
             $el.on('select2:select', function (e) {
                 self.applyArchiveFilter('account_id', e.params.data.id);
@@ -226,6 +295,17 @@ var ArchiveMixin = {
             $el.on('select2:clear', function () {
                 self.clearArchiveFilter('account_id');
             });
+        },
+
+        refreshArchiveAccountSelect2: function () {
+            var $el = $('#archive-account-select2');
+            if (!$el.length || !$el.data('select2')) return;
+            $el.empty();
+            (this.archiveAccounts || []).forEach(function (a) {
+                var text = a.name + (a.currency ? ' (' + a.currency + ')' : '');
+                $el.append(new Option(text, String(a.id), false, false));
+            });
+            $el.val(this.archiveFilters.account_id || null).trigger('change.select2');
         },
 
         // ══════════════════════════════════════════════════
@@ -486,7 +566,36 @@ var ArchiveMixin = {
         loadArchiveAccounts: function () {
             var self = this;
             SmartMatchApi.get(AppRoutes.archiveAccounts, {}).then(function (r) {
-                if (r.data && r.data.success) self.archiveAccounts = r.data.data;
+                if (r.data && r.data.success) {
+                    self.archiveAccounts = r.data.data;
+                    if (self.archiveFiltersOpen) {
+                        setTimeout(function () {
+                            if (self._archiveAccountSelect2Inited) {
+                                self.refreshArchiveAccountSelect2();
+                            } else {
+                                self.initArchiveAccountSelect2();
+                            }
+                        }, 0);
+                    }
+                }
+            });
+        },
+
+        loadArchiveAccountPools: function () {
+            var self = this;
+            SmartMatchApi.get(AppRoutes.accountPoolList, {}).then(function (r) {
+                if (r.data && r.data.success) {
+                    self.archiveAccountPools = r.data.data || [];
+                    if (self.archiveFiltersOpen) {
+                        setTimeout(function () {
+                            if (self._archivePoolSelect2Inited) {
+                                self.refreshArchivePoolSelect2();
+                            } else {
+                                self.initArchivePoolSelect2();
+                            }
+                        }, 0);
+                    }
+                }
             });
         },
 

@@ -12,7 +12,7 @@
                     </span>
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-                <button class="toolbar-btn outline" @click="toggleArchiveFilters"
+                <button type="button" class="toolbar-btn outline" @click.prevent="toggleArchiveFilters"
                         :style="(archiveFiltersOpen || activeArchiveFilterCount()>0) ? 'border-color:#7c3aed;color:#7c3aed' : ''">
                     <i class="fas fa-filter"></i>Фильтры
                     <span v-if="activeArchiveFilterCount()>0"
@@ -20,14 +20,14 @@
                             {{ activeArchiveFilterCount() }}
                         </span>
                 </button>
-                <button class="toolbar-btn outline" @click="archiveSettingsOpen=true">
+                <button type="button" class="toolbar-btn outline" @click.prevent="archiveSettingsOpen=true">
                     <i class="fas fa-cog"></i>Настройки
                 </button>
-                <button class="toolbar-btn outline" @click="purgeExpired" :disabled="archivePurging">
+                <button type="button" class="toolbar-btn outline" @click.prevent="purgeExpired" :disabled="archivePurging">
                     <i :class="archivePurging?'fas fa-spinner fa-spin':'fas fa-trash-alt'" style="color:#ef4444"></i>
                     Очистить просроченные
                 </button>
-                <button class="toolbar-btn primary" @click="runArchive" :disabled="archiveRunning">
+                <button type="button" class="toolbar-btn primary" @click.prevent="runArchive" :disabled="archiveRunning">
                     <i :class="archiveRunning?'fas fa-spinner fa-spin':'fas fa-archive'"></i>
                     {{ archiveRunning ? 'Архивирование...' : 'Архивировать сейчас' }}
                 </button>
@@ -95,7 +95,8 @@
         </div>
 
         <!-- ФИЛЬТРЫ -->
-        <div v-show="archiveFiltersOpen" class="filters-panel" style="display:none;margin-bottom:14px">
+        <div v-if="archiveFiltersOpen" class="filters-panel" style="margin-bottom:14px"
+             @click.stop @change.stop @input.stop @submit.prevent.stop>
             <div style="display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-end">
 
                 <!-- Ностро банк Select2 -->
@@ -114,12 +115,12 @@
                 <div class="filter-field">
                     <label class="filter-label">L/S</label>
                     <div class="filter-toggle-group">
-                        <button class="ftg-btn" :class="{active:!archiveFilters.ls}"
-                                @click="applyArchiveFilter('ls','')">Все</button>
-                        <button class="ftg-btn" :class="{active:archiveFilters.ls==='L'}"
-                                @click="applyArchiveFilter('ls','L')">L</button>
-                        <button class="ftg-btn" :class="{active:archiveFilters.ls==='S'}"
-                                @click="applyArchiveFilter('ls','S')">S</button>
+                        <button type="button" class="ftg-btn" :class="{active:!archiveFilters.ls}"
+                                @click.prevent="applyArchiveFilter('ls','')">Все</button>
+                        <button type="button" class="ftg-btn" :class="{active:archiveFilters.ls==='L'}"
+                                @click.prevent="applyArchiveFilter('ls','L')">L</button>
+                        <button type="button" class="ftg-btn" :class="{active:archiveFilters.ls==='S'}"
+                                @click.prevent="applyArchiveFilter('ls','S')">S</button>
                     </div>
                 </div>
 
@@ -127,12 +128,12 @@
                 <div class="filter-field">
                     <label class="filter-label">D/C</label>
                     <div class="filter-toggle-group">
-                        <button class="ftg-btn" :class="{active:!archiveFilters.dc}"
-                                @click="applyArchiveFilter('dc','')">Все</button>
-                        <button class="ftg-btn" :class="{active:archiveFilters.dc==='Debit'}"
-                                @click="applyArchiveFilter('dc','Debit')">D</button>
-                        <button class="ftg-btn" :class="{active:archiveFilters.dc==='Credit'}"
-                                @click="applyArchiveFilter('dc','Credit')">C</button>
+                        <button type="button" class="ftg-btn" :class="{active:!archiveFilters.dc}"
+                                @click.prevent="applyArchiveFilter('dc','')">Все</button>
+                        <button type="button" class="ftg-btn" :class="{active:archiveFilters.dc==='Debit'}"
+                                @click.prevent="applyArchiveFilter('dc','Debit')">D</button>
+                        <button type="button" class="ftg-btn" :class="{active:archiveFilters.dc==='Credit'}"
+                                @click.prevent="applyArchiveFilter('dc','Credit')">C</button>
                     </div>
                 </div>
 
@@ -157,8 +158,8 @@
                                :value="archiveFilters.amount_min||''"
                                @change="applyArchiveFilter('amount_min',$event.target.value)"
                                @input="if(!archiveFilters.amount_max&&$event.target.value) applyArchiveFilter('amount_max',$event.target.value)">
-                        <button v-if="archiveFilters.amount_min" class="filter-clear-btn"
-                                @click="clearArchiveFilter('amount_min')">×</button>
+                        <button v-if="archiveFilters.amount_min" type="button" class="filter-clear-btn"
+                                @click.prevent="clearArchiveFilter('amount_min')">×</button>
                     </div>
                 </div>
                 <div class="filter-field">
@@ -167,8 +168,8 @@
                         <input type="number" class="filter-input" placeholder="∞"
                                :value="archiveFilters.amount_max||''"
                                @change="applyArchiveFilter('amount_max',$event.target.value)">
-                        <button v-if="archiveFilters.amount_max" class="filter-clear-btn"
-                                @click="clearArchiveFilter('amount_max')">×</button>
+                        <button v-if="archiveFilters.amount_max" type="button" class="filter-clear-btn"
+                                @click.prevent="clearArchiveFilter('amount_max')">×</button>
                     </div>
                 </div>
 
@@ -179,8 +180,8 @@
                         <input type="text" v-datepicker class="filter-input"
                                :value="archiveFilters.value_date_from||''"
                                @change="applyArchiveFilter('value_date_from',$event.target.value)">
-                        <button v-if="archiveFilters.value_date_from" class="filter-clear-btn"
-                                @click="clearArchiveFilter('value_date_from')">×</button>
+                        <button v-if="archiveFilters.value_date_from" type="button" class="filter-clear-btn"
+                                @click.prevent="clearArchiveFilter('value_date_from')">×</button>
                     </div>
                 </div>
                 <div class="filter-field">
@@ -189,8 +190,8 @@
                         <input type="text" v-datepicker class="filter-input"
                                :value="archiveFilters.value_date_to||''"
                                @change="applyArchiveFilter('value_date_to',$event.target.value)">
-                        <button v-if="archiveFilters.value_date_to" class="filter-clear-btn"
-                                @click="clearArchiveFilter('value_date_to')">×</button>
+                        <button v-if="archiveFilters.value_date_to" type="button" class="filter-clear-btn"
+                                @click.prevent="clearArchiveFilter('value_date_to')">×</button>
                     </div>
                 </div>
 
@@ -201,8 +202,8 @@
                         <input type="text" v-datepicker class="filter-input"
                                :value="archiveFilters.archived_at_from||''"
                                @change="applyArchiveFilter('archived_at_from',$event.target.value)">
-                        <button v-if="archiveFilters.archived_at_from" class="filter-clear-btn"
-                                @click="clearArchiveFilter('archived_at_from')">×</button>
+                        <button v-if="archiveFilters.archived_at_from" type="button" class="filter-clear-btn"
+                                @click.prevent="clearArchiveFilter('archived_at_from')">×</button>
                     </div>
                 </div>
                 <div class="filter-field">
@@ -211,8 +212,8 @@
                         <input type="text" v-datepicker class="filter-input"
                                :value="archiveFilters.archived_at_to||''"
                                @change="applyArchiveFilter('archived_at_to',$event.target.value)">
-                        <button v-if="archiveFilters.archived_at_to" class="filter-clear-btn"
-                                @click="clearArchiveFilter('archived_at_to')">×</button>
+                        <button v-if="archiveFilters.archived_at_to" type="button" class="filter-clear-btn"
+                                @click.prevent="clearArchiveFilter('archived_at_to')">×</button>
                     </div>
                 </div>
 
@@ -238,15 +239,15 @@
                         <input type="text" class="filter-input" placeholder="Поиск..."
                                :value="archiveFilters.search_value||''"
                                @input="debouncedArchiveFilter('search_value',$event.target.value)">
-                        <button v-if="archiveFilters.search_value" class="filter-clear-btn"
-                                @click="clearArchiveFilter('search_value')">×</button>
+                        <button v-if="archiveFilters.search_value" type="button" class="filter-clear-btn"
+                                @click.prevent="clearArchiveFilter('search_value')">×</button>
                     </div>
                 </div>
 
                 <!-- Сброс фильтров -->
                 <div class="filter-field" style="align-self:flex-end">
-                    <button class="toolbar-btn outline" style="font-size:11px;padding:4px 10px"
-                            @click="clearAllArchiveFilters">
+                    <button type="button" class="toolbar-btn outline" style="font-size:11px;padding:4px 10px"
+                            @click.prevent="clearAllArchiveFilters">
                         <i class="fas fa-times"></i>Сбросить
                     </button>
                 </div>
@@ -352,11 +353,11 @@
                             {{ row.expires_at_fmt||'—' }}
                         </td>
                         <td style="text-align:right;padding-right:12px">
-                            <button class="row-btn history" @click="showArchiveHistory(row)"
+                            <button type="button" class="row-btn history" @click.prevent="showArchiveHistory(row)"
                                     title="История изменений">
                                 <i class="fas fa-history"></i>
                             </button>
-                            <button class="row-btn edit" @click="restoreFromArchive(row)"
+                            <button type="button" class="row-btn edit" @click.prevent="restoreFromArchive(row)"
                                     title="Восстановить в активные записи">
                                 <i class="fas fa-undo"></i>
                             </button>
@@ -375,7 +376,7 @@
             <div class="modal-card" style="max-width:440px">
                 <div class="modal-card-header">
                     <span><i class="fas fa-cog me-2"></i>Настройки архивирования</span>
-                    <button class="btn-close" @click="archiveSettingsOpen=false"></button>
+                    <button type="button" class="btn-close" @click.prevent="archiveSettingsOpen=false"></button>
                 </div>
                 <div class="modal-card-body">
                     <div class="row g-3">
@@ -415,8 +416,8 @@
                     </div>
                 </div>
                 <div class="modal-card-footer" style="display:flex;justify-content:flex-end;gap:8px">
-                    <button class="toolbar-btn outline" @click="archiveSettingsOpen=false">Отмена</button>
-                    <button class="toolbar-btn primary" @click="saveArchiveSettings" :disabled="archiveSettingsSaving">
+                    <button type="button" class="toolbar-btn outline" @click.prevent="archiveSettingsOpen=false">Отмена</button>
+                    <button type="button" class="toolbar-btn primary" @click.prevent="saveArchiveSettings" :disabled="archiveSettingsSaving">
                         <i :class="archiveSettingsSaving?'fas fa-spinner fa-spin':'fas fa-save'"></i>
                         {{ archiveSettingsSaving ? 'Сохранение...' : 'Сохранить' }}
                     </button>
@@ -425,4 +426,3 @@
         </div>
 
     </div><!-- /archive section -->
-

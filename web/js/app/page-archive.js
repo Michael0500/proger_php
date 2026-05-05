@@ -27,6 +27,8 @@
             },
 
             mounted: function () {
+                this.bindArchiveSubmitGuard();
+                this.loadArchiveAccountPools();
                 this.loadArchiveAccounts();
                 this.loadArchive(true);
                 this.loadArchiveStats();
