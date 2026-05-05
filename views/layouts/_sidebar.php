@@ -38,8 +38,8 @@
             <div class="tree-group-row"
                  :class="{
                      active: selectedCategory && selectedCategory.id === category.id,
-                     'has-active-pool': selectedGroup && category.groups &&
-                         category.groups.some(function(g){ return g.id === selectedGroup.id; })
+                     'has-active-pool': selectedPool && category.pools &&
+                         category.pools.some(function(p){ return p.id === selectedPool.id; })
                  }"
                  :data-name="category.name"
                  @click="toggleCategory(category)"
@@ -58,8 +58,8 @@
 
                 <!-- Название + счётчик (скрыты в collapsed) -->
                 <span class="tree-group-name" :title="category.name">{{ category.name }}</span>
-                <span class="tree-group-count" v-if="category.groups && category.groups.length">
-                    {{ category.groups.length }}
+                <span class="tree-group-count" v-if="category.pools && category.pools.length">
+                    {{ category.pools.length }}
                 </span>
 
                 <!-- Кнопки (скрыты в collapsed) -->
@@ -89,57 +89,54 @@
 
                 <div class="flyout-header">{{ category.name }}</div>
 
-                <div v-if="!category.groups || category.groups.length === 0"
-                     class="flyout-empty">Нет групп</div>
+                <div v-if="!category.pools || category.pools.length === 0"
+                     class="flyout-empty">Нет ностро-банков</div>
 
-                <div v-for="group in category.groups" :key="group.id"
+                <div v-for="pool in category.pools" :key="pool.id"
                      class="flyout-item"
-                     :class="{ active: selectedGroup && selectedGroup.id === group.id }"
-                     @click.stop="selectGroup(group, category); closeFlyout()">
+                     :class="{ active: selectedPool && selectedPool.id === pool.id }"
+                     @click.stop="selectPool(pool, category); closeFlyout()">
                     <span class="flyout-dot"></span>
-                    <span class="flyout-item-name">{{ group.name }}</span>
-                    <span v-if="!group.is_active" class="flyout-badge-off">Откл</span>
+                    <span class="flyout-item-name">{{ pool.name }}</span>
                 </div>
 
-                <button class="flyout-add" @click.stop="showAddGroupModal(category); closeFlyout()">
+                <button class="flyout-add" @click.stop="showAddPoolModal(category); closeFlyout()">
                     <i class="fas fa-plus" style="font-size:9px"></i>
-                    Добавить группу
+                    Добавить ностро-банк
                 </button>
             </div>
 
-            <!-- Группы — только в развёрнутом виде -->
+            <!-- Ностро-банки — только в развёрнутом виде -->
             <div class="tree-pools" v-show="category.expanded">
-                <div v-if="!category.groups || category.groups.length === 0"
+                <div v-if="!category.pools || category.pools.length === 0"
                      style="font-size:11px;color:#9ca3af;padding:3px 6px 3px 4px">
-                    Нет групп
+                    Нет ностро-банков
                 </div>
 
-                <div v-for="group in category.groups" :key="group.id"
+                <div v-for="pool in category.pools" :key="pool.id"
                      class="tree-pool-row"
-                     :class="{ active: selectedGroup && selectedGroup.id === group.id }"
-                     @click.stop="selectGroup(group, category)">
+                     :class="{ active: selectedPool && selectedPool.id === pool.id }"
+                     @click.stop="selectPool(pool, category)">
 
                     <span class="tree-pool-dot"></span>
-                    <span class="tree-pool-name" :title="group.name">{{ group.name }}</span>
-                    <span v-if="!group.is_active"
-                          style="font-size:9px;background:#e5e7eb;color:#6b7280;
-                                 border-radius:4px;padding:1px 5px;margin-left:3px;flex-shrink:0">
-                        Откл
-                    </span>
+                    <span class="tree-pool-name" :title="pool.name">{{ pool.name }}</span>
 
                     <span class="tree-actions" @click.stop>
-                        <button class="tree-btn primary" @click.stop="editGroup(group)" title="Редактировать">
-                            <i class="fas fa-pen"></i>
-                        </button>
-                        <button class="tree-btn warning" @click.stop="configureGroup(group)" title="Настройки">
-                            <i class="fas fa-sliders-h"></i>
+                        <button class="tree-btn primary" @click.stop="showMovePoolModal(pool, category)" title="Переместить в другую категорию">
+                            <i class="fas fa-arrows-alt"></i>
                         </button>
                         <div class="row-actions-dropdown">
-                            <button class="tree-btn" @click.stop="toggleRowMenu('grp', group.id, $event)" title="Ещё">
+                            <button class="tree-btn" @click.stop="toggleRowMenu('pool', pool.id, $event)" title="Ещё">
                                 <i class="fas fa-ellipsis-v"></i>
                             </button>
-                            <div v-if="openRowMenu==='grp-'+group.id" class="row-actions-menu" :style="rowMenuStyle">
-                                <button class="row-actions-menu-item danger" @click.stop="deleteGroup(group); openRowMenu=null">
+                            <div v-if="openRowMenu==='pool-'+pool.id" class="row-actions-menu" :style="rowMenuStyle">
+                                <button class="row-actions-menu-item" @click.stop="showMovePoolModal(pool, category); openRowMenu=null">
+                                    <i class="fas fa-arrows-alt"></i> Переместить
+                                </button>
+                                <button class="row-actions-menu-item" @click.stop="detachPoolFromCategory(pool, category); openRowMenu=null">
+                                    <i class="fas fa-unlink"></i> Открепить от категории
+                                </button>
+                                <button class="row-actions-menu-item danger" @click.stop="deletePool(pool); openRowMenu=null">
                                     <i class="fas fa-trash"></i> Удалить
                                 </button>
                             </div>
@@ -147,10 +144,10 @@
                     </span>
                 </div>
 
-                <!-- Добавить группу -->
-                <button class="tree-add-pool" @click.stop="showAddGroupModal(category)">
+                <!-- Добавить ностро-банк -->
+                <button class="tree-add-pool" @click.stop="showAddPoolModal(category)">
                     <i class="fas fa-plus" style="font-size:9px"></i>
-                    Добавить группу
+                    Добавить ностро-банк
                 </button>
             </div>
 

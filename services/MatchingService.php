@@ -6,8 +6,7 @@ use Yii;
 use app\models\NostroEntry;
 use app\models\MatchingRule;
 use app\models\Account;
-use app\models\Group;
-use app\models\GroupFilter;
+use app\models\AccountPool;
 
 /**
  * Сервис квитования записей Ностро.
@@ -221,7 +220,7 @@ class MatchingService
 
     /**
      * Разрешить scope в список account_id.
-     * scope_type: 'all' | 'pool' | 'group' | 'category'
+     * scope_type: 'all' | 'pool' | 'category'
      * scope_id:   id соответствующей сущности (null для 'all')
      * Возвращает null = без ограничений, [] = нет подходящих счетов.
      */
@@ -238,48 +237,17 @@ class MatchingService
                 ->column();
         }
 
-        if ($scopeType === 'group') {
-            $group = Group::findOne(['id' => $scopeId, 'company_id' => $companyId]);
-            if (!$group) return [];
-
-            $groupFilters = GroupFilter::find()
-                ->where(['group_id' => $scopeId])
-                ->orderBy(['sort_order' => SORT_ASC])
-                ->all();
-
-            if (empty($groupFilters)) {
-                // Нет фильтров — берём все счета компании
-                return Account::find()->select('id')->where(['company_id' => $companyId])->column();
-            }
-
-            $accountFilters = array_values(array_filter($groupFilters, fn($f) => $f->isAccountField()));
-            if (empty($accountFilters)) {
-                return Account::find()->select('id')->where(['company_id' => $companyId])->column();
-            }
-
-            $q = Account::find()->select('id')->where(['company_id' => $companyId]);
-            foreach ($accountFilters as $f) {
-                $cond = $f->buildAccountCondition();
-                if ($cond === null) continue;
-                if ($f->logic === 'OR') $q->orWhere($cond);
-                else $q->andWhere($cond);
-            }
-            return $q->column();
-        }
-
         if ($scopeType === 'category') {
-            $groups = Group::find()
+            $poolIds = AccountPool::find()
+                ->select('id')
                 ->where(['category_id' => $scopeId, 'company_id' => $companyId])
-                ->all();
-            if (empty($groups)) return [];
+                ->column();
+            if (empty($poolIds)) return [];
 
-            $allIds = [];
-            foreach ($groups as $group) {
-                $ids = $this->resolveScopeAccounts($companyId, 'group', $group->id);
-                if ($ids === null) return null;
-                $allIds = array_merge($allIds, $ids);
-            }
-            return array_values(array_unique($allIds));
+            return Account::find()
+                ->select('id')
+                ->where(['pool_id' => $poolIds, 'company_id' => $companyId])
+                ->column();
         }
 
         return null;

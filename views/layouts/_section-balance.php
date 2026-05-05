@@ -43,10 +43,6 @@
             <select id="balancePoolSelect" class="form-select" style="width:300px">
                 <option value="">— Все ностро-банки —</option>
             </select>
-            <span v-if="_getGroupPoolId() && !balancePoolId"
-                  style="font-size:11px;color:#6366f1;background:#ede9fe;padding:2px 10px;border-radius:10px;white-space:nowrap">
-                <i class="fas fa-filter me-1"></i>авто из группы
-            </span>
         </div>
 
         <!-- ФИЛЬТРЫ -->

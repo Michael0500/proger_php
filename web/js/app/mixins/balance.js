@@ -61,25 +61,7 @@ var BalanceMixin = {
         };
     },
 
-    watch: {
-        selectedGroup: function () {
-            // При смене группы — сбрасываем ручной фильтр и обновляем Select2
-            this.balancePoolId = '';
-            var $el = jQuery('#balancePoolSelect');
-            if ($el.length) $el.val('').trigger('change.select2');
-            this.$nextTick(this.initBalancePoolSelect);
-            if (this.activeSection === 'balance') {
-                this.loadBalances(true);
-            }
-        },
-        groupFilters: function () {
-            // Если фильтры группы загрузились/изменились — обновляем плейсхолдер
-            this.$nextTick(this.initBalancePoolSelect);
-            if (this.activeSection === 'balance') {
-                this.loadBalances(true);
-            }
-        },
-    },
+    watch: {},
 
     computed: {
         hasMoreBalances: function () {
@@ -124,9 +106,8 @@ var BalanceMixin = {
             // Собираем итоговые фильтры
             var filters = Object.assign({}, self.balanceFilters);
 
-            // Фильтр по ностро-банку: из Select2 или из выбранной группы
-            var effectivePoolId = self.balancePoolId || self._getGroupPoolId();
-            if (effectivePoolId) filters.pool_id = effectivePoolId;
+            // Фильтр по ностро-банку: из Select2 (если задан вручную)
+            if (self.balancePoolId) filters.pool_id = self.balancePoolId;
 
             SmartMatchApi.get(AppRoutes.balanceList, {
                 page:    self.balancesPage,
@@ -178,20 +159,6 @@ var BalanceMixin = {
 
         onBalancePoolChange: function () {
             this.loadBalances(true);
-        },
-
-        /**
-         * Из фильтров текущей группы достаём account_pool_id (если есть).
-         * Используется как дефолтный фильтр баланса при выборе группы.
-         */
-        _getGroupPoolId: function () {
-            if (!this.selectedGroup || !this.groupFilters || !this.groupFilters.length) return null;
-            for (var i = 0; i < this.groupFilters.length; i++) {
-                if (this.groupFilters[i].field === 'account_pool_id' && this.groupFilters[i].value) {
-                    return this.groupFilters[i].value;
-                }
-            }
-            return null;
         },
 
         // ── Сортировка ────────────────────────────────────────────
@@ -558,15 +525,10 @@ var BalanceMixin = {
                 $el.append(new Option(p.name, p.id, false, false));
             });
 
-            // Если есть авто pool_id из группы — ставим плейсхолдер
-            var autoPoolId = self._getGroupPoolId();
-
             $el.select2({
                 theme: 'bootstrap-5',
                 allowClear: true,
-                placeholder: autoPoolId
-                    ? '— Авто: из группы —'
-                    : '— Все ностро-банки —',
+                placeholder: '— Все ностро-банки —',
                 width: '300px',
             });
 

@@ -4,7 +4,7 @@ namespace app\controllers;
 use Yii;
 use yii\web\Response;
 use app\models\Category;
-use app\models\Group;
+use app\models\AccountPool;
 
 class CategoryController extends BaseController
 {
@@ -24,34 +24,24 @@ class CategoryController extends BaseController
 
         $categories = Category::find()
             ->where(['company_id' => $user->company_id])
-            ->with('groups')
+            ->with('pools')
             ->orderBy('name')
             ->all();
 
         $data = [];
         foreach ($categories as $category) {
             $data[] = [
-                'id' => $category->id,
-                'name' => $category->name,
+                'id'          => $category->id,
+                'name'        => $category->name,
                 'description' => $category->description,
-                'created_at' => $category->created_at,
-                'groups' => array_map(function($group) {
+                'created_at'  => $category->created_at,
+                'pools'       => array_map(function (AccountPool $pool) {
                     return [
-                        'id' => $group->id,
-                        'name' => $group->name,
-                        'description' => $group->description,
-                        'is_active' => $group->is_active,
-                        'filters' => array_map(function ($f) {
-                               return [
-                                   'id'       => $f->id,
-                                   'field'    => $f->field,
-                                   'operator' => $f->operator,
-                                   'value'    => $f->value,
-                                   'logic'    => $f->logic,
-                               ];
-                           }, $group->filters),
+                        'id'          => $pool->id,
+                        'name'        => $pool->name,
+                        'description' => $pool->description,
                     ];
-                }, $category->groups)
+                }, $category->pools),
             ];
         }
 
@@ -132,11 +122,8 @@ class CategoryController extends BaseController
             ];
         }
 
-        // Удаляем связанные группы
-        $groups = Group::find()->where(['category_id' => $id])->all();
-        foreach ($groups as $group) {
-            $group->delete();
-        }
+        // Связанные ностро-банки получат category_id = NULL автоматически
+        // (FK с ON DELETE SET NULL)
 
         if ($model->delete()) {
             return [

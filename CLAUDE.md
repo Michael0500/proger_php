@@ -82,11 +82,9 @@ All DB queries must include `company_id` scoping.
 |---|---|---|
 | `NostroEntry` | `nostro_entries` | Core transaction records. Key fields: `ls` (L=Ledger/S=Statement), `dc` (Debit/Credit), `match_status` (U/M/I), `match_id` |
 | `MatchingRule` | `matching_rules` | Rules for auto-matching: `pair_type` (LS/LL/SS), match criteria flags, `priority` |
-| `Account` | `accounts` | Nostro bank accounts. `is_suspense` distinguishes suspense accounts (used in INV section) |
-| `Category` | `categories` | Категории — верхний уровень группировки (ранее `account_groups`) |
-| `Group` | `groups` | Группы счетов с динамическими фильтрами (ранее `account_pools`). FK `category_id` → `categories` |
-| `GroupFilter` | `group_filters` | Фильтры группы (ранее `account_pool_filters`). Поддерживает фильтрацию по `account_pool_id`. FK `group_id` → `groups` |
-| `AccountPool` | `account_pools` | Ностро-банки (технические пулы счетов). `accounts.pool_id` → `account_pools` |
+| `Account` | `accounts` | Nostro bank accounts. `is_suspense` distinguishes suspense accounts (used in INV section). FK `pool_id` → `account_pools` |
+| `Category` | `categories` | Категории — верхний уровень группировки в сайдбаре выверки |
+| `AccountPool` | `account_pools` | Ностро-банки. Привязываются напрямую к категории через `category_id` (nullable). `accounts.pool_id` → `account_pools` |
 | `NostroBalance` | `nostro_balance` | Closing balances (L/S) by account and date — used in recon report |
 | `NostroEntryAudit` | `nostro_entry_audit` | Full audit log of all NostroEntry changes (create/update/delete/archive) |
 | `NostroEntryArchive` | `nostro_entries_archive` | Matched entries moved to archive; has `original_id`, `archived_at`, `expires_at` |
@@ -112,16 +110,14 @@ All DB queries must include `company_id` scoping.
 - **Match ID uniqueness**: `generateMatchId()` uses `random_bytes(4)` + DB check loop (nostro_entries + archive) to guarantee no collisions.
 - **Console command** (`commands/AutoMatchController`): `php yii auto-match/run` — runs auto-matching for all or specific company/account with progress output.
 
-### Group filtering (two-step, `NostroEntryController::actionList`)
-When filtering entries by `group_id` (formerly `pool_id`):
-1. Apply `GroupFilter` conditions that target `accounts` table (account-level fields, including `account_pool_id` → `accounts.pool_id`) → get matching `account_id` list.
-2. Apply `GroupFilter` conditions that target `nostro_entries` table (entry-level fields) → filter the main query.
+### Pool filtering (`NostroEntryController::actionList`)
+Параметр `pool_id` в `GET /nostro-entry/list` — это `AccountPool.id`. Фильтрация: `accounts.pool_id = pool_id`. Дополнительные фильтры строки — через query-параметр `filters` (JSON).
 
 ### Cross-bank reconciliation page (`AllNostroController`)
 Standalone страница `/all-nostro` — "Выверка по всем ностро-банкам". Показывает записи `NostroEntry` со всех ностро-банков компании с полным набором фильтров (как на главной выверке) + **мультивыбор ностро-банков** (`filters.pool_ids[]`) и выбор счёта (`filters.account_id`). Основная страница выверки (`site/index`) больше не содержит фильтров по ностро-банку/счёту — они перенесены сюда.
 
 ### Reconciliation Report / Раккорд (`ReconReportController`)
-Страница `/recon-report` формирует отчет **Reconciliation Report** для раздела NRE вручную по выбранной категории или ностро-банку. Интерфейс не использует выбор группы и счета: категория разворачивается в ностро-банки через активные `Group`/`GroupFilter`, ностро-банк — во все счета `accounts.pool_id`. Одна карточка отчета соответствует одному ностро-банку и агрегирует все его Ledger/Statement-счета.
+Страница `/recon-report` формирует отчет **Reconciliation Report** для раздела NRE вручную по выбранной категории или ностро-банку. Интерфейс не использует выбор счета: категория разворачивается в ностро-банки через `account_pools.category_id`, ностро-банк — во все счета `accounts.pool_id`. Одна карточка отчета соответствует одному ностро-банку и агрегирует все его Ledger/Statement-счета.
 
 Правила отчета:
 - учитываются только несквитованные `nostro_entries` с пустым `match_id` и `match_status = U`;
@@ -132,11 +128,11 @@ Standalone страница `/all-nostro` — "Выверка по всем но
 - серверный экспорт: `/recon-report/export?format=xlsx|pdf...`; для нескольких отчетов возвращается ZIP, для одного отчета — файл `ReconReport_<Nostro Bank>_<Date>.xlsx|pdf`;
 - XLSX строится через `phpoffice/phpspreadsheet` на основе `web/reconciliation_report_template.xlsx`, PDF — через `mpdf/mpdf`.
 
-### Hierarchy: Category → Group → GroupFilter
-- **Category** (`CategoryController`): верхний уровень навигации в сайдбаре
-- **Group** (`GroupController`): набор фильтров для выборки записей. Принадлежит категории через `category_id`
-- **GroupFilter**: условие фильтрации (поле, оператор, значение). Поддерживает `account_pool_id` для фильтрации по ностро-банку
-- **AccountPool**: отдельная сущность — ностро-банки. Standalone страница `/nostro-banks` (`AccountPoolController`). CRUD + привязка/отвязка счетов (`Account.pool_id` nullable). Не связан с категориями/группами напрямую
+### Hierarchy: Category → AccountPool
+- **Category** (`CategoryController`): верхний уровень навигации в сайдбаре. CRUD на странице выверки.
+- **AccountPool** (`AccountPoolController`): ностро-банки. Привязываются напрямую к категории через `account_pools.category_id` (nullable, FK `ON DELETE SET NULL`). Standalone страница `/nostro-banks` — CRUD ностро-банков, привязка к категории, привязка/отвязка счетов (`Account.pool_id`).
+- **Сайдбар выверки**: отображает дерево «Категория → Ностро-банки этой категории». Выбор ностро-банка фильтрует записи в `nostro_entries` через `accounts.pool_id`.
+- Группы (`Group`) и фильтры группы (`GroupFilter`) удалены в миграции `m260505_120000_link_account_pool_to_category` — связь категория↔ностро-банк теперь прямая.
 
 ### Frontend
 - Main layout: `views/layouts/main.php` — Bootstrap 5 navbar + тонкий диспетчер по типу страницы (guest / no-company / entries-page / other app / standalone).
@@ -148,14 +144,14 @@ Standalone страница `/all-nostro` — "Выверка по всем но
   - `/recon-report`, `/nostro-banks`, `/accounts` — каждая со своим инстансом внутри view
 - Общая инфраструктура: `web/js/app/common.js` (глобальные методы `recordText`, `formatAmount` через `Vue.mixin`), `datepicker.js` (глобальная директива `v-datepicker` и метод `fmtDate`), `api.js` (`SmartMatchApi` поверх axios), `state-storage.js`.
 - `views/layouts/_vue-scripts.php` заполняет `window.AppRoutes` и `window.AppConfig` — рендерится во всех залогиненных страницах.
-- Vue mixins (`web/js/app/mixins/`): `CategoriesMixin`, `GroupsMixin`, `EntriesMixin`, `MatchingMixin`, `BalanceMixin`, `ArchiveMixin`, `ModalsMixin`, `StatePersistenceMixin`.
+- Vue mixins (`web/js/app/mixins/`): `CategoriesMixin`, `PoolsMixin`, `EntriesMixin`, `MatchingMixin`, `BalanceMixin`, `ArchiveMixin`, `ModalsMixin`, `StatePersistenceMixin`.
 
 ### Стартеры Vue (`web/js/app/page-*.js`)
 Каждый стартер создаёт свой Vue-инстанс, но только если находит соответствующий корневой `<div id="...">`. Все три файла грузятся через `AppAsset`, но выполняется только тот, чей корень есть в DOM.
 
 | Стартер | Корень | Mixins |
 |---|---|---|
-| `page-entries.js` | `#entries-app` | Modals, Categories, Groups, Entries, Matching, StatePersistence |
+| `page-entries.js` | `#entries-app` | Modals, Categories, Pools, Entries, Matching, StatePersistence |
 | `page-balance.js` | `#balance-app` | Modals, Balance |
 | `page-archive.js` | `#archive-app` | Modals, Archive |
 
@@ -175,6 +171,7 @@ Standalone страница `/all-nostro` — "Выверка по всем но
 
 ### Archive process
 Archiving is batch-processed: client calls `POST /archive/run-batch` repeatedly (300 records per call) until `is_finished = true`. Uses raw SQL `batchInsert` + `DELETE WHERE id = ANY(ARRAY[...])` for performance.
+Restore is group-based: UI first calls `GET /archive/restore-preview?id=...` and shows all archived rows with the same `match_id`; `POST /archive/restore` restores all those rows in one transaction and removes them from `nostro_entries_archive`.
 
 ### Audit trail
 `NostroEntry` hooks (`afterSave`, `beforeDelete`) automatically call `NostroEntryAudit::log()`. `NostroEntryController::actionHistory` reconstructs full record snapshots at each point in time by replaying audit events.

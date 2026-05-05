@@ -7,8 +7,6 @@ use yii\web\Response;
 use app\models\Account;
 use app\models\AccountPool;
 use app\models\Category;
-use app\models\Group;
-use app\models\GroupFilter;
 use app\models\NostroBalance;
 use app\models\NostroEntry;
 use Mpdf\Mpdf;
@@ -213,21 +211,19 @@ class ReconReportController extends BaseController
             return [];
         }
 
-        $groups = Group::find()
-            ->where(['category_id' => $categoryId, 'company_id' => $cid, 'is_active' => true])
-            ->orderBy(['name' => SORT_ASC])
-            ->all();
+        $poolIds = AccountPool::find()
+            ->select('id')
+            ->where(['category_id' => $categoryId, 'company_id' => $cid])
+            ->column();
 
-        $seen = [];
-        $accounts = [];
-        foreach ($groups as $group) {
-            foreach ($this->resolveAccountsByGroup((int)$group->id, $cid) as $account) {
-                if (!isset($seen[$account->id])) {
-                    $seen[$account->id] = true;
-                    $accounts[] = $account;
-                }
-            }
+        if (empty($poolIds)) {
+            return [];
         }
+
+        $accounts = Account::find()
+            ->with('pool')
+            ->where(['pool_id' => $poolIds, 'company_id' => $cid])
+            ->all();
 
         usort($accounts, function ($a, $b) {
             $poolA = $a->pool ? $a->pool->name : '';
@@ -245,36 +241,6 @@ class ReconReportController extends BaseController
     {
         $account = Account::findOne(['id' => $accountId, 'company_id' => $cid]);
         return $account ? [$account] : [];
-    }
-
-    /**
-     * @return Account[]
-     */
-    private function resolveAccountsByGroup(int $groupId, int $cid): array
-    {
-        $filters = GroupFilter::find()
-            ->where(['group_id' => $groupId])
-            ->orderBy(['sort_order' => SORT_ASC])
-            ->all();
-
-        $query = Account::find()->where(['company_id' => $cid]);
-        $accountFilters = array_values(array_filter($filters, function ($f) {
-            return $f->isAccountField();
-        }));
-
-        foreach ($accountFilters as $idx => $filter) {
-            $condition = $filter->buildAccountCondition();
-            if ($condition === null) {
-                continue;
-            }
-            if ($idx > 0 && $filter->logic === 'OR') {
-                $query->orWhere($condition);
-            } else {
-                $query->andWhere($condition);
-            }
-        }
-
-        return $query->orderBy(['name' => SORT_ASC])->all();
     }
 
     private function resolveReportLevel(int $poolId, int $categoryId, int $cid): array

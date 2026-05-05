@@ -16,7 +16,7 @@ use yii\db\ActiveRecord;
  * @property string $updated_at
  *
  * @property Company $company
- * @property Group[] $groups
+ * @property AccountPool[] $pools
  */
 class Category extends ActiveRecord
 {
@@ -53,9 +53,10 @@ class Category extends ActiveRecord
         return $this->hasOne(Company::class, ['id' => 'company_id']);
     }
 
-    public function getGroups()
+    public function getPools()
     {
-        return $this->hasMany(Group::class, ['category_id' => 'id']);
+        return $this->hasMany(AccountPool::class, ['category_id' => 'id'])
+            ->orderBy(['name' => SORT_ASC]);
     }
 
     public static function findForCurrentUser()

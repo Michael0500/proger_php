@@ -7,7 +7,6 @@ use yii\console\ExitCode;
 use app\models\Account;
 use app\models\AccountPool;
 use app\models\Category;
-use app\models\Group;
 use app\models\Company;
 
 /**
@@ -259,7 +258,7 @@ class SeedController extends Controller
     }
 
     /**
-     * Создаёт группу, пул и тестовые счета если их нет
+     * Создаёт категорию, ностро-банк и тестовые счета если их нет
      */
     private function ensureTestStructure(int $companyId): void
     {
@@ -276,30 +275,20 @@ class SeedController extends Controller
             $this->stdout("   ✓ Категория: {$category->name}\n");
         }
 
-        // Группа
-        $group = Group::find()
-            ->where(['category_id' => $category->id, 'name' => 'Основная группа'])
-            ->one();
-        if (!$group) {
-            $group              = new Group();
-            $group->company_id  = $companyId;
-            $group->category_id = $category->id;
-            $group->name        = 'Основная группа';
-            $group->is_active   = true;
-            $group->save(false);
-            $this->stdout("   ✓ Группа: {$group->name}\n");
-        }
-
-        // Пул (ностробанк)
+        // Ностро-банк (привязан к категории напрямую)
         $pool = AccountPool::find()
             ->where(['company_id' => $companyId, 'name' => 'Основной пул'])
             ->one();
         if (!$pool) {
-            $pool             = new AccountPool();
-            $pool->company_id = $companyId;
-            $pool->name       = 'Основной пул';
+            $pool              = new AccountPool();
+            $pool->company_id  = $companyId;
+            $pool->category_id = $category->id;
+            $pool->name        = 'Основной пул';
             $pool->save(false);
-            $this->stdout("   ✓ Пул: {$pool->name}\n");
+            $this->stdout("   ✓ Ностро-банк: {$pool->name}\n");
+        } elseif (!$pool->category_id) {
+            $pool->category_id = $category->id;
+            $pool->save(false);
         }
 
         // Тестовые счета

@@ -145,7 +145,7 @@ var EntriesMixin = {
         },
 
         loadEntries: function (reset) {
-            if (!this.selectedGroup) return;
+            if (!this.selectedPool) return;
             if (reset) {
                 this.entries          = [];
                 this.entriesPage      = 1;
@@ -158,7 +158,7 @@ var EntriesMixin = {
             else         self.entriesLoadingMore = true;
 
             SmartMatchApi.get(window.AppRoutes.entryList, {
-                pool_id: self.selectedGroup.id,
+                pool_id: self.selectedPool.id,
                 page:    self.entriesPage,
                 limit:   self.entriesLimit,
                 sort:    self.sortCol,
@@ -230,32 +230,12 @@ var EntriesMixin = {
         },
 
         clearAllFilters: function () {
-            // Сохраняем account_pool_id, если он задан фильтром группы
-            var groupPoolId = this._getGroupPoolId();
             this.filters = {};
             var $fs = $('#filter-account-select2');
             if ($fs.length && $fs.data('select2')) $fs.val(null).trigger('change');
             var $fp = $('#filter-pool-select2');
-            if (groupPoolId) {
-                this.$set(this.filters, 'account_pool_id', groupPoolId);
-                if ($fp.length && $fp.data('select2')) $fp.val(String(groupPoolId)).trigger('change.select2');
-            } else {
-                if ($fp.length && $fp.data('select2')) $fp.val(null).trigger('change');
-            }
+            if ($fp.length && $fp.data('select2')) $fp.val(null).trigger('change');
             this.loadEntries(true);
-        },
-
-        /** Возвращает account_pool_id из фильтров выбранной группы, или null */
-        _getGroupPoolId: function () {
-            var group = this.selectedGroup;
-            if (!group || !Array.isArray(group.filters)) return null;
-            for (var i = 0; i < group.filters.length; i++) {
-                var f = group.filters[i];
-                if (f.field === 'account_pool_id' && f.operator === 'eq' && f.value) {
-                    return String(f.value);
-                }
-            }
-            return null;
         },
 
         hasFilter: function (field) {
@@ -264,13 +244,8 @@ var EntriesMixin = {
 
         activeFilterCount: function () {
             var self = this, cnt = 0;
-            var groupPoolId = self._getGroupPoolId();
             Object.keys(self.filters).forEach(function (k) {
-                if (self.filters[k] !== undefined && self.filters[k] !== '') {
-                    // Не считаем account_pool_id, если он совпадает с ностробанком группы
-                    if (k === 'account_pool_id' && groupPoolId && String(self.filters[k]) === groupPoolId) return;
-                    cnt++;
-                }
+                if (self.filters[k] !== undefined && self.filters[k] !== '') cnt++;
             });
             return cnt;
         },
@@ -304,7 +279,7 @@ var EntriesMixin = {
                 ajax: {
                     url: function () {
                         return window.AppRoutes.entrySearchAccounts +
-                            '?group_id=' + (self.selectedGroup ? self.selectedGroup.id : 0);
+                            '?pool_id=' + (self.selectedPool ? self.selectedPool.id : 0);
                     },
                     dataType: 'json', delay: 200,
                     data:     function (p) { return { q: p.term || '' }; },
@@ -400,7 +375,7 @@ var EntriesMixin = {
                 ajax: {
                     url: function () {
                         return window.AppRoutes.entrySearchAccounts +
-                            '?group_id=' + (self.selectedGroup ? self.selectedGroup.id : 0);
+                            '?pool_id=' + (self.selectedPool ? self.selectedPool.id : 0);
                     },
                     dataType: 'json', delay: 200,
                     data:     function (p) { return { q: p.term || '' }; },

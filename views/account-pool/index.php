@@ -200,7 +200,7 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                         <label class="form-label" style="font-size:13px">Категория <span style="color:#9ca3af;font-weight:400">(необязательно)</span></label>
                         <select id="create-category-select2" style="width:100%"></select>
                         <div style="font-size:11px;color:#9ca3af;margin-top:3px">
-                            Создаст новую группу «{{ formPool.name || 'Ностро-банк' }}» в выбранной категории с фильтром по этому банку
+                            Ностро-банк отобразится в выбранной категории на странице выверки
                         </div>
                     </div>
                 </div>

@@ -206,31 +206,16 @@ var MatchingMixin = {
         // ─── Автоквитование — открыть модалку выбора области ─────
         runAutoMatch: function () {
             var self = this;
-            if (!self.selectedGroup) return;
+            if (!self.selectedPool) return;
 
-            // Определяем ностробанк из фильтров текущей группы
-            var poolId = null;
-            var poolName = '';
-            if (self.selectedGroup && Array.isArray(self.selectedGroup.filters)) {
-                for (var i = 0; i < self.selectedGroup.filters.length; i++) {
-                    var f = self.selectedGroup.filters[i];
-                    if (f.field === 'account_pool_id' && f.operator === 'eq' && f.value) {
-                        poolId = parseInt(f.value, 10);
-                        var foundPool = (self.accountPools || []).find(function (p) { return p.id === poolId; });
-                        poolName = foundPool ? foundPool.name : ('Ностробанк #' + poolId);
-                        break;
-                    }
-                }
-            }
+            var poolId   = self.selectedPool.id;
+            var poolName = self.selectedPool.name;
 
-            self.autoMatchScope = { type: 'all', poolId: poolId, poolName: poolName };
-
-            // Дефолтная опция: если есть ностробанк — по ностробанку, иначе — по категории
-            if (poolId) {
-                self.autoMatchScope.type = 'pool';
-            } else {
-                self.autoMatchScope.type = 'category';
-            }
+            self.autoMatchScope = {
+                type:     'pool',
+                poolId:   poolId,
+                poolName: poolName,
+            };
 
             self._showModal('autoMatchScopeModal');
         },

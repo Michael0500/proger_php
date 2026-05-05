@@ -14,16 +14,11 @@ $companySection = $currentComp ? strtoupper($currentComp->code) : '';
         categoryUpdate:        '<?= Url::to(['/category/update']) ?>',
         categoryDelete:        '<?= Url::to(['/category/delete']) ?>',
 
-        // Группы
-        groupCreate:      '<?= Url::to(['/group/create']) ?>',
-        groupUpdate:      '<?= Url::to(['/group/update']) ?>',
-        groupDelete:      '<?= Url::to(['/group/delete']) ?>',
-        groupGetAccounts: '<?= Url::to(['/group/get-accounts']) ?>',
-        groupGetFilters:  '<?= Url::to(['/group/get-filters']) ?>',
-        groupSaveFilters: '<?= Url::to(['/group/save-filters']) ?>',
-
         // Ностро банки
-        accountPoolList: '<?= Url::to(['/account-pool/list']) ?>',
+        accountPoolList:            '<?= Url::to(['/account-pool/list']) ?>',
+        accountPoolQuickCreate:     '<?= Url::to(['/account-pool/quick-create']) ?>',
+        accountPoolMoveToCategory:  '<?= Url::to(['/account-pool/move-to-category']) ?>',
+        accountPoolDelete:          '<?= Url::to(['/account-pool/delete']) ?>',
 
         // Записи (NostroEntry)
         entryList:           '<?= Url::to(['/nostro-entry/list']) ?>',

@@ -1,6 +1,6 @@
 /**
  * SmartMatch — Vue-инстанс страницы "Выверка" (#entries-app).
- * Подключает mixins: Modals, Categories, Groups, Entries, Matching, StatePersistence.
+ * Подключает mixins: Modals, Categories, Pools, Entries, Matching, StatePersistence.
  */
 (function () {
     'use strict';
@@ -21,7 +21,7 @@
         new Vue({
             el: '#entries-app',
 
-            mixins: [ModalsMixin, CategoriesMixin, GroupsMixin, EntriesMixin, MatchingMixin, StatePersistenceMixin],
+            mixins: [ModalsMixin, CategoriesMixin, PoolsMixin, EntriesMixin, MatchingMixin, StatePersistenceMixin],
 
             data: {
                 // Сайдбар
@@ -34,15 +34,11 @@
                 flyoutStyle:    {},
                 flyoutTimer:    null,
 
-                // Категории / группы
+                // Категории / ностро-банки
                 loadingCategories:   false,
                 categories:          [],
                 selectedCategory:    null,
-                selectedGroup:       null,
-                groupFilters:        [],
-                groupFilterFields:   {},
-                groupFilterMeta:     {},
-                groupFiltersLoading: false,
+                selectedPool:        null,
 
                 // Секция фиксирована на выверке; поле нужно mixin'ам
                 activeSection: 'entries',
@@ -50,12 +46,7 @@
                 newCategory:     { name: '', description: '' },
                 editingCategory: { id: null, name: '', description: '' },
 
-                newGroup:     { category_id: null, name: '', description: '', is_active: true },
-                editingGroup: { id: null, name: '', description: '', is_active: true },
-
                 collapsedCategories: {},
-                _pendingCategoryId:  null,
-                _pendingGroupId:     null,
 
                 // Контекстное меню строки
                 openRowMenu:  null,

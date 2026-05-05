@@ -64,11 +64,6 @@ class Company extends ActiveRecord
         return $this->hasMany(AccountPool::class, ['company_id' => 'id']);
     }
 
-    public function getGroups()
-    {
-        return $this->hasMany(Group::class, ['company_id' => 'id']);
-    }
-
     public function getCategories()
     {
         return $this->hasMany(Category::class, ['company_id' => 'id']);

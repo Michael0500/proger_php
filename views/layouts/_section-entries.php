@@ -2,10 +2,10 @@
 
     <div>
 
-        <!-- ─────────── Пул не выбран ─────────── -->
-        <div v-if="!selectedGroup" class="empty-pool">
+        <!-- ─────────── Ностро-банк не выбран ─────────── -->
+        <div v-if="!selectedPool" class="empty-pool">
             <i class="fas fa-hand-point-left"></i>
-            <p>Выберите группу в панели слева</p>
+            <p>Выберите ностро-банк в панели слева</p>
         </div>
 
         <div v-else>
@@ -13,7 +13,7 @@
             <!-- ТУЛБАР -->
             <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
                 <div style="display:flex;align-items:center;gap:8px">
-                    <span class="pool-title">{{ selectedGroup.name }}</span>
+                    <span class="pool-title">{{ selectedPool.name }}</span>
                     <span class="pool-tag">{{ selectedCategory ? selectedCategory.name : '' }}</span>
                     <span v-if="entriesTotal > 0" style="font-size:11px;color:#9ca3af;margin-left:2px">
                     {{ entriesTotal.toLocaleString() }} {{ recordText(entriesTotal) }}

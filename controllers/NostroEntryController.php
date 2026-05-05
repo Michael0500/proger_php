@@ -5,7 +5,6 @@ use Yii;
 use yii\web\Response;
 use app\models\NostroEntry;
 use app\models\Account;
-use app\models\Group;
 
 class NostroEntryController extends BaseController
 {
@@ -24,7 +23,7 @@ class NostroEntryController extends BaseController
 
     /**
      * GET /nostro-entry/list
-     * Params: pool_id, page, limit, sort, dir, filters(JSON)
+     * Params: pool_id (AccountPool.id), page, limit, sort, dir, filters(JSON)
      */
     public function actionList(): array
     {
@@ -52,69 +51,9 @@ class NostroEntryController extends BaseController
             ->leftJoin(['ap' => 'account_pools'], 'ap.id = a.pool_id')
             ->where(['ne.company_id' => $cid]);
 
-        // pool_id теперь означает group_id (группа с фильтрами)
+        // pool_id — ID ностро-банка. Фильтруем по счетам этого банка.
         if ($poolId > 0) {
-            $group = \app\models\Group::findOne($poolId);
-
-            if (!$group) {
-                return ['success' => false, 'message' => 'Группа не найдена'];
-            }
-
-            $groupFilters = \app\models\GroupFilter::find()
-                ->where(['group_id' => $poolId])
-                ->orderBy(['sort_order' => SORT_ASC])
-                ->all();
-
-            if (!empty($groupFilters)) {
-                // ── Шаг 1: account-фильтры → находим подходящие account_id ─────────
-                /** @var \app\models\GroupFilter[] $accountFilters */
-                $accountFilters = array_values(array_filter($groupFilters, function($f) { return $f->isAccountField(); }));
-                /** @var \app\models\GroupFilter[] $entryFilters */
-                $entryFilters   = array_values(array_filter($groupFilters, function($f) { return $f->isEntryField(); }));
-
-                if (!empty($accountFilters)) {
-                    $accountQuery = Account::find()
-                        ->select('id')
-                        ->where(['company_id' => $cid]);
-
-                    $firstAcc = true;
-                    foreach ($accountFilters as $pf) {
-                        $condition = $pf->buildAccountCondition();
-                        if ($condition === null) continue;
-                        if ($firstAcc) {
-                            $accountQuery->andWhere($condition);
-                            $firstAcc = false;
-                        } elseif ($pf->logic === 'OR') {
-                            $accountQuery->orWhere($condition);
-                        } else {
-                            $accountQuery->andWhere($condition);
-                        }
-                    }
-
-                    $accountIds = $accountQuery->column();
-
-                    if (empty($accountIds)) {
-                        return ['success' => true, 'data' => [], 'total' => 0,
-                            'page' => $page, 'limit' => $limit, 'pages' => 0];
-                    }
-                    $q->andWhere(['ne.account_id' => $accountIds]);
-                }
-
-                // ── Шаг 2: entry-фильтры → применяем к основному запросу ──────────
-                $firstEntry = true;
-                foreach ($entryFilters as $pf) {
-                    $condition = $pf->buildEntryCondition('ne');
-                    if ($condition === null) continue;
-                    if ($firstEntry) {
-                        $q->andWhere($condition);
-                        $firstEntry = false;
-                    } elseif ($pf->logic === 'OR') {
-                        $q->orWhere($condition);
-                    } else {
-                        $q->andWhere($condition);
-                    }
-                }
-            }
+            $q->andWhere(['a.pool_id' => $poolId]);
         }
 
 
@@ -165,36 +104,21 @@ class NostroEntryController extends BaseController
     }
 
     /**
-     * GET /nostro-entry/search-accounts?group_id=&q=
-     * Для Select2 autocomplete. Фильтрует счета через account-фильтры группы.
+     * GET /nostro-entry/search-accounts?pool_id=&q=
+     * Для Select2 autocomplete. Если задан pool_id — фильтрует счета по ностро-банку.
      */
     public function actionSearchAccounts(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
 
-        $cid     = $this->cid();
-        $groupId = (int)Yii::$app->request->get('group_id', 0);
-        $q       = trim(Yii::$app->request->get('q', ''));
+        $cid    = $this->cid();
+        $poolId = (int)Yii::$app->request->get('pool_id', 0);
+        $q      = trim(Yii::$app->request->get('q', ''));
 
         $query = Account::find()->where(['company_id' => $cid]);
 
-        if ($groupId > 0) {
-            $group = Group::findOne($groupId);
-            if ($group) {
-                $first = true;
-                foreach ($group->filters as $filter) {
-                    $condition = $filter->buildAccountCondition();
-                    if ($condition === null) continue;
-                    if ($first) {
-                        $query->andWhere($condition);
-                        $first = false;
-                    } elseif ($filter->logic === 'OR') {
-                        $query->orWhere($condition);
-                    } else {
-                        $query->andWhere($condition);
-                    }
-                }
-            }
+        if ($poolId > 0) {
+            $query->andWhere(['pool_id' => $poolId]);
         }
 
         if ($q !== '') $query->andWhere(['ilike', 'name', $q]);

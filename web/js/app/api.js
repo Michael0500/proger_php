@@ -29,16 +29,6 @@ var SmartMatchApi = (function () {
             delete: function (id)     { return post(AppRoutes.categoryDelete, { id: id }); }
         },
 
-        // ── Группы ────────────────────────────────────────────────
-        groups: {
-            create:      function (data)    { return post(AppRoutes.groupCreate, data); },
-            update:      function (data)    { return post(AppRoutes.groupUpdate, data); },
-            delete:      function (id)      { return post(AppRoutes.groupDelete, { id: id }); },
-            accounts:    function (id)      { return get(AppRoutes.groupGetAccounts, { id: id }); },
-            getFilters:  function(groupId)  { return get(AppRoutes.groupGetFilters, { group_id: groupId }); },
-            saveFilters: function(data)     { return post(AppRoutes.groupSaveFilters, data); },
-        },
-
         // ── Записи выверки (NostroEntry) ────────────────────────────
         entries: {
             create:        function (data)         { return post(AppRoutes.entryCreate, data); },

@@ -6,8 +6,6 @@ use yii\web\Response;
 use app\models\AccountPool;
 use app\models\Account;
 use app\models\Category;
-use app\models\Group;
-use app\models\GroupFilter;
 
 /**
  * CRUD для ностро-банков (AccountPool) + управление привязанными счетами.
@@ -49,47 +47,37 @@ class AccountPoolController extends BaseController
             ->orderBy(['name' => SORT_ASC])
             ->all();
 
-        // Привязки пулов к категориям через GroupFilter
-        $poolIds = array_map(function ($p) { return $p->id; }, $pools);
-        $poolCategoryMap = [];
-        if ($poolIds) {
-            $rows = (new \yii\db\Query())
-                ->select(['gf.value AS pool_id', 'g.category_id'])
-                ->from('{{%group_filters}} gf')
-                ->innerJoin('{{%groups}} g', 'g.id = gf.group_id')
-                ->where(['gf.field' => 'account_pool_id', 'gf.value' => array_map('strval', $poolIds), 'g.company_id' => $cid])
-                ->all();
-            foreach ($rows as $row) {
-                $poolCategoryMap[(int)$row['pool_id']] = (int)$row['category_id'];
-            }
-        }
-
         $initData = [
-            'categories' => array_map(function ($c) {
+            'categories' => array_map(function (Category $c) {
                 return ['id' => $c->id, 'name' => $c->name];
             }, $categories),
-            'pools' => array_map(function ($p) use ($poolCategoryMap) {
-                return [
-                    'id'          => $p->id,
-                    'name'        => $p->name,
-                    'description' => $p->description,
-                    'created_at'  => $p->created_at,
-                    'category_id' => $poolCategoryMap[$p->id] ?? null,
-                    'accounts'    => array_map(function ($a) {
-                        return [
-                            'id'          => $a->id,
-                            'name'        => $a->name,
-                            'currency'    => $a->currency ?? null,
-                            'is_suspense' => (bool)$a->is_suspense,
-                            'date_open'   => $a->date_open,
-                            'date_close'  => $a->date_close,
-                        ];
-                    }, $p->accounts),
-                ];
+            'pools' => array_map(function (AccountPool $p) {
+                return $this->serializePool($p);
             }, $pools),
         ];
 
         return $this->render('index', ['initData' => $initData]);
+    }
+
+    private function serializePool(AccountPool $p): array
+    {
+        return [
+            'id'          => $p->id,
+            'name'        => $p->name,
+            'description' => $p->description,
+            'created_at'  => $p->created_at,
+            'category_id' => $p->category_id ? (int)$p->category_id : null,
+            'accounts'    => array_map(function (Account $a) {
+                return [
+                    'id'          => $a->id,
+                    'name'        => $a->name,
+                    'currency'    => $a->currency ?? null,
+                    'is_suspense' => (bool)$a->is_suspense,
+                    'date_open'   => $a->date_open,
+                    'date_close'  => $a->date_close,
+                ];
+            }, $p->accounts),
+        ];
     }
 
     // ── JSON API ─────────────────────────────────────────────────
@@ -107,39 +95,8 @@ class AccountPoolController extends BaseController
             ->orderBy(['name' => SORT_ASC])
             ->all();
 
-        // Найти привязки пулов к категориям через GroupFilter(field='account_pool_id')
-        $poolIds = array_map(function ($p) { return $p->id; }, $pools);
-        $poolCategoryMap = [];
-        if ($poolIds) {
-            $rows = (new \yii\db\Query())
-                ->select(['gf.value AS pool_id', 'g.category_id'])
-                ->from('{{%group_filters}} gf')
-                ->innerJoin('{{%groups}} g', 'g.id = gf.group_id')
-                ->where(['gf.field' => 'account_pool_id', 'gf.value' => array_map('strval', $poolIds), 'g.company_id' => $cid])
-                ->all();
-            foreach ($rows as $row) {
-                $poolCategoryMap[(int)$row['pool_id']] = (int)$row['category_id'];
-            }
-        }
-
-        $data = array_map(function ($p) use ($poolCategoryMap) {
-            return [
-                'id'          => $p->id,
-                'name'        => $p->name,
-                'description' => $p->description,
-                'created_at'  => $p->created_at,
-                'category_id' => $poolCategoryMap[$p->id] ?? null,
-                'accounts'    => array_map(function ($a) {
-                    return [
-                        'id'          => $a->id,
-                        'name'        => $a->name,
-                        'currency'    => $a->currency ?? null,
-                        'is_suspense' => (bool)$a->is_suspense,
-                        'date_open'   => $a->date_open,
-                        'date_close'  => $a->date_close,
-                    ];
-                }, $p->accounts),
-            ];
+        $data = array_map(function (AccountPool $p) {
+            return $this->serializePool($p);
         }, $pools);
 
         return ['success' => true, 'data' => $data];
@@ -148,9 +105,9 @@ class AccountPoolController extends BaseController
     /**
      * POST /account-pool/create
      * Дополнительно принимает:
-     *   ledger_accounts[]   — ID счетов с load_status='L' для привязки
-     *   statement_accounts[] — ID счетов с load_status='S' для привязки
-     *   category_id          — (необязательно) создать Group+GroupFilter в этой категории
+     *   ledger_accounts[]    — ID счетов типа L для привязки
+     *   statement_accounts[] — ID счетов типа S для привязки
+     *   category_id          — (необязательно) ID категории для прямой привязки
      */
     public function actionCreate(): array
     {
@@ -158,16 +115,25 @@ class AccountPoolController extends BaseController
         $cid = $this->cid();
         if (!$cid) return ['success' => false, 'message' => 'Компания не выбрана'];
 
-        $req            = Yii::$app->request;
-        $ledgerIds      = array_filter(array_map('intval', (array)$req->post('ledger_accounts', [])));
-        $statementIds   = array_filter(array_map('intval', (array)$req->post('statement_accounts', [])));
-        $categoryId     = $req->post('category_id') ? (int)$req->post('category_id') : null;
+        $req          = Yii::$app->request;
+        $ledgerIds    = array_filter(array_map('intval', (array)$req->post('ledger_accounts', [])));
+        $statementIds = array_filter(array_map('intval', (array)$req->post('statement_accounts', [])));
+        $categoryId   = $req->post('category_id') !== '' && $req->post('category_id') !== null
+            ? (int)$req->post('category_id') : null;
+
+        if ($categoryId !== null) {
+            $category = Category::findOne(['id' => $categoryId, 'company_id' => $cid]);
+            if (!$category) {
+                return ['success' => false, 'message' => 'Категория не найдена'];
+            }
+        }
 
         $db = Yii::$app->db;
         $transaction = $db->beginTransaction();
         try {
             $model = new AccountPool();
             $model->company_id  = $cid;
+            $model->category_id = $categoryId;
             $model->name        = $req->post('name');
             $model->description = $req->post('description');
 
@@ -185,37 +151,6 @@ class AccountPoolController extends BaseController
                 );
             }
 
-            // Создание группы в категории с фильтром по этому ностробанку
-            if ($categoryId) {
-                $category = Category::findOne(['id' => $categoryId, 'company_id' => $cid]);
-                if (!$category) {
-                    $transaction->rollBack();
-                    return ['success' => false, 'message' => 'Категория не найдена'];
-                }
-
-                $group = new Group();
-                $group->company_id  = $cid;
-                $group->category_id = $categoryId;
-                $group->name        = $model->name;
-                $group->is_active   = true;
-                if (!$group->save()) {
-                    $transaction->rollBack();
-                    return ['success' => false, 'message' => 'Ошибка создания группы', 'errors' => $group->errors];
-                }
-
-                $filter = new GroupFilter();
-                $filter->group_id   = $group->id;
-                $filter->field      = 'account_pool_id';
-                $filter->operator   = 'eq';
-                $filter->value      = (string)$model->id;
-                $filter->logic      = 'AND';
-                $filter->sort_order = 0;
-                if (!$filter->save()) {
-                    $transaction->rollBack();
-                    return ['success' => false, 'message' => 'Ошибка создания фильтра группы', 'errors' => $filter->errors];
-                }
-            }
-
             $transaction->commit();
             return ['success' => true, 'message' => 'Ностро-банк создан', 'data' => ['id' => $model->id, 'name' => $model->name]];
 
@@ -230,7 +165,7 @@ class AccountPoolController extends BaseController
      * Дополнительно принимает:
      *   ledger_accounts[]    — ID новых счетов типа L для привязки
      *   statement_accounts[] — ID новых счетов типа S для привязки
-     *   category_id          — (необязательно) создать Group+GroupFilter в этой категории
+     *   category_id          — ID категории (пусто/null = без категории)
      */
     public function actionUpdate(): array
     {
@@ -245,13 +180,26 @@ class AccountPoolController extends BaseController
 
         $ledgerIds    = array_filter(array_map('intval', (array)$req->post('ledger_accounts', [])));
         $statementIds = array_filter(array_map('intval', (array)$req->post('statement_accounts', [])));
-        $categoryId   = $req->post('category_id') ? (int)$req->post('category_id') : null;
+
+        $hasCategoryParam = $req->post('category_id') !== null;
+        $rawCategoryId    = (string)$req->post('category_id', '');
+        $categoryId       = ($hasCategoryParam && $rawCategoryId !== '') ? (int)$rawCategoryId : null;
+
+        if ($hasCategoryParam && $categoryId !== null) {
+            $category = Category::findOne(['id' => $categoryId, 'company_id' => $cid]);
+            if (!$category) {
+                return ['success' => false, 'message' => 'Категория не найдена'];
+            }
+        }
 
         $db = Yii::$app->db;
         $transaction = $db->beginTransaction();
         try {
             $model->name        = $req->post('name', $model->name);
             $model->description = $req->post('description', $model->description);
+            if ($hasCategoryParam) {
+                $model->category_id = $categoryId;
+            }
 
             if (!$model->save()) {
                 $transaction->rollBack();
@@ -277,37 +225,6 @@ class AccountPoolController extends BaseController
                         ['or', ['pool_id' => null], ['pool_id' => $model->id]],
                     ]
                 );
-            }
-
-            // Создание группы в категории
-            if ($categoryId) {
-                $category = Category::findOne(['id' => $categoryId, 'company_id' => $cid]);
-                if (!$category) {
-                    $transaction->rollBack();
-                    return ['success' => false, 'message' => 'Категория не найдена'];
-                }
-
-                $group = new Group();
-                $group->company_id  = $cid;
-                $group->category_id = $categoryId;
-                $group->name        = $model->name;
-                $group->is_active   = true;
-                if (!$group->save()) {
-                    $transaction->rollBack();
-                    return ['success' => false, 'message' => 'Ошибка создания группы', 'errors' => $group->errors];
-                }
-
-                $filter = new GroupFilter();
-                $filter->group_id   = $group->id;
-                $filter->field      = 'account_pool_id';
-                $filter->operator   = 'eq';
-                $filter->value      = (string)$model->id;
-                $filter->logic      = 'AND';
-                $filter->sort_order = 0;
-                if (!$filter->save()) {
-                    $transaction->rollBack();
-                    return ['success' => false, 'message' => 'Ошибка создания фильтра группы', 'errors' => $filter->errors];
-                }
             }
 
             $transaction->commit();
@@ -457,5 +374,98 @@ class AccountPoolController extends BaseController
         }
 
         return ['success' => false, 'message' => 'Ошибка отвязки'];
+    }
+
+    /**
+     * POST /account-pool/quick-create
+     * Быстрое создание ностро-банка из сайдбара выверки.
+     * Body: { name, description?, category_id? }
+     */
+    public function actionQuickCreate(): array
+    {
+        Yii::$app->response->format = Response::FORMAT_JSON;
+        $cid = $this->cid();
+        if (!$cid) return ['success' => false, 'message' => 'Компания не выбрана'];
+
+        $req         = Yii::$app->request;
+        $name        = trim((string)$req->post('name', ''));
+        $description = trim((string)$req->post('description', ''));
+        $rawCategory = $req->post('category_id', '');
+        $categoryId  = ($rawCategory !== '' && $rawCategory !== null) ? (int)$rawCategory : null;
+
+        if ($name === '') {
+            return ['success' => false, 'message' => 'Название обязательно'];
+        }
+
+        if ($categoryId !== null) {
+            $category = Category::findOne(['id' => $categoryId, 'company_id' => $cid]);
+            if (!$category) {
+                return ['success' => false, 'message' => 'Категория не найдена'];
+            }
+        }
+
+        $model = new AccountPool();
+        $model->company_id  = $cid;
+        $model->category_id = $categoryId;
+        $model->name        = $name;
+        $model->description = $description !== '' ? $description : null;
+
+        if (!$model->save()) {
+            return ['success' => false, 'message' => 'Ошибка создания', 'errors' => $model->errors];
+        }
+
+        return [
+            'success' => true,
+            'message' => 'Ностро-банк создан',
+            'data'    => [
+                'id'          => (int)$model->id,
+                'name'        => $model->name,
+                'description' => $model->description,
+                'category_id' => $model->category_id ? (int)$model->category_id : null,
+            ],
+        ];
+    }
+
+    /**
+     * POST /account-pool/move-to-category
+     * Переместить ностро-банк в другую категорию (или открепить).
+     * Body: { id, category_id (число или пусто/null для открепления) }
+     */
+    public function actionMoveToCategory(): array
+    {
+        Yii::$app->response->format = Response::FORMAT_JSON;
+        $cid = $this->cid();
+        if (!$cid) return ['success' => false, 'message' => 'Компания не выбрана'];
+
+        $req         = Yii::$app->request;
+        $id          = (int)$req->post('id');
+        $rawCategory = $req->post('category_id', '');
+        $categoryId  = ($rawCategory !== '' && $rawCategory !== null) ? (int)$rawCategory : null;
+
+        $model = AccountPool::findOne(['id' => $id, 'company_id' => $cid]);
+        if (!$model) return ['success' => false, 'message' => 'Ностро-банк не найден'];
+
+        if ($categoryId !== null) {
+            $category = Category::findOne(['id' => $categoryId, 'company_id' => $cid]);
+            if (!$category) {
+                return ['success' => false, 'message' => 'Категория не найдена'];
+            }
+        }
+
+        $model->category_id = $categoryId;
+        if (!$model->save(false)) {
+            return ['success' => false, 'message' => 'Ошибка перемещения'];
+        }
+
+        return [
+            'success' => true,
+            'message' => $categoryId === null
+                ? 'Ностро-банк откреплён от категории'
+                : 'Ностро-банк перемещён',
+            'data'    => [
+                'id'          => (int)$model->id,
+                'category_id' => $model->category_id ? (int)$model->category_id : null,
+            ],
+        ];
     }
 }

@@ -1,6 +1,7 @@
 /**
  * Mixin: Categories
- * Всё что касается Category — загрузка, создание, редактирование, удаление
+ * Всё что касается Category — загрузка, создание, редактирование, удаление.
+ * Категория содержит ностро-банки (pools), привязанные напрямую через pool.category_id.
  */
 var CategoriesMixin = {
     methods: {
@@ -11,9 +12,9 @@ var CategoriesMixin = {
             SmartMatchApi.categories.list()
                 .then(function (response) {
                     if (response.data.success) {
-                        var savedExpanded    = StateStorage.get('categoriesExpanded', {});
-                        var savedCategoryId  = StateStorage.get('selectedCategoryId', null);
-                        var savedGroupId     = StateStorage.get('selectedGroupId', null);
+                        var savedExpanded   = StateStorage.get('categoriesExpanded', {});
+                        var savedCategoryId = StateStorage.get('selectedCategoryId', null);
+                        var savedPoolId     = StateStorage.get('selectedPoolId', null);
 
                         self.categories = response.data.data.map(function (category) {
                             var isExpanded = !!savedExpanded[category.id];
@@ -27,12 +28,12 @@ var CategoriesMixin = {
                             if (foundCategory) {
                                 self.selectedCategory = foundCategory;
 
-                                if (savedGroupId && foundCategory.groups) {
-                                    var foundGroup = foundCategory.groups.find(function (g) {
-                                        return g.id === parseInt(savedGroupId, 10);
+                                if (savedPoolId && foundCategory.pools) {
+                                    var foundPool = foundCategory.pools.find(function (p) {
+                                        return p.id === parseInt(savedPoolId, 10);
                                     });
-                                    if (foundGroup) {
-                                        self.selectedGroup = foundGroup;
+                                    if (foundPool) {
+                                        self.selectedPool = foundPool;
                                         self.loadEntries && self.loadEntries(true);
                                     }
                                 }
@@ -58,8 +59,7 @@ var CategoriesMixin = {
                 if (index !== -1) self.categories[index].expanded = !self.categories[index].expanded;
             } else {
                 self.selectedCategory = category;
-                self.selectedGroup = null;
-                self.accounts = [];
+                self.selectedPool = null;
                 if (index !== -1) self.categories[index].expanded = true;
             }
 
@@ -67,7 +67,7 @@ var CategoriesMixin = {
             self.categories.forEach(function (c) { expandedMap[c.id] = !!c.expanded; });
             StateStorage.set('categoriesExpanded', expandedMap);
             StateStorage.set('selectedCategoryId', self.selectedCategory ? self.selectedCategory.id : null);
-            if (!self.selectedGroup) StateStorage.set('selectedGroupId', null);
+            if (!self.selectedPool) StateStorage.set('selectedPoolId', null);
         },
 
         // Добавление
@@ -125,7 +125,7 @@ var CategoriesMixin = {
             var self = this;
             Swal.fire({
                 title: 'Вы уверены?',
-                text: 'Удалить категорию "' + category.name + '"? Все связанные группы будут удалены.',
+                text: 'Удалить категорию "' + category.name + '"? Привязанные ностро-банки останутся, но категория у них очистится.',
                 icon: 'warning',
                 showCancelButton: true,
                 confirmButtonColor: '#d33',
@@ -141,8 +141,7 @@ var CategoriesMixin = {
                             self.loadCategories();
                             if (self.selectedCategory && self.selectedCategory.id === category.id) {
                                 self.selectedCategory = null;
-                                self.selectedGroup    = null;
-                                self.accounts         = [];
+                                self.selectedPool     = null;
                             }
                         } else {
                             Swal.fire('Ошибка', response.data.message, 'error');
