@@ -162,18 +162,26 @@ class FccMergeController extends Controller
 
         $flushEntries = function () use ($db, $entryColumns, &$entryBuf, &$totalEntries) {
             if (empty($entryBuf)) return;
+            $lastId = (int)$db->createCommand("SELECT COALESCE(MAX(id), 0) FROM {{%nostro_entries}}")->queryScalar();
+
             $db->createCommand()
                 ->batchInsert('{{%nostro_entries}}', $entryColumns, $entryBuf)
                 ->execute();
+
+            $this->writeEntryAuditAfterFlush($lastId, $entryBuf);
             $totalEntries += count($entryBuf);
             $entryBuf = [];
         };
 
         $flushBalances = function () use ($db, $balanceColumns, &$balanceBuf, &$totalBalances) {
             if (empty($balanceBuf)) return;
+            $lastId = (int)$db->createCommand("SELECT COALESCE(MAX(id), 0) FROM {{%nostro_balance}}")->queryScalar();
+
             $db->createCommand()
                 ->batchInsert('{{%nostro_balance}}', $balanceColumns, $balanceBuf)
                 ->execute();
+
+            $this->writeBalanceAuditAfterFlush($lastId, $balanceBuf);
             $totalBalances += count($balanceBuf);
             $balanceBuf = [];
         };
@@ -290,6 +298,132 @@ class FccMergeController extends Controller
         $flushBalances();
 
         return [$totalBalances, $totalEntries, $skippedLineNos];
+    }
+
+    /**
+     * Пишет аудит создания FCC12-записей после пакетной вставки в nostro_entries.
+     */
+    private function writeEntryAuditAfterFlush(int $lastId, array $insertedRows): void
+    {
+        $lineNos = $this->extractLineNos($insertedRows, 14);
+        if (empty($lineNos)) {
+            return;
+        }
+
+        $rows = Yii::$app->db->createCommand(
+            "SELECT id, account_id, company_id, ls, dc, amount, currency,
+                    value_date, post_date, instruction_id, end_to_end_id,
+                    transaction_id, message_id, other_id, comment, source,
+                    match_status, match_id, extract_no, line_no, created_at, updated_at
+               FROM {{%nostro_entries}}
+              WHERE id > :last_id
+                AND source = :source
+                AND extract_no = :extract_no
+                AND line_no = ANY(:line_nos)
+              ORDER BY id",
+            [
+                ':last_id'    => $lastId,
+                ':source'     => self::SOURCE,
+                ':extract_no' => (int)$insertedRows[0][13],
+                ':line_nos'   => '{' . implode(',', $lineNos) . '}',
+            ]
+        )->queryAll();
+
+        if (empty($rows)) {
+            return;
+        }
+
+        $auditRows = [];
+        $now = date('Y-m-d H:i:s');
+        foreach ($rows as $row) {
+            $auditRows[] = [
+                (int)$row['id'],
+                0,
+                'create',
+                null,
+                json_encode($row, JSON_UNESCAPED_UNICODE),
+                null,
+                null,
+                'Импорт FCC12',
+                $now,
+            ];
+        }
+
+        Yii::$app->db->createCommand()
+            ->batchInsert('{{%nostro_entry_audit}}', [
+                'entry_id', 'user_id', 'action', 'old_values', 'new_values',
+                'changed_field', 'archived_id', 'reason', 'created_at',
+            ], $auditRows)
+            ->execute();
+    }
+
+    /**
+     * Пишет аудит импорта FCC12-балансов после пакетной вставки в nostro_balance.
+     */
+    private function writeBalanceAuditAfterFlush(int $lastId, array $insertedRows): void
+    {
+        $lineNos = $this->extractLineNos($insertedRows, 14);
+        if (empty($lineNos)) {
+            return;
+        }
+
+        $rows = Yii::$app->db->createCommand(
+            "SELECT id, company_id, account_id, ls_type, statement_number, currency,
+                    value_date, opening_balance, opening_dc, closing_balance, closing_dc,
+                    section, source, status, comment, extract_no, line_no, created_at, updated_at
+               FROM {{%nostro_balance}}
+              WHERE id > :last_id
+                AND source = :source
+                AND extract_no = :extract_no
+                AND line_no = ANY(:line_nos)
+              ORDER BY id",
+            [
+                ':last_id'    => $lastId,
+                ':source'     => self::SOURCE,
+                ':extract_no' => (int)$insertedRows[0][13],
+                ':line_nos'   => '{' . implode(',', $lineNos) . '}',
+            ]
+        )->queryAll();
+
+        if (empty($rows)) {
+            return;
+        }
+
+        $auditRows = [];
+        $now = date('Y-m-d H:i:s');
+        foreach ($rows as $row) {
+            $auditRows[] = [
+                (int)$row['id'],
+                0,
+                'import',
+                null,
+                json_encode($row, JSON_UNESCAPED_UNICODE),
+                'Импорт FCC12',
+                $now,
+            ];
+        }
+
+        Yii::$app->db->createCommand()
+            ->batchInsert('{{%nostro_balance_audit}}', [
+                'balance_id', 'user_id', 'action', 'old_values',
+                'new_values', 'reason', 'created_at',
+            ], $auditRows)
+            ->execute();
+    }
+
+    /**
+     * Забирает line_no из буфера batchInsert и готовит PostgreSQL array literal.
+     */
+    private function extractLineNos(array $rows, int $lineNoIndex): array
+    {
+        $lineNos = [];
+        foreach ($rows as $row) {
+            if (isset($row[$lineNoIndex])) {
+                $lineNos[] = (int)$row[$lineNoIndex];
+            }
+        }
+
+        return array_values(array_unique($lineNos));
     }
 
     private function mapDc(?string $drcrInd): string

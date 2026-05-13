@@ -333,6 +333,18 @@ var BalanceMixin = {
             if (self.editingBalance.ls_type === 'S' && !self.editingBalance.statement_number) {
                 self._balanceNotify('Укажите номер выписки', 'warning'); return;
             }
+
+            self.editingBalance.opening_balance = self.normalizeMoneyInput(self.editingBalance.opening_balance, true);
+            self.editingBalance.closing_balance = self.normalizeMoneyInput(self.editingBalance.closing_balance, true);
+
+            var openingError = self.validateMoneyAmount(self.editingBalance.opening_balance, true);
+            if (openingError) {
+                self._balanceNotify('Opening Balance: ' + openingError, 'warning'); return;
+            }
+            var closingError = self.validateMoneyAmount(self.editingBalance.closing_balance, true);
+            if (closingError) {
+                self._balanceNotify('Closing Balance: ' + closingError, 'warning'); return;
+            }
             self.balanceSaving = true;
 
             var url = self.editingBalance.id ? AppRoutes.balanceUpdate : AppRoutes.balanceCreate;
@@ -508,10 +520,66 @@ var BalanceMixin = {
 
         formatBalanceAmount: function (amount) {
             if (amount === null || amount === undefined || amount === '') return '—';
-            return parseFloat(amount).toLocaleString('ru-RU', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-            });
+            var s = String(amount).trim();
+            var sign = '';
+            if (s.charAt(0) === '-') {
+                sign = '-';
+                s = s.slice(1);
+            }
+            s = s.replace(/\s/g, '').replace(/,/g, '');
+            if (!/^\d+(\.\d+)?$/.test(s)) return '—';
+            var parts = s.split('.');
+            var intPart = parts[0].replace(/^0+(?=\d)/, '').replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+            var decPart = ((parts[1] || '') + '00').slice(0, 2);
+            return sign + intPart + ',' + decPart;
+        },
+
+        normalizeMoneyInput: function (val, allowNegative) {
+            if (val === null || val === undefined || val === '') return '';
+            var s = String(val).trim();
+            var sign = '';
+            if (allowNegative && s.charAt(0) === '-') {
+                sign = '-';
+                s = s.slice(1);
+            }
+            s = s.replace(/\s/g, '');
+
+            var hasDot = s.indexOf('.') !== -1;
+            var hasComma = s.indexOf(',') !== -1;
+            if (hasDot && hasComma) {
+                var lastDot = s.lastIndexOf('.');
+                var lastComma = s.lastIndexOf(',');
+                if (lastComma > lastDot) {
+                    s = s.replace(/\./g, '');
+                    var pos = s.lastIndexOf(',');
+                    s = s.slice(0, pos).replace(/,/g, '') + '.' + s.slice(pos + 1);
+                } else {
+                    s = s.replace(/,/g, '');
+                }
+            } else if (hasComma) {
+                var commaCount = (s.match(/,/g) || []).length;
+                var afterLast = s.slice(s.lastIndexOf(',') + 1);
+                s = (commaCount === 1 && afterLast.length <= 2) ? s.replace(',', '.') : s.replace(/,/g, '');
+            }
+
+            if (s.charAt(0) === '.') s = '0' + s;
+            if (/^\d+(\.\d{0,2})?$/.test(s)) {
+                var parts = s.split('.');
+                s = parts[0] + '.' + ((parts[1] || '') + '00').slice(0, 2);
+            }
+            return sign + s;
+        },
+
+        validateMoneyAmount: function (val, allowNegative) {
+            var s = this.normalizeMoneyInput(val, allowNegative);
+            var re = allowNegative ? /^-?\d+(\.\d{1,2})?$/ : /^\d+(\.\d{1,2})?$/;
+            if (!re.test(s)) return 'сумма должна быть числом с максимум 2 знаками после запятой';
+
+            var integerPart = s.replace('-', '').split('.')[0].replace(/^0+/, '');
+            if (integerPart.length > 18) {
+                return 'максимум 18 цифр до запятой и 2 после';
+            }
+            return '';
         },
 
         initBalancePoolSelect: function () {

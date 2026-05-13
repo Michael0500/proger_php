@@ -33,12 +33,18 @@
 
             formatAmount: function (val) {
                 if (val === null || val === undefined || val === '') return '—';
-                var n = parseFloat(val);
-                if (isNaN(n)) return '—';
-                return n.toLocaleString('en-US', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                });
+                var s = String(val).trim();
+                var sign = '';
+                if (s.charAt(0) === '-') {
+                    sign = '-';
+                    s = s.slice(1);
+                }
+                s = s.replace(/\s/g, '').replace(/,/g, '');
+                if (!/^\d+(\.\d+)?$/.test(s)) return '—';
+                var parts = s.split('.');
+                var intPart = parts[0].replace(/^0+(?=\d)/, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                var decPart = ((parts[1] || '') + '00').slice(0, 2);
+                return sign + intPart + '.' + decPart;
             }
         }
     });

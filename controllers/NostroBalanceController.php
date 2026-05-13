@@ -131,7 +131,7 @@ class NostroBalanceController extends BaseController
         $m->runValidations($settings);
 
         if (!$m->validate() || !$m->save(false)) {
-            return ['success' => false, 'message' => 'Ошибка сохранения', 'errors' => $m->errors];
+            return ['success' => false, 'message' => $this->firstModelError($m->errors) ?: 'Ошибка сохранения', 'errors' => $m->errors];
         }
 
         NostroBalanceAudit::log($m->id, NostroBalanceAudit::ACTION_IMPORT, null, $m->toApiArray(), 'Ручной ввод');
@@ -159,7 +159,7 @@ class NostroBalanceController extends BaseController
         $m->runValidations($settings);
 
         if (!$m->validate() || !$m->save(false)) {
-            return ['success' => false, 'errors' => $m->errors];
+            return ['success' => false, 'message' => $this->firstModelError($m->errors) ?: 'Ошибка сохранения', 'errors' => $m->errors];
         }
 
         NostroBalanceAudit::log($m->id, NostroBalanceAudit::ACTION_EDIT, $oldValues, $m->toApiArray(), $p['reason'] ?? null);
@@ -360,12 +360,66 @@ class NostroBalanceController extends BaseController
         $m->statement_number  = ($p['statement_number'] ?? '') ?: null;
         $m->currency          = strtoupper($p['currency'] ?? 'RUB');
         $m->value_date        = $p['value_date']         ?? null;
-        $m->opening_balance   = (float)str_replace(',', '.', $p['opening_balance'] ?? '0');
+        $m->opening_balance   = $this->normalizeDecimalInput($p['opening_balance'] ?? '0');
         $m->opening_dc        = $p['opening_dc']         ?? NostroBalance::DC_CREDIT;
-        $m->closing_balance   = (float)str_replace(',', '.', $p['closing_balance'] ?? '0');
+        $m->closing_balance   = $this->normalizeDecimalInput($p['closing_balance'] ?? '0');
         $m->closing_dc        = $p['closing_dc']         ?? NostroBalance::DC_CREDIT;
         $m->section           = $p['section']            ?? NostroBalance::SECTION_NRE;
         $m->comment           = ($p['comment']           ?? '') ?: null;
+    }
+
+    private function normalizeDecimalInput($value): string
+    {
+        $s = trim((string)$value);
+        if ($s === '') {
+            return '';
+        }
+
+        $sign = '';
+        if (strpos($s, '-') === 0) {
+            $sign = '-';
+            $s = substr($s, 1);
+        }
+
+        $s = preg_replace('/\s+/u', '', $s);
+        $hasDot = strpos($s, '.') !== false;
+        $hasComma = strpos($s, ',') !== false;
+
+        if ($hasDot && $hasComma) {
+            $lastDot = strrpos($s, '.');
+            $lastComma = strrpos($s, ',');
+            if ($lastComma > $lastDot) {
+                $s = str_replace('.', '', $s);
+                $pos = strrpos($s, ',');
+                $s = str_replace(',', '', substr($s, 0, $pos)) . '.' . substr($s, $pos + 1);
+            } else {
+                $s = str_replace(',', '', $s);
+            }
+        } elseif ($hasComma) {
+            $commaCount = substr_count($s, ',');
+            $afterLast = substr($s, strrpos($s, ',') + 1);
+            if ($commaCount === 1 && strlen($afterLast) <= 2) {
+                $s = str_replace(',', '.', $s);
+            } else {
+                $s = str_replace(',', '', $s);
+            }
+        }
+
+        if (strpos($s, '.') === 0) {
+            $s = '0' . $s;
+        }
+
+        return $sign . $s;
+    }
+
+    private function firstModelError(array $errors): ?string
+    {
+        foreach ($errors as $messages) {
+            if (!empty($messages[0])) {
+                return $messages[0];
+            }
+        }
+        return null;
     }
 
     private function saveImportRows(array $rows, array $parseErrors, int $cid): array

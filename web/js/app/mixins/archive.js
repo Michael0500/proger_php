@@ -44,6 +44,11 @@ var ArchiveMixin = {
             archiveProgressAll:   0,
             archiveProgressPct:   0,
 
+            // ── История ────────────────────────────────────
+            historyLoading: false,
+            historyItems:   [],
+            historyEntry:   null,
+
             _archiveDebounceTimer:        null,
             _archivePoolSelect2Inited:    false,
             _archiveAccountSelect2Inited: false,

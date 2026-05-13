@@ -37,6 +37,9 @@ use yii\db\ActiveRecord;
  */
 class NostroEntry extends ActiveRecord
 {
+    const MONEY_MAX_INTEGER_DIGITS = 18;
+    const MONEY_SCALE = 2;
+
     // Типы записей
     const LS_LEDGER    = 'L';
     const LS_STATEMENT = 'S';
@@ -60,7 +63,7 @@ class NostroEntry extends ActiveRecord
         return [
             [['account_id', 'company_id', 'ls', 'dc', 'amount', 'currency'], 'required'],
             [['account_id', 'company_id', 'created_by', 'updated_by'], 'integer'],
-            [['amount'], 'number', 'min' => 0],
+            [['amount'], 'validateMoneyAmount'],
             [['value_date', 'post_date', 'created_at', 'updated_at'], 'safe'],
             [['ls'], 'string', 'max' => 1],
             [['ls'], 'in', 'range' => [self::LS_LEDGER, self::LS_STATEMENT]],
@@ -78,6 +81,21 @@ class NostroEntry extends ActiveRecord
             [['account_id'], 'exist', 'targetClass' => Account::class, 'targetAttribute' => ['account_id' => 'id']],
             [['company_id'], 'exist', 'targetClass' => Company::class, 'targetAttribute' => ['company_id' => 'id']],
         ];
+    }
+
+    public function validateMoneyAmount($attribute): void
+    {
+        $value = trim((string)$this->$attribute);
+        if (!preg_match('/^\d+(?:\.\d{1,2})?$/', $value)) {
+            $this->addError($attribute, 'Сумма должна быть положительным числом с максимум 2 знаками после точки.');
+            return;
+        }
+
+        [$integerPart] = explode('.', $value, 2);
+        $integerPart = ltrim($integerPart, '0');
+        if (strlen($integerPart) > self::MONEY_MAX_INTEGER_DIGITS) {
+            $this->addError($attribute, 'Сумма слишком большая: максимум 18 цифр до точки и 2 после.');
+        }
     }
 
     public function attributeLabels(): array

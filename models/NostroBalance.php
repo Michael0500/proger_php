@@ -36,6 +36,9 @@ use yii\db\Expression;
  */
 class NostroBalance extends ActiveRecord
 {
+    const MONEY_MAX_INTEGER_DIGITS = 18;
+    const MONEY_SCALE = 2;
+
     // ls_type
     const LS_LEDGER    = 'L';
     const LS_STATEMENT = 'S';
@@ -95,7 +98,7 @@ class NostroBalance extends ActiveRecord
 
             // Числа
             [['company_id', 'account_id', 'created_by', 'updated_by'], 'integer'],
-            [['opening_balance', 'closing_balance'], 'number'],
+            [['opening_balance', 'closing_balance'], 'validateMoneyAmount'],
 
             // Строки
             [['ls_type', 'opening_dc', 'closing_dc'], 'string', 'max' => 1],
@@ -130,6 +133,21 @@ class NostroBalance extends ActiveRecord
             [['company_id'], 'exist', 'targetClass' => Company::class,
                 'targetAttribute' => ['company_id' => 'id']],
         ];
+    }
+
+    public function validateMoneyAmount($attribute): void
+    {
+        $value = trim((string)$this->$attribute);
+        if (!preg_match('/^-?\d+(?:\.\d{1,2})?$/', $value)) {
+            $this->addError($attribute, 'Сумма должна быть числом с максимум 2 знаками после запятой.');
+            return;
+        }
+
+        [$integerPart] = explode('.', ltrim($value, '-'), 2);
+        $integerPart = ltrim($integerPart, '0');
+        if (strlen($integerPart) > self::MONEY_MAX_INTEGER_DIGITS) {
+            $this->addError($attribute, 'Сумма слишком большая: максимум 18 цифр до запятой и 2 после.');
+        }
     }
 
     public function attributeLabels(): array
@@ -227,9 +245,9 @@ class NostroBalance extends ActiveRecord
             'currency'         => $this->currency,
             'value_date'       => $this->value_date,
             'value_date_fmt'   => $this->getValueDateFormatted(),
-            'opening_balance'  => (float)$this->opening_balance,
+            'opening_balance'  => $this->opening_balance,
             'opening_dc'       => $this->opening_dc,
-            'closing_balance'  => (float)$this->closing_balance,
+            'closing_balance'  => $this->closing_balance,
             'closing_dc'       => $this->closing_dc,
             'section'          => $this->section,
             'source'           => $this->source,

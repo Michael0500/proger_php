@@ -95,6 +95,9 @@ All DB queries must include `company_id` scoping.
 | — | `git_no_stro_extract_custom` | Сырой приёмник выписок FCC12 (построчный разбор: баланс или транзакция). После merge очищается |
 | — | `tds_status` | Статус пакетов выписок. `type='FCC12' + is_merged=false` → забирает `fcc-merge/run` |
 
+### Money precision
+Денежные поля используют `decimal(20,2)`: `nostro_entries.amount`, `nostro_entries_archive.amount`, `nostro_balance.opening_balance`, `nostro_balance.closing_balance`. UI и модели должны валидировать максимум 18 цифр до десятичного разделителя и 2 после; не приводить пользовательский ввод к `float` до сохранения, чтобы не терять точность.
+
 ### FCC12 ingestion (`commands/FccMergeController`)
 `php yii fcc-merge/run` — для каждой `tds_status` с `type='FCC12'` и `is_merged=false` в одной транзакции:
 1. Читает строки `git_no_stro_extract_custom` c тем же `extract_no`.
@@ -102,7 +105,8 @@ All DB queries must include `company_id` scoping.
 3. Строки-балансы (`opening_bal`/`closing_bal`) → `nostro_balance` (ls_type=L, section=NRE, source=FCC12).
 4. Счёт находится через `accounts.name = git_no_stro_extract_custom.cbr_cc_no` (company_id=1).
 5. В `nostro_balance`/`nostro_entries` проставляются `extract_no` и `line_no` — трассировка до исходной строки.
-6. `tds_status.is_merged := true`, исходные строки `git_no_stro_extract_custom` удаляются. Commit.
+6. После каждого `batchInsert` создаётся batch-аудит: `nostro_entry_audit` (`action=create`) для транзакций и `nostro_balance_audit` (`action=import`) для балансов, `user_id=0`, `reason='Импорт FCC12'`.
+7. `tds_status.is_merged := true`, исходные строки `git_no_stro_extract_custom` удаляются. Commit.
 
 ### Matching logic (`services/MatchingService.php`)
 - **Manual matching** (`matchManual`): takes array of entry IDs, validates balance (Ledger sum = Statement sum for mixed L+S sets), assigns a `MTCH` + 8-char hex `match_id`.
@@ -186,7 +190,7 @@ Archiving is batch-processed: client calls `POST /archive/run-batch` repeatedly 
 Restore is group-based: UI first calls `GET /archive/restore-preview?id=...` and shows all archived rows with the same `match_id`; `POST /archive/restore` restores all those rows in one transaction and removes them from `nostro_entries_archive`.
 
 ### Audit trail
-`NostroEntry` hooks (`afterSave`, `beforeDelete`) automatically call `NostroEntryAudit::log()`. `NostroEntryController::actionHistory` reconstructs full record snapshots at each point in time by replaying audit events.
+`NostroEntry` hooks (`afterSave`, `beforeDelete`) automatically call `NostroEntryAudit::log()`. `NostroEntryController::actionHistory` reconstructs full record snapshots at each point in time by replaying audit events. FCC12 merge uses raw `batchInsert` for performance, so `commands/FccMergeController` writes audit rows explicitly after each flush.
 
 ## Configuration
 

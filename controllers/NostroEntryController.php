@@ -148,7 +148,7 @@ class NostroEntryController extends BaseController
         $m->account_id     = (int)($p['account_id'] ?? 0);
         $m->ls             = $p['ls']       ?? 'L';
         $m->dc             = $p['dc']       ?? 'Debit';
-        $m->amount         = (float)($p['amount'] ?? 0);
+        $m->amount         = $this->normalizeDecimalInput($p['amount'] ?? '0');
         $m->currency       = strtoupper(trim($p['currency'] ?? 'USD'));
         $m->value_date     = ($p['value_date']     ?? '') ?: null;
         $m->post_date      = ($p['post_date']      ?? '') ?: null;
@@ -160,7 +160,9 @@ class NostroEntryController extends BaseController
         $m->comment        = ($p['comment']        ?? '') ?: null;
         $m->match_status   = NostroEntry::STATUS_UNMATCHED;
 
-        if (!$m->save()) return ['success' => false, 'message' => 'Ошибка', 'errors' => $m->errors];
+        if (!$m->save()) {
+            return ['success' => false, 'message' => $this->firstModelError($m->errors) ?: 'Ошибка', 'errors' => $m->errors];
+        }
 
         $row = $m->toArray();
         $acc = Account::findOne($m->account_id);
@@ -182,7 +184,7 @@ class NostroEntryController extends BaseController
         $m->ls             = $p['ls']                  ?? $m->ls;
         $m->dc             = $p['dc']                  ?? $m->dc;
         if ($m->match_status !== NostroEntry::STATUS_MATCHED) {
-            $m->amount     = (float)($p['amount']      ?? $m->amount);
+            $m->amount     = $this->normalizeDecimalInput($p['amount'] ?? $m->amount);
         }
         $m->currency       = strtoupper(trim($p['currency'] ?? $m->currency));
         $m->value_date     = ($p['value_date']         ?? '') ?: null;
@@ -194,7 +196,9 @@ class NostroEntryController extends BaseController
         $m->other_id       = ($p['other_id']           ?? '') ?: null;
         $m->comment        = ($p['comment']            ?? '') ?: null;
 
-        if (!$m->save()) return ['success' => false, 'message' => 'Ошибка', 'errors' => $m->errors];
+        if (!$m->save()) {
+            return ['success' => false, 'message' => $this->firstModelError($m->errors) ?: 'Ошибка', 'errors' => $m->errors];
+        }
 
         $row = $m->toArray();
         $acc = Account::findOne($m->account_id);
@@ -214,6 +218,54 @@ class NostroEntryController extends BaseController
             return ['success' => false, 'message' => 'Нельзя удалить сквитованную запись'];
         $m->delete();
         return ['success' => true, 'message' => 'Запись удалена'];
+    }
+
+    private function normalizeDecimalInput($value): string
+    {
+        $s = trim((string)$value);
+        if ($s === '') {
+            return '';
+        }
+
+        $s = preg_replace('/\s+/u', '', $s);
+        $hasDot = strpos($s, '.') !== false;
+        $hasComma = strpos($s, ',') !== false;
+
+        if ($hasDot && $hasComma) {
+            $lastDot = strrpos($s, '.');
+            $lastComma = strrpos($s, ',');
+            if ($lastComma > $lastDot) {
+                $s = str_replace('.', '', $s);
+                $pos = strrpos($s, ',');
+                $s = str_replace(',', '', substr($s, 0, $pos)) . '.' . substr($s, $pos + 1);
+            } else {
+                $s = str_replace(',', '', $s);
+            }
+        } elseif ($hasComma) {
+            $commaCount = substr_count($s, ',');
+            $afterLast = substr($s, strrpos($s, ',') + 1);
+            if ($commaCount === 1 && strlen($afterLast) <= 2) {
+                $s = str_replace(',', '.', $s);
+            } else {
+                $s = str_replace(',', '', $s);
+            }
+        }
+
+        if (strpos($s, '.') === 0) {
+            $s = '0' . $s;
+        }
+
+        return $s;
+    }
+
+    private function firstModelError(array $errors): ?string
+    {
+        foreach ($errors as $messages) {
+            if (!empty($messages[0])) {
+                return $messages[0];
+            }
+        }
+        return null;
     }
 
     /** POST /nostro-entry/update-comment */

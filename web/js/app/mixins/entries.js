@@ -505,6 +505,12 @@ var EntriesMixin = {
                     position: 'top-end', timer: 2000, showConfirmButton: false });
                 return;
             }
+            var amountError = self.validateMoneyAmount(self.editingEntry.amount, false);
+            if (amountError) {
+                Swal.fire({ icon: 'warning', title: amountError, toast: true,
+                    position: 'top-end', timer: 3500, showConfirmButton: false });
+                return;
+            }
             var isNew = !self.editingEntry.id;
             var url   = isNew ? window.AppRoutes.entryCreate : window.AppRoutes.entryUpdate;
 
@@ -603,10 +609,18 @@ var EntriesMixin = {
 
         formatAmount: function (val) {
             if (val === null || val === undefined || val === '') return '—';
-            return parseFloat(val).toLocaleString('en-US', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-            });
+            var s = String(val).trim();
+            var sign = '';
+            if (s.charAt(0) === '-') {
+                sign = '-';
+                s = s.slice(1);
+            }
+            s = s.replace(/\s/g, '').replace(/,/g, '');
+            if (!/^\d+(\.\d+)?$/.test(s)) return '—';
+            var parts = s.split('.');
+            var intPart = parts[0].replace(/^0+(?=\d)/, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            var decPart = ((parts[1] || '') + '00').slice(0, 2);
+            return sign + intPart + '.' + decPart;
         },
 
         /** Нормализует ввод суммы. Если встречаются и точка, и запятая —
@@ -621,43 +635,55 @@ var EntriesMixin = {
          *   - Только запятая, несколько или 3+ цифры после → разделитель тысяч (555,444,344 → 555444344)
          *   - Только точка → оставляется (десятичный разделитель)*/
         normalizeAmount: function (val) {
+            return this.normalizeMoneyInput(val, false);
+        },
+
+        normalizeMoneyInput: function (val, allowNegative) {
             if (val === null || val === undefined || val === '') return '';
             var s = String(val).trim();
-            // Убираем пробелы (разделитель тысяч)
+            var sign = '';
+            if (allowNegative && s.charAt(0) === '-') {
+                sign = '-';
+                s = s.slice(1);
+            }
             s = s.replace(/\s/g, '');
 
-            var hasDot   = s.indexOf('.') !== -1;
+            var hasDot = s.indexOf('.') !== -1;
             var hasComma = s.indexOf(',') !== -1;
-
             if (hasDot && hasComma) {
-                // Крайний правый разделитель — десятичный
-                var lastDot   = s.lastIndexOf('.');
+                var lastDot = s.lastIndexOf('.');
                 var lastComma = s.lastIndexOf(',');
                 if (lastComma > lastDot) {
-                    // Запятая — десятичный разделитель: убираем все точки, заменяем последнюю запятую точкой
-                    s = s.replace(/\./g, '').replace(/,/g, function (m, offset, str) {
-                        return offset === str.lastIndexOf(',') ? '.' : '';
-                    });
+                    s = s.replace(/\./g, '');
+                    var pos = s.lastIndexOf(',');
+                    s = s.slice(0, pos).replace(/,/g, '') + '.' + s.slice(pos + 1);
                 } else {
-                    // Точка — десятичный разделитель: убираем все запятые
                     s = s.replace(/,/g, '');
                 }
             } else if (hasComma) {
                 var commaCount = (s.match(/,/g) || []).length;
-                var afterLast  = s.slice(s.lastIndexOf(',') + 1);
-                if (commaCount === 1 && afterLast.length <= 2) {
-                    // Одна запятая и после неё 1-2 цифры → десятичный разделитель
-                    s = s.replace(',', '.');
-                } else {
-                    // Несколько запятых или 3+ цифры после → разделитель тысяч
-                    s = s.replace(/,/g, '');
-                }
+                var afterLast = s.slice(s.lastIndexOf(',') + 1);
+                s = (commaCount === 1 && afterLast.length <= 2) ? s.replace(',', '.') : s.replace(/,/g, '');
             }
-            // Только точка — оставляем как есть (десятичный разделитель)
 
-            var n = parseFloat(s);
-            if (isNaN(n)) return val;
-            return n.toFixed(2);
+            if (s.charAt(0) === '.') s = '0' + s;
+            if (/^\d+(\.\d{0,2})?$/.test(s)) {
+                var parts = s.split('.');
+                s = parts[0] + '.' + ((parts[1] || '') + '00').slice(0, 2);
+            }
+            return sign + s;
+        },
+
+        validateMoneyAmount: function (val, allowNegative) {
+            var s = this.normalizeMoneyInput(val, allowNegative);
+            var re = allowNegative ? /^-?\d+(\.\d{1,2})?$/ : /^\d+(\.\d{1,2})?$/;
+            if (!re.test(s)) return 'Сумма должна быть числом с максимум 2 знаками после точки';
+
+            var integerPart = s.replace('-', '').split('.')[0].replace(/^0+/, '');
+            if (integerPart.length > 18) {
+                return 'Сумма слишком большая: максимум 18 цифр до точки и 2 после';
+            }
+            return '';
         },
 
         // ══════════════════════════════════════════════════

@@ -280,6 +280,7 @@
                         <div>
                             <label class="filter-label">Opening Balance *</label>
                             <input type="text" class="filter-input" v-model="editingBalance.opening_balance"
+                                   @blur="editingBalance.opening_balance = normalizeMoneyInput(editingBalance.opening_balance, true)"
                                    placeholder="0.00" style="width:100%;font-family:monospace">
                         </div>
                         <div>
@@ -294,6 +295,7 @@
                         <div>
                             <label class="filter-label">Closing Balance *</label>
                             <input type="text" class="filter-input" v-model="editingBalance.closing_balance"
+                                   @blur="editingBalance.closing_balance = normalizeMoneyInput(editingBalance.closing_balance, true)"
                                    placeholder="0.00" style="width:100%;font-family:monospace">
                         </div>
                         <div>

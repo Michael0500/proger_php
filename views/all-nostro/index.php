@@ -593,10 +593,18 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
 
                 formatAmount: function (val) {
                     if (val === null || val === undefined || val === '') return '—';
-                    return parseFloat(val).toLocaleString('en-US', {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2
-                    });
+                    var s = String(val).trim();
+                    var sign = '';
+                    if (s.charAt(0) === '-') {
+                        sign = '-';
+                        s = s.slice(1);
+                    }
+                    s = s.replace(/\s/g, '').replace(/,/g, '');
+                    if (!/^\d+(\.\d+)?$/.test(s)) return '—';
+                    var parts = s.split('.');
+                    var intPart = parts[0].replace(/^0+(?=\d)/, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                    var decPart = ((parts[1] || '') + '00').slice(0, 2);
+                    return sign + intPart + '.' + decPart;
                 },
                 fmtDate: function (val) {
                     if (!val) return '—';

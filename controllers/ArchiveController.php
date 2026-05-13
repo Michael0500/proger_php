@@ -587,7 +587,7 @@ class ArchiveController extends BaseController
 
     /**
      * GET /archive/history?id=
-     * Получить историю изменений архивной записи (по original_id)
+     * Получить историю изменений архивной записи (по original_id).
      */
     public function actionHistory(): array
     {
@@ -600,27 +600,196 @@ class ArchiveController extends BaseController
             return ['success' => false, 'message' => 'Архивная запись не найдена'];
         }
 
-        // История хранится по original_id
+        $baseState = [
+            'account_id'     => $archived->account_id,
+            'ls'             => $archived->ls,
+            'dc'             => $archived->dc,
+            'amount'         => $archived->amount,
+            'currency'       => $archived->currency,
+            'value_date'     => $archived->value_date,
+            'post_date'      => $archived->post_date,
+            'instruction_id' => $archived->instruction_id,
+            'end_to_end_id'  => $archived->end_to_end_id,
+            'transaction_id' => $archived->transaction_id,
+            'message_id'     => $archived->message_id,
+            'other_id'       => $archived->other_id,
+            'comment'        => $archived->comment,
+            'match_status'   => $archived->match_status,
+            'match_id'       => $archived->match_id,
+        ];
+
+        return ['success' => true, 'data' => $this->buildEntryHistoryRows((int)$archived->original_id, $cid, $baseState)];
+    }
+
+    /**
+     * Собирает историю записи в том же формате, который ожидает общая Vue-модалка.
+     */
+    private function buildEntryHistoryRows(int $entryId, int $cid, array $baseState): array
+    {
         $audits = \app\models\NostroEntryAudit::find()
-            ->where(['entry_id' => $archived->original_id])
-            ->orderBy(['created_at' => SORT_DESC])
+            ->where(['entry_id' => $entryId])
+            ->orderBy(['created_at' => SORT_ASC, 'id' => SORT_ASC])
             ->asArray()
             ->all();
 
-        $rows = [];
+        if (empty($audits)) {
+            return [];
+        }
+
+        $userIds = array_unique(array_column($audits, 'user_id'));
+        $users   = [];
+        if (!empty($userIds)) {
+            $userRows = \app\models\User::find()
+                ->select(['id', 'username', 'email'])
+                ->where(['id' => $userIds])
+                ->asArray()
+                ->all();
+            foreach ($userRows as $u) {
+                $users[$u['id']] = $u['username'] ?: $u['email'];
+            }
+        }
+
+        $groups = [];
+        $groupOrder = [];
         foreach ($audits as $audit) {
+            $ts  = substr($audit['created_at'], 0, 19);
+            $key = $ts . '|' . $audit['user_id'] . '|' . $audit['action'];
+
+            if (!isset($groups[$key])) {
+                $groups[$key] = [
+                    'key'            => $key,
+                    'action'         => $audit['action'],
+                    'user_id'        => $audit['user_id'],
+                    'username'       => $users[$audit['user_id']] ?? ('User #' . $audit['user_id']),
+                    'reason'         => $audit['reason'],
+                    'created_at'     => $ts,
+                    'changes'        => [],
+                    'snapshot'       => [],
+                    'changed_fields' => [],
+                ];
+                $groupOrder[] = $key;
+            }
+
+            $field   = $audit['changed_field'];
+            $oldVals = $audit['old_values'] ? json_decode($audit['old_values'], true) : null;
+            $newVals = $audit['new_values'] ? json_decode($audit['new_values'], true) : null;
+
+            if ($field) {
+                $oldV = is_array($oldVals) ? ($oldVals[$field] ?? null) : null;
+                $newV = is_array($newVals) ? ($newVals[$field] ?? null) : null;
+                $groups[$key]['changes'][$field] = ['old' => $oldV, 'new' => $newV];
+                $groups[$key]['changed_fields'][] = $field;
+            } elseif ($oldVals || $newVals) {
+                $fieldsInEvent = array_unique(array_merge(
+                    is_array($oldVals) ? array_keys($oldVals) : [],
+                    is_array($newVals) ? array_keys($newVals) : []
+                ));
+                foreach ($fieldsInEvent as $eventField) {
+                    $groups[$key]['changes'][$eventField] = [
+                        'old' => is_array($oldVals) ? ($oldVals[$eventField] ?? null) : null,
+                        'new' => is_array($newVals) ? ($newVals[$eventField] ?? null) : null,
+                    ];
+                }
+            }
+        }
+
+        $fields = ['account_id', 'ls', 'dc', 'amount', 'currency',
+            'value_date', 'post_date', 'instruction_id', 'end_to_end_id',
+            'transaction_id', 'message_id', 'other_id', 'comment', 'match_status', 'match_id'];
+
+        $current = array_fill_keys($fields, null);
+        $firstGroup = $groups[$groupOrder[0]];
+        if ($firstGroup['action'] === \app\models\NostroEntryAudit::ACTION_CREATE) {
+            foreach ($fields as $f) {
+                $current[$f] = $firstGroup['changes'][$f]['new'] ?? null;
+            }
+        } else {
+            foreach ($fields as $f) {
+                $current[$f] = $baseState[$f] ?? null;
+            }
+            foreach (array_reverse($groupOrder) as $key) {
+                foreach ($groups[$key]['changes'] as $field => $change) {
+                    if (in_array($field, $fields, true)) {
+                        $current[$field] = $change['old'];
+                    }
+                }
+            }
+        }
+
+        foreach ($groupOrder as $key) {
+            $group = &$groups[$key];
+            $action = $group['action'];
+
+            if ($action === \app\models\NostroEntryAudit::ACTION_CREATE) {
+                foreach ($fields as $f) {
+                    $current[$f] = $group['changes'][$f]['new'] ?? $current[$f];
+                }
+                $group['snapshot'] = $current;
+            } elseif ($action === \app\models\NostroEntryAudit::ACTION_DELETE
+                || $action === \app\models\NostroEntryAudit::ACTION_ARCHIVE) {
+                $snap = $current;
+                foreach ($group['changes'] as $field => $change) {
+                    if (in_array($field, $fields, true) && $change['old'] !== null) {
+                        $snap[$field] = $change['old'];
+                    }
+                }
+                if ($action === \app\models\NostroEntryAudit::ACTION_ARCHIVE) {
+                    $snap['match_status'] = NostroEntryArchive::STATUS_ARCHIVED;
+                }
+                $group['snapshot'] = $snap;
+                $current = $snap;
+            } else {
+                foreach ($group['changes'] as $field => $change) {
+                    if (in_array($field, $fields, true)) {
+                        $current[$field] = $change['new'];
+                    }
+                }
+                $group['snapshot'] = $current;
+            }
+            unset($group);
+        }
+
+        $accountIds = [];
+        foreach ($groups as $g) {
+            if (!empty($g['snapshot']['account_id'])) {
+                $accountIds[] = (int)$g['snapshot']['account_id'];
+            }
+        }
+        $accountIds = array_unique($accountIds);
+        $accountNames = [];
+        if (!empty($accountIds)) {
+            $accRows = Account::find()
+                ->select(['id', 'name'])
+                ->where(['company_id' => $cid, 'id' => $accountIds])
+                ->asArray()
+                ->all();
+            foreach ($accRows as $a) {
+                $accountNames[$a['id']] = $a['name'];
+            }
+        }
+
+        $rows = [];
+        foreach (array_reverse($groupOrder) as $key) {
+            $g = $groups[$key];
+            $snap = $g['snapshot'];
+            if (!empty($snap['account_id'])) {
+                $snap['account_name'] = $accountNames[$snap['account_id']] ?? ('ID: ' . $snap['account_id']);
+            } else {
+                $snap['account_name'] = '—';
+            }
+
             $rows[] = [
-                'id'            => $audit['id'],
-                'action'        => $audit['action'],
-                'user_id'       => $audit['user_id'],
-                'old_values'    => $audit['old_values'] ? json_decode($audit['old_values'], true) : null,
-                'new_values'    => $audit['new_values'] ? json_decode($audit['new_values'], true) : null,
-                'changed_field' => $audit['changed_field'],
-                'reason'        => $audit['reason'],
-                'created_at'    => $audit['created_at'],
+                'action'         => $g['action'],
+                'user_id'        => $g['user_id'],
+                'username'       => $g['username'],
+                'reason'         => $g['reason'],
+                'created_at'     => $g['created_at'],
+                'changed_fields' => array_values(array_unique($g['changed_fields'])),
+                'snapshot'       => $snap,
+                'changes'        => $g['changes'],
             ];
         }
 
-        return ['success' => true, 'data' => $rows];
+        return $rows;
     }
 }
