@@ -8,6 +8,12 @@ This file provides guidance to coding agents when working with code in this repo
 
 SmartMatch is a **Nostro account reconciliation** (квитование) system built on **Yii 2 Basic** (PHP 7.4+) with **PostgreSQL 17** and **Vue.js** frontend embedded in PHP views.
 
+## Project documentation
+
+- `docs/USER_GUIDE.md` — подробное пользовательское руководство по рабочему процессу в системе.
+- `docs/FAQ.md` — пользовательский FAQ по выверке, автоквитованию, балансам, раккорду и архиву.
+- `docs/DEVELOPER_GUIDE.md` — руководство разработчика: архитектура, соглашения, команды, тесты и сопровождение.
+
 ## Обязательное правило: обновление AGENTS.md
 При любых значимых изменениях в проекте (новый модуль, новый контроллер, новая подсистема, изменение архитектуры, новые команды, изменение стека) — **всегда обновляй этот файл**, чтобы он отражал актуальное состояние проекта.
 
@@ -79,7 +85,7 @@ All DB queries must include `company_id` scoping.
 
 | Model | Table | Purpose |
 |---|---|---|
-| `NostroEntry` | `nostro_entries` | Core transaction records. Key fields: `ls` (L=Ledger/S=Statement), `dc` (Debit/Credit), `match_status` (U/M/I), `match_id` |
+| `NostroEntry` | `nostro_entries` | Core transaction records. Key fields: `ls` (L=Ledger/S=Statement), `dc` (Debit/Credit), `match_status` (U/M/I), `match_id`, `matched_at` |
 | `MatchingRule` | `matching_rules` | Rules for auto-matching: `pair_type` (LS/LL/SS), match criteria flags, `priority` |
 | `Account` | `accounts` | Nostro bank accounts. `is_suspense` distinguishes suspense accounts (used in INV section) |
 | `Category` | `categories` | Категории — верхний уровень группировки (ранее `account_groups`) |
@@ -88,7 +94,7 @@ All DB queries must include `company_id` scoping.
 | `AccountPool` | `account_pools` | Ностро-банки (технические пулы счетов). `accounts.pool_id` → `account_pools` |
 | `NostroBalance` | `nostro_balance` | Closing balances (L/S) by account and date — used in recon report |
 | `NostroEntryAudit` | `nostro_entry_audit` | Full audit log of all NostroEntry changes (create/update/delete/archive) |
-| `NostroEntryArchive` | `nostro_entries_archive` | Matched entries moved to archive; has `original_id`, `archived_at`, `expires_at` |
+| `NostroEntryArchive` | `nostro_entries_archive` | Matched entries moved to archive; has `original_id`, `matched_at`, `archived_at`, `expires_at` |
 | `ArchiveSettings` | `archive_settings` | Per-company archive settings (`archive_after_days`, `retention_years`) |
 | `UserPreference` | `user_preferences` | Персональные настройки UI (JSONB). Ключи whitelist'ятся в `UserPreferenceController`. Текущий ключ: `entries_table_columns` — видимость и ширина колонок таблицы выверки |
 | — | `git_no_stro_extract_custom` | Сырой приёмник выписок FCC12 (построчный разбор: баланс или транзакция). После merge очищается |
@@ -108,10 +114,10 @@ All DB queries must include `company_id` scoping.
 7. `tds_status.is_merged := true`, исходные строки `git_no_stro_extract_custom` удаляются. Commit.
 
 ### Matching logic (`services/MatchingService.php`)
-- **Manual matching** (`matchManual`): takes array of entry IDs, validates balance (Ledger sum = Statement sum for mixed L+S sets), assigns a `MTCH` + 8-char hex `match_id`.
+- **Manual matching** (`matchManual`): takes array of entry IDs, validates balance (Ledger sum = Statement sum for mixed L+S sets), assigns a `MTCH` + 8-char hex `match_id` and sets `matched_at`.
 - **Auto-matching** (`autoMatch`): runs all active `MatchingRule`s in priority order. Each rule uses a CTE with `ROW_NUMBER() OVER (PARTITION BY ...)` to find unique one-to-one pairs in a single SQL query. Supports `cross_id_search` (any ID field on one side matches any ID field on the other). Accepts optional `$onProgress` callback for console output.
 - **Step-by-step auto-matching** (UI): `autoMatchStart` → returns `job_id` + rules list, then client calls `autoMatchStep` per rule. State stored in FileCache. Provides real-time progress in UI.
-- **Unmatch** (`unmatch`): clears `match_id` and sets `match_status = U` for all entries sharing a `match_id`.
+- **Unmatch** (`unmatch`): clears `match_id`, `matched_at` and sets `match_status = U` for all entries sharing a `match_id`.
 - **Match ID uniqueness**: `generateMatchId()` uses `random_bytes(4)` + DB check loop (nostro_entries + archive) to guarantee no collisions.
 - **Console command** (`commands/AutoMatchController`): `php yii auto-match/run` — runs auto-matching for all or specific company/account with progress output.
 
@@ -178,10 +184,12 @@ Standalone страница `/all-nostro` — "Выверка по всем но
 
 ### Archive process
 Archiving is batch-processed: client calls `POST /archive/run-batch` repeatedly (300 records per call) until `is_finished = true`. Uses raw SQL `batchInsert` + `DELETE WHERE id = ANY(ARRAY[...])` for performance.
+Archive candidates are matched rows with `match_status = M`, non-null `match_id`, non-null `matched_at`, and `matched_at` older than `archive_settings.archive_after_days`; `updated_at` is not used for archive aging because restore/comments update it.
 Restore is group-based: UI first calls `GET /archive/restore-preview?id=...` and shows all archived rows with the same `match_id`; `POST /archive/restore` restores all those rows in one transaction and removes them from `nostro_entries_archive`.
+Restore preserves `matched_at` from `nostro_entries_archive`, so the original matching date survives archive round-trips.
 
 ### Audit trail
-`NostroEntry` hooks (`afterSave`, `beforeDelete`) automatically call `NostroEntryAudit::log()`. `NostroEntryController::actionHistory` reconstructs full record snapshots at each point in time by replaying audit events. FCC12 merge uses raw `batchInsert` for performance, so `commands/FccMergeController` writes audit rows explicitly after each flush.
+`NostroEntry` hooks (`afterSave`, `beforeDelete`) automatically call `NostroEntryAudit::log()`. `NostroEntryController::actionHistory` reconstructs full record snapshots at each point in time by replaying audit events. For restored entries it also follows the `restore.old_values.original_id` link back to the original archived entry history, so the active restored row shows its pre-archive audit chain. Archive history is read from `nostro_entry_audit` by `nostro_entries_archive.original_id` and also follows `restore.old_values.original_id` across restore/archive cycles; `nostro_entry_audit.entry_id` intentionally has no FK to `nostro_entries`, otherwise archive/delete would null the audit link. `ArchiveController::actionRunBatch` writes explicit `archive` audit rows because archiving uses raw `batchInsert` + `DELETE`; `ArchiveController::actionRestore` writes explicit `restore` audit rows for the newly restored active entry and suppresses the technical create audit for the new physical row. FCC12 merge uses raw `batchInsert` for performance, so `commands/FccMergeController` writes audit rows explicitly after each flush.
 
 ## Configuration
 

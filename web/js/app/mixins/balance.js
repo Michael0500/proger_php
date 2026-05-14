@@ -63,7 +63,7 @@ var BalanceMixin = {
             balanceTableColumns: [
                 { key: 'id',               label: 'ID',           visible: false, width: 60  },
                 { key: 'ls_type',          label: 'L/S',          visible: true,  width: 55  },
-                { key: 'section',          label: 'Раздел',       visible: true,  width: 80  },
+                { key: 'section',          label: 'Раздел',       visible: false, width: 80  },
                 { key: 'account_id',       label: 'Счёт',         visible: true,  width: 140 },
                 { key: 'currency',         label: 'Валюта',       visible: true,  width: 70  },
                 { key: 'value_date',       label: 'Дата вал.',    visible: true,  width: 100 },
