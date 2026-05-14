@@ -4,6 +4,7 @@ namespace app\controllers;
 use Yii;
 use yii\web\Response;
 use app\models\NostroEntry;
+use app\models\NostroEntryAudit;
 use app\models\Account;
 
 class NostroEntryController extends BaseController
@@ -303,12 +304,9 @@ class NostroEntryController extends BaseController
             return ['success' => false, 'message' => 'Запись не найдена'];
         }
 
-        // Загружаем от старых к новым (ASC) — нужно для реконструкции снапшотов
-        $audits = \app\models\NostroEntryAudit::find()
-            ->where(['entry_id' => $id])
-            ->orderBy(['created_at' => SORT_ASC, 'id' => SORT_ASC])
-            ->asArray()
-            ->all();
+        // Загружаем от старых к новым (ASC) — нужно для реконструкции снапшотов.
+        // Для восстановленных из архива записей подтягиваем и прежнюю цепочку по original_id.
+        $audits = $this->findEntryHistoryAudits($id);
 
         if (empty($audits)) {
             return ['success' => true, 'data' => []];
@@ -386,7 +384,7 @@ class NostroEntryController extends BaseController
         $fields = ['account_id', 'ls', 'dc', 'amount', 'currency',
             'value_date', 'post_date', 'instruction_id', 'end_to_end_id',
             'transaction_id', 'message_id', 'other_id', 'comment', 'branch_code',
-            'match_status', 'match_id'];
+            'match_status', 'match_id', 'matched_at'];
 
         // Стартовое состояние — текущие данные записи (самое актуальное)
         // Идём от новых к старым, чтобы вычислить снапшоты в обратном порядке.
@@ -398,7 +396,7 @@ class NostroEntryController extends BaseController
 
         // Инициализируем из первого события (create) если есть, иначе берём текущую запись
         $firstGroup = $groups[$groupOrder[0]];
-        if ($firstGroup['action'] === 'create') {
+        if ($firstGroup['action'] === NostroEntryAudit::ACTION_CREATE) {
             foreach ($fields as $f) {
                 $v = $firstGroup['changes'][$f]['new'] ?? null;
                 $current[$f] = $v;
@@ -424,23 +422,28 @@ class NostroEntryController extends BaseController
             $group  = &$groups[$key];
             $action = $group['action'];
 
-            if ($action === 'create') {
+            if ($action === NostroEntryAudit::ACTION_CREATE) {
                 // Снапшот = new_values из create
                 foreach ($fields as $f) {
                     $current[$f] = $group['changes'][$f]['new'] ?? $current[$f];
                 }
                 $group['snapshot'] = $current;
-            } elseif ($action === 'delete') {
-                // Снапшот = состояние до удаления (old_values)
+            } elseif ($action === NostroEntryAudit::ACTION_DELETE
+                || $action === NostroEntryAudit::ACTION_ARCHIVE) {
+                // Снапшот = состояние до удаления/архивации (old_values)
                 $snap = $current;
                 foreach ($group['changes'] as $field => $change) {
-                    if (in_array($field, $fields, true)) {
+                    if (in_array($field, $fields, true) && $change['old'] !== null) {
                         $snap[$field] = $change['old'];
                     }
                 }
+                if ($action === NostroEntryAudit::ACTION_ARCHIVE) {
+                    $snap['match_status'] = 'A';
+                }
                 $group['snapshot'] = $snap;
+                $current = $snap;
             } else {
-                // update / archive — применяем new_values к текущему состоянию
+                // update / restore — применяем new_values к текущему состоянию
                 foreach ($group['changes'] as $field => $change) {
                     if (in_array($field, $fields, true)) {
                         $current[$field] = $change['new'];
@@ -495,5 +498,75 @@ class NostroEntryController extends BaseController
         }
 
         return ['success' => true, 'data' => $rows];
+    }
+
+    private function findEntryHistoryAudits(int $entryId): array
+    {
+        $currentAudits = NostroEntryAudit::find()
+            ->where(['entry_id' => $entryId])
+            ->orderBy(['created_at' => SORT_ASC, 'id' => SORT_ASC])
+            ->asArray()
+            ->all();
+
+        $originalIds = [];
+        foreach ($currentAudits as $audit) {
+            if (($audit['action'] ?? '') !== NostroEntryAudit::ACTION_RESTORE) {
+                continue;
+            }
+
+            $oldValues = !empty($audit['old_values']) ? json_decode($audit['old_values'], true) : null;
+            if (is_array($oldValues) && !empty($oldValues['original_id'])) {
+                $originalIds[] = (int)$oldValues['original_id'];
+            }
+        }
+
+        $originalIds = array_values(array_unique(array_filter($originalIds)));
+        if (empty($originalIds)) {
+            return $currentAudits;
+        }
+
+        $previousAudits = $this->findPreviousAuditsForOriginalIds($originalIds);
+
+        if (!empty($previousAudits)) {
+            $currentAudits = array_values(array_filter($currentAudits, function ($audit) use ($entryId) {
+                return !(($audit['action'] ?? '') === NostroEntryAudit::ACTION_CREATE
+                    && (int)($audit['entry_id'] ?? 0) === $entryId);
+            }));
+        }
+
+        $audits = array_merge($previousAudits, $currentAudits);
+        usort($audits, function ($a, $b) {
+            $dateCmp = strcmp((string)$a['created_at'], (string)$b['created_at']);
+            if ($dateCmp !== 0) {
+                return $dateCmp;
+            }
+            return (int)$a['id'] <=> (int)$b['id'];
+        });
+
+        return $audits;
+    }
+
+    private function findPreviousAuditsForOriginalIds(array $originalIds): array
+    {
+        $ids = array_values(array_unique(array_map('intval', $originalIds)));
+        if (empty($ids)) {
+            return [];
+        }
+
+        $idList = implode(',', $ids);
+        $idTextList = implode(',', array_map(function ($id) {
+            return Yii::$app->db->quoteValue((string)$id);
+        }, $ids));
+
+        return Yii::$app->db->createCommand(
+            "SELECT *
+               FROM {{%nostro_entry_audit}}
+              WHERE entry_id IN ({$idList})
+                 OR (entry_id IS NULL AND (
+                        (old_values IS NOT NULL AND old_values::jsonb ->> 'id' IN ({$idTextList}))
+                     OR (new_values IS NOT NULL AND new_values::jsonb ->> 'id' IN ({$idTextList}))
+                 ))
+              ORDER BY created_at ASC, id ASC"
+        )->queryAll();
     }
 }

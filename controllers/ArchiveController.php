@@ -61,7 +61,7 @@ class ArchiveController extends BaseController
         $filters = json_decode($r->get('filters', '{}'), true) ?: [];
 
         $sortable = ['id', 'original_id', 'match_id', 'ls', 'dc', 'amount', 'currency',
-            'value_date', 'post_date', 'archived_at', 'expires_at', 'account_id'];
+            'value_date', 'post_date', 'matched_at', 'archived_at', 'expires_at', 'account_id'];
         if (!in_array($sort, $sortable, true)) $sort = 'archived_at';
 
         $q = NostroEntryArchive::find()
@@ -171,6 +171,7 @@ class ArchiveController extends BaseController
         foreach ($rows as &$row) {
             if ($row['value_date'])   $row['value_date_fmt']   = date('d.m.Y', strtotime($row['value_date']));
             if ($row['post_date'])    $row['post_date_fmt']    = date('d.m.Y', strtotime($row['post_date']));
+            if ($row['matched_at'])    $row['matched_at_fmt']    = date('d.m.Y H:i', strtotime($row['matched_at']));
             if ($row['archived_at'])  $row['archived_at_fmt']  = date('d.m.Y H:i', strtotime($row['archived_at']));
             if ($row['expires_at'])   $row['expires_at_fmt']   = date('d.m.Y', strtotime($row['expires_at']));
         }
@@ -202,7 +203,8 @@ class ArchiveController extends BaseController
         $total = (int)NostroEntry::find()
             ->where(['company_id' => $cid, 'match_status' => NostroEntry::STATUS_MATCHED])
             ->andWhere(['is not', 'match_id', null])
-            ->andWhere(['<', 'updated_at', $cutoffDate])
+            ->andWhere(['is not', 'matched_at', null])
+            ->andWhere(['<', 'matched_at', $cutoffDate])
             ->count();
 
         return ['success' => true, 'total' => $total];
@@ -238,12 +240,14 @@ class ArchiveController extends BaseController
         $rows = $db->createCommand("
             SELECT id, account_id, company_id, match_id, ls, dc, amount, currency,
                    value_date, post_date, instruction_id, end_to_end_id,
-                   transaction_id, message_id, other_id, comment, source, created_at, updated_at
+                   transaction_id, message_id, other_id, comment, source,
+                   matched_at, created_at, updated_at
             FROM {{%nostro_entries}}
             WHERE company_id   = :cid
               AND match_status = 'M'
               AND match_id     IS NOT NULL
-              AND updated_at   < :cutoff
+              AND matched_at   IS NOT NULL
+              AND matched_at   < :cutoff
             ORDER BY id ASC
             LIMIT :lim
         ", [':cid' => $cid, ':cutoff' => $cutoffDate, ':lim' => $batchSize])
@@ -266,6 +270,7 @@ class ArchiveController extends BaseController
             'ls','dc','amount','currency','value_date','post_date',
             'instruction_id','end_to_end_id','transaction_id','message_id','other_id',
             'comment','source','match_status',
+            'matched_at',
             'archived_at','expires_at','archived_by',
             'original_created_at','original_updated_at',
         ];
@@ -281,6 +286,7 @@ class ArchiveController extends BaseController
                 $r['transaction_id'], $r['message_id'], $r['other_id'],
                 $r['comment'], $r['source'],
                 'A',
+                $r['matched_at'],
                 $archivedAt, $expiresAt, $userId,
                 $r['created_at'], $r['updated_at'],
             ];
@@ -321,7 +327,8 @@ class ArchiveController extends BaseController
             WHERE company_id   = :cid
               AND match_status = 'M'
               AND match_id     IS NOT NULL
-              AND updated_at   < :cutoff
+              AND matched_at   IS NOT NULL
+              AND matched_at   < :cutoff
         ", [':cid' => $cid, ':cutoff' => $cutoffDate])->queryScalar();
 
         $percent = $totalAll > 0 ? min(100, (int)round($newDone / $totalAll * 100)) : 0;
@@ -451,6 +458,8 @@ class ArchiveController extends BaseController
         $entry->comment          = $archived->comment;
         $entry->source           = $archived->source;
         $entry->match_status     = NostroEntry::STATUS_MATCHED;
+        $entry->matched_at       = $archived->matched_at;
+        $entry->skipAudit        = true;
 
         return $entry;
     }
@@ -554,7 +563,8 @@ class ArchiveController extends BaseController
         $pendingCount = (int)NostroEntry::find()
             ->where(['company_id' => $cid, 'match_status' => NostroEntry::STATUS_MATCHED])
             ->andWhere(['is not', 'match_id', null])
-            ->andWhere(['<', 'updated_at', $cutoffDate])
+            ->andWhere(['is not', 'matched_at', null])
+            ->andWhere(['<', 'matched_at', $cutoffDate])
             ->count();
 
         return [
@@ -623,6 +633,7 @@ class ArchiveController extends BaseController
             'comment'        => $archived->comment,
             'match_status'   => $archived->match_status,
             'match_id'       => $archived->match_id,
+            'matched_at'     => $archived->matched_at,
         ];
 
         return ['success' => true, 'data' => $this->buildEntryHistoryRows((int)$archived->original_id, $cid, $baseState)];
@@ -698,7 +709,8 @@ class ArchiveController extends BaseController
 
         $fields = ['account_id', 'ls', 'dc', 'amount', 'currency',
             'value_date', 'post_date', 'instruction_id', 'end_to_end_id',
-            'transaction_id', 'message_id', 'other_id', 'comment', 'match_status', 'match_id'];
+            'transaction_id', 'message_id', 'other_id', 'comment',
+            'match_status', 'match_id', 'matched_at'];
 
         $current = array_fill_keys($fields, null);
         $firstGroup = $groups[$groupOrder[0]];

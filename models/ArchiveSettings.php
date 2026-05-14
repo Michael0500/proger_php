@@ -10,7 +10,7 @@ use yii\db\ActiveRecord;
  *
  * @property int  $id
  * @property int  $company_id
- * @property int  $archive_after_days   Через сколько дней архивировать
+ * @property int  $archive_after_days   Через сколько дней после квитования архивировать
  * @property int  $retention_years      Срок хранения в архиве (лет)
  * @property bool $auto_archive_enabled Включить автоархивирование
  * @property int|null $updated_by
@@ -42,7 +42,7 @@ class ArchiveSettings extends ActiveRecord
     public function attributeLabels(): array
     {
         return [
-            'archive_after_days'   => 'Дней до архивирования',
+            'archive_after_days'   => 'Дней после квитования до архивирования',
             'retention_years'      => 'Лет хранения в архиве',
             'auto_archive_enabled' => 'Автоархивирование',
         ];

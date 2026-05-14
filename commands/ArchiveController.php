@@ -62,7 +62,7 @@ class ArchiveController extends Controller
             }
 
             $cutoffDate = date('Y-m-d H:i:s', strtotime("-{$settings->archive_after_days} days"));
-            $this->stdout("  [{$company->name}] Порог: {$cutoffDate} (>{$settings->archive_after_days} дн.)\n");
+            $this->stdout("  [{$company->name}] Порог по дате квитования: {$cutoffDate} (>{$settings->archive_after_days} дн.)\n");
 
             $baseQuery = NostroEntry::find()
                 ->where([
@@ -70,7 +70,8 @@ class ArchiveController extends Controller
                     'match_status' => NostroEntry::STATUS_MATCHED,
                 ])
                 ->andWhere(['is not', 'match_id', null])
-                ->andWhere(['<', 'updated_at', $cutoffDate])
+                ->andWhere(['is not', 'matched_at', null])
+                ->andWhere(['<', 'matched_at', $cutoffDate])
                 ->orderBy(['id' => SORT_ASC]);
 
             $count    = (int)$baseQuery->count();
@@ -90,7 +91,8 @@ class ArchiveController extends Controller
                 'original_id', 'account_id', 'company_id', 'match_id',
                 'ls', 'dc', 'amount', 'currency', 'value_date', 'post_date',
                 'instruction_id', 'end_to_end_id', 'transaction_id', 'message_id',
-                'comment', 'source', 'match_status',
+                'other_id', 'comment', 'source', 'match_status',
+                'matched_at',
                 'archived_at', 'expires_at', 'archived_by',
                 'original_created_at', 'original_updated_at',
             ];
@@ -106,8 +108,9 @@ class ArchiveController extends Controller
                         $entry->value_date, $entry->post_date,
                         $entry->instruction_id, $entry->end_to_end_id,
                         $entry->transaction_id, $entry->message_id,
-                        $entry->comment, $entry->source,
+                        $entry->other_id, $entry->comment, $entry->source,
                         NostroEntryArchive::STATUS_ARCHIVED,
+                        $entry->matched_at,
                         $archivedAt, $expiresAt, null,
                         $entry->created_at, $entry->updated_at,
                     ];

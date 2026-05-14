@@ -27,6 +27,7 @@ use yii\db\ActiveRecord;
  * @property string|null $comment
  * @property string|null $source
  * @property string      $match_status   всегда 'A'
+ * @property string|null $matched_at
  * @property string      $archived_at
  * @property string      $expires_at
  * @property int|null    $archived_by
@@ -52,7 +53,7 @@ class NostroEntryArchive extends ActiveRecord
             [['original_id', 'account_id', 'company_id', 'match_id', 'ls', 'dc', 'amount', 'currency'], 'required'],
             [['original_id', 'account_id', 'company_id', 'archived_by'], 'integer'],
             [['amount'], 'number'],
-            [['value_date', 'post_date', 'archived_at', 'expires_at',
+            [['value_date', 'post_date', 'matched_at', 'archived_at', 'expires_at',
                 'original_created_at', 'original_updated_at'], 'safe'],
             [['ls', 'match_status'], 'string', 'max' => 1],
             [['dc'], 'string', 'max' => 6],
@@ -85,6 +86,7 @@ class NostroEntryArchive extends ActiveRecord
             'comment'        => 'Комментарий',
             'source'         => 'Источник',
             'match_status'   => 'Статус',
+            'matched_at'     => 'Дата квитования',
             'archived_at'    => 'Дата архивирования',
             'expires_at'     => 'Срок хранения до',
             'archived_by'    => 'Заархивировал',
@@ -144,6 +146,7 @@ class NostroEntryArchive extends ActiveRecord
         $archive->comment             = $entry->comment;
         $archive->source              = $entry->source;
         $archive->match_status        = self::STATUS_ARCHIVED;
+        $archive->matched_at          = $entry->matched_at;
         $archive->archived_at         = date('Y-m-d H:i:s');
         $archive->expires_at          = date('Y-m-d H:i:s', strtotime("+{$retentionYears} years"));
         $archive->archived_by         = $archivedBy;
@@ -177,6 +180,7 @@ class NostroEntryArchive extends ActiveRecord
             'comment'        => $this->comment,
             'source'         => $this->source,
             'match_status'   => $this->match_status,
+            'matched_at'     => $this->matched_at,
             'archived_at'    => $this->archived_at,
             'expires_at'     => $this->expires_at,
             'archived_by'    => $this->archived_by,

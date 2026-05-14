@@ -90,7 +90,7 @@
             </div>
             <div class="stat-chip stat-chip-gray">
                 <i class="fas fa-sliders-h"></i>
-                <span>Архивировать через: <strong>{{ archiveStats.settings.archive_after_days }} дн.</strong></span>
+                <span>После квитования: <strong>{{ archiveStats.settings.archive_after_days }} дн.</strong></span>
             </div>
         </div>
 
@@ -263,7 +263,7 @@
                 <i class="fas fa-archive" style="opacity:.3"></i>
                 <p>Архив пуст</p>
                 <p style="font-size:12px;color:#9ca3af;margin-top:4px">
-                    Сквитованные записи старше {{ archiveSettings.archive_after_days }} дней будут перенесены сюда
+                    Сквитованные записи старше {{ archiveSettings.archive_after_days }} дней от даты квитования будут перенесены сюда
                 </p>
             </div>
             <div v-else class="table-scroll-wrap" @scroll="onArchiveScroll">
@@ -382,14 +382,14 @@
                     <div class="row g-3">
                         <div class="col-12">
                             <label class="form-label fw-semibold">
-                                Дней до архивирования
+                                Дней после квитования
                                 <span style="font-weight:400;color:#9ca3af;font-size:11px">(мин 1, макс 3650)</span>
                             </label>
                             <input type="number" class="form-control"
                                    v-model.number="archiveSettings.archive_after_days"
                                    min="1" max="3650">
                             <div class="form-text">
-                                Сквитованные записи старше указанного числа дней будут архивированы.
+                                Сквитованные записи старше указанного числа дней от даты квитования будут архивированы.
                             </div>
                         </div>
                         <div class="col-12">

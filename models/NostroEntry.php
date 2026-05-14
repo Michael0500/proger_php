@@ -27,6 +27,7 @@ use yii\db\ActiveRecord;
  * @property string|null $source
  * @property string|null $branch_code
  * @property string      $match_status  U/M/I
+ * @property string|null $matched_at
  * @property int|null    $created_by
  * @property int|null    $updated_by
  * @property string      $created_at
@@ -38,6 +39,8 @@ use yii\db\ActiveRecord;
  */
 class NostroEntry extends ActiveRecord
 {
+    public bool $skipAudit = false;
+
     const MONEY_MAX_INTEGER_DIGITS = 18;
     const MONEY_SCALE = 2;
 
@@ -65,7 +68,7 @@ class NostroEntry extends ActiveRecord
             [['account_id', 'company_id', 'ls', 'dc', 'amount', 'currency'], 'required'],
             [['account_id', 'company_id', 'created_by', 'updated_by'], 'integer'],
             [['amount'], 'validateMoneyAmount'],
-            [['value_date', 'post_date', 'created_at', 'updated_at'], 'safe'],
+            [['value_date', 'post_date', 'matched_at', 'created_at', 'updated_at'], 'safe'],
             [['ls'], 'string', 'max' => 1],
             [['ls'], 'in', 'range' => [self::LS_LEDGER, self::LS_STATEMENT]],
             [['dc'], 'string', 'max' => 6],
@@ -122,6 +125,7 @@ class NostroEntry extends ActiveRecord
             'source'         => 'Источник',
             'branch_code'    => 'Код филиала',
             'match_status'   => 'Статус квитования',
+            'matched_at'     => 'Дата квитования',
             'created_by'     => 'Создал',
             'updated_by'     => 'Обновил',
             'created_at'     => 'Создано',
@@ -180,11 +184,19 @@ class NostroEntry extends ActiveRecord
             return false;
         }
 
+        $now = date('Y-m-d H:i:s');
+
         if ($insert) {
-            $this->created_at = date('Y-m-d H:i:s');
+            $this->created_at = $now;
             $this->created_by = Yii::$app->user->id ?? null;
         }
-        $this->updated_at = date('Y-m-d H:i:s');
+        if ($this->match_status === self::STATUS_MATCHED) {
+            $this->matched_at = $this->matched_at ?: $now;
+        } else {
+            $this->matched_at = null;
+        }
+
+        $this->updated_at = $now;
         $this->updated_by = Yii::$app->user->id ?? null;
 
         return true;
@@ -193,6 +205,10 @@ class NostroEntry extends ActiveRecord
     public function afterSave($insert, $changedAttributes)
     {
         parent::afterSave($insert, $changedAttributes);
+
+        if ($this->skipAudit) {
+            return;
+        }
 
         if ($insert) {
             // Логирование создания

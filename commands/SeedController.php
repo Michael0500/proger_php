@@ -97,7 +97,7 @@ class SeedController extends Controller
             'account_id', 'company_id', 'match_id', 'ls', 'dc', 'amount', 'currency',
             'value_date', 'post_date', 'instruction_id', 'end_to_end_id',
             'transaction_id', 'message_id', 'comment', 'match_status',
-            'created_at', 'updated_at'
+            'matched_at', 'created_at', 'updated_at'
         ];
 
         $currencies  = ['USD', 'EUR', 'RUB', 'GBP', 'CHF', 'CNY', 'JPY'];
@@ -155,6 +155,7 @@ class SeedController extends Controller
                     'M',
                     $now,
                     $now,
+                    $now,
                 ];
 
                 if (count($rows) >= $this->batchSize) {
@@ -194,6 +195,7 @@ class SeedController extends Controller
                     'AM' . mt_rand(1000000, 9999999),
                     null, // comment
                     'U',
+                    null,
                     $now,
                     $now,
                 ];
@@ -235,6 +237,7 @@ class SeedController extends Controller
                     (mt_rand(0, 1) ? 'G' . mt_rand(100000, 9999999) : null),
                     (mt_rand(0, 4) === 0 ? 'Запись #' . ($i + 1) : null),
                     'U',
+                    null,
                     $now,
                     $now,
                 ];

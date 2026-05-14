@@ -134,6 +134,7 @@ var ModalsMixin = {
                 'message_id':     'Message ID',
                 'comment':        'Комментарий',
                 'match_status':   'Статус',
+                'matched_at':     'Дата квитования',
                 'source':         'Источник'
             };
             return labels[field] || field;
@@ -162,6 +163,8 @@ var ModalsMixin = {
                 } else if (key === 'match_status') {
                     var statusLabels = { 'U': 'Unmatched', 'M': 'Matched', 'I': 'Ignored', 'A': 'Archived' };
                     formatted = statusLabels[val] || val;
+                } else if (key === 'matched_at') {
+                    formatted = self.formatDate(val);
                 }
                 lines.push(label + ': ' + (formatted === null || formatted === '' ? '—' : formatted));
             });

@@ -234,7 +234,7 @@ class MigrateDataController extends Controller
             'account_id', 'company_id', 'match_id', 'ls', 'dc', 'amount', 'currency',
             'value_date', 'post_date', 'instruction_id', 'end_to_end_id',
             'transaction_id', 'message_id', 'other_id', 'comment', 'match_status',
-            'created_at', 'updated_at',
+            'matched_at', 'created_at', 'updated_at',
         ];
 
         $offset = 0;
@@ -317,6 +317,7 @@ class MigrateDataController extends Controller
                     $item['UserText1'] ?: null,  // other_id
                     $item['Addr1'] ?: null,      // comment
                     $matchStatus,
+                    $matchStatus === 'M' ? $now : null,
                     $now,
                     $now,
                 ];

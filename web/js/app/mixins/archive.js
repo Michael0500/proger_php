@@ -325,7 +325,7 @@ var ArchiveMixin = {
                 title: 'Запустить архивирование?',
                 html:  'Все сквитованные записи старше <strong>' +
                     self.archiveSettings.archive_after_days +
-                    ' дней</strong> будут перенесены в архив.',
+                    ' дней</strong> от даты квитования будут перенесены в архив.',
                 icon:  'question',
                 showCancelButton: true,
                 confirmButtonText: 'Да, архивировать',

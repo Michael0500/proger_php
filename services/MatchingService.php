@@ -120,6 +120,7 @@ class MatchingService
             foreach ($entries as $e) {
                 $e->match_id     = $matchId;
                 $e->match_status = NostroEntry::STATUS_MATCHED;
+                $e->matched_at   = $now;
                 $e->updated_at   = $now;
                 $e->updated_by   = $userId;
                 $e->save(false);
@@ -148,6 +149,7 @@ class MatchingService
             [
                 'match_id'     => null,
                 'match_status' => NostroEntry::STATUS_UNMATCHED,
+                'matched_at'   => null,
                 'updated_at'   => date('Y-m-d H:i:s'),
                 'updated_by'   => Yii::$app->user->id,
             ],
@@ -530,6 +532,7 @@ class MatchingService
                 UPDATE nostro_entries ne
                 SET match_id     = u.mid,
                     match_status = 'M',
+                    matched_at   = '{$now}',
                     updated_at   = '{$now}',
                     updated_by   = {$userIdSql}
                 FROM to_update u
