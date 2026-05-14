@@ -5,6 +5,7 @@ namespace app\controllers;
 use Yii;
 use yii\web\Response;
 use app\models\NostroEntry;
+use app\models\NostroEntryAudit;
 use app\models\NostroEntryArchive;
 use app\models\ArchiveSettings;
 use app\models\Account;
@@ -285,13 +286,17 @@ class ArchiveController extends BaseController
             ];
             $ids[] = (int)$r['id'];
         }
-        unset($rows); // сразу освобождаем
+        $rowsForAudit = $rows;
+        unset($rows); // дальше используем только компактный буфер для audit
 
         $transaction = $db->beginTransaction();
         try {
             $db->createCommand()
                 ->batchInsert('{{%nostro_entries_archive}}', $archiveCols, $insertRows)
                 ->execute();
+
+            $archiveIdByOriginalId = $this->findArchiveIdsByOriginalIds($ids, $archivedAt);
+            $this->writeArchiveAuditRows($rowsForAudit, $archiveIdByOriginalId, $archivedAt, $userId);
 
             // PostgreSQL: DELETE WHERE id = ANY(ARRAY[...]) — один параметр, работает с любым кол-вом ID
             $db->createCommand(
@@ -626,11 +631,7 @@ class ArchiveController extends BaseController
      */
     private function buildEntryHistoryRows(int $entryId, int $cid, array $baseState): array
     {
-        $audits = \app\models\NostroEntryAudit::find()
-            ->where(['entry_id' => $entryId])
-            ->orderBy(['created_at' => SORT_ASC, 'id' => SORT_ASC])
-            ->asArray()
-            ->all();
+        $audits = $this->findEntryAuditsForArchive($entryId);
 
         if (empty($audits)) {
             return [];
@@ -699,7 +700,7 @@ class ArchiveController extends BaseController
 
         $current = array_fill_keys($fields, null);
         $firstGroup = $groups[$groupOrder[0]];
-        if ($firstGroup['action'] === \app\models\NostroEntryAudit::ACTION_CREATE) {
+        if ($firstGroup['action'] === NostroEntryAudit::ACTION_CREATE) {
             foreach ($fields as $f) {
                 $current[$f] = $firstGroup['changes'][$f]['new'] ?? null;
             }
@@ -720,20 +721,20 @@ class ArchiveController extends BaseController
             $group = &$groups[$key];
             $action = $group['action'];
 
-            if ($action === \app\models\NostroEntryAudit::ACTION_CREATE) {
+            if ($action === NostroEntryAudit::ACTION_CREATE) {
                 foreach ($fields as $f) {
                     $current[$f] = $group['changes'][$f]['new'] ?? $current[$f];
                 }
                 $group['snapshot'] = $current;
-            } elseif ($action === \app\models\NostroEntryAudit::ACTION_DELETE
-                || $action === \app\models\NostroEntryAudit::ACTION_ARCHIVE) {
+            } elseif ($action === NostroEntryAudit::ACTION_DELETE
+                || $action === NostroEntryAudit::ACTION_ARCHIVE) {
                 $snap = $current;
                 foreach ($group['changes'] as $field => $change) {
                     if (in_array($field, $fields, true) && $change['old'] !== null) {
                         $snap[$field] = $change['old'];
                     }
                 }
-                if ($action === \app\models\NostroEntryAudit::ACTION_ARCHIVE) {
+                if ($action === NostroEntryAudit::ACTION_ARCHIVE) {
                     $snap['match_status'] = NostroEntryArchive::STATUS_ARCHIVED;
                 }
                 $group['snapshot'] = $snap;
@@ -791,5 +792,73 @@ class ArchiveController extends BaseController
         }
 
         return $rows;
+    }
+
+    private function findArchiveIdsByOriginalIds(array $originalIds, string $archivedAt): array
+    {
+        if (empty($originalIds)) {
+            return [];
+        }
+
+        $rows = NostroEntryArchive::find()
+            ->select(['id', 'original_id'])
+            ->where(['original_id' => $originalIds])
+            ->andWhere(['archived_at' => $archivedAt])
+            ->asArray()
+            ->all();
+
+        $map = [];
+        foreach ($rows as $row) {
+            $map[(int)$row['original_id']] = (int)$row['id'];
+        }
+        return $map;
+    }
+
+    private function writeArchiveAuditRows(array $rows, array $archiveIdByOriginalId, string $archivedAt, int $userId): void
+    {
+        if (empty($rows)) {
+            return;
+        }
+
+        $auditRows = [];
+        foreach ($rows as $row) {
+            $originalId = (int)$row['id'];
+            $auditRows[] = [
+                $originalId,
+                $userId,
+                NostroEntryAudit::ACTION_ARCHIVE,
+                json_encode($row, JSON_UNESCAPED_UNICODE),
+                null,
+                null,
+                $archiveIdByOriginalId[$originalId] ?? null,
+                'Запись заархивирована',
+                $archivedAt,
+            ];
+        }
+
+        Yii::$app->db->createCommand()
+            ->batchInsert('{{%nostro_entry_audit}}', [
+                'entry_id', 'user_id', 'action', 'old_values', 'new_values',
+                'changed_field', 'archived_id', 'reason', 'created_at',
+            ], $auditRows)
+            ->execute();
+    }
+
+    private function findEntryAuditsForArchive(int $entryId): array
+    {
+        return Yii::$app->db->createCommand(
+            "SELECT *
+               FROM {{%nostro_entry_audit}}
+              WHERE entry_id = :entry_id
+                 OR (entry_id IS NULL AND (
+                        (old_values IS NOT NULL AND old_values::jsonb ->> 'id' = :entry_id_text)
+                     OR (new_values IS NOT NULL AND new_values::jsonb ->> 'id' = :entry_id_text)
+                 ))
+              ORDER BY created_at ASC, id ASC",
+            [
+                ':entry_id'      => $entryId,
+                ':entry_id_text' => (string)$entryId,
+            ]
+        )->queryAll();
     }
 }
