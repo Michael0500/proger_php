@@ -10,7 +10,7 @@ use yii\db\ActiveRecord;
  * @property int         $id
  * @property int|null    $entry_id       ID записи из nostro_entries или original_id из архива
  * @property int         $user_id        Кто выполнил действие
- * @property string      $action         create | update | delete | archive
+ * @property string      $action         create | update | delete | archive | restore
  * @property string|null $old_values     JSON: старые значения
  * @property string|null $new_values     JSON: новые значения
  * @property string|null $changed_field  Какое поле изменилось (для update)
@@ -27,6 +27,7 @@ class NostroEntryAudit extends ActiveRecord
     const ACTION_UPDATE = 'update';
     const ACTION_DELETE = 'delete';
     const ACTION_ARCHIVE = 'archive';
+    const ACTION_RESTORE = 'restore';
 
     public static function tableName(): string
     {
@@ -39,7 +40,7 @@ class NostroEntryAudit extends ActiveRecord
             [['user_id', 'action'], 'required'],
             [['entry_id', 'user_id', 'archived_id'], 'integer'],
             [['action'], 'string', 'max' => 20],
-            [['action'], 'in', 'range' => [self::ACTION_CREATE, self::ACTION_UPDATE, self::ACTION_DELETE, self::ACTION_ARCHIVE]],
+            [['action'], 'in', 'range' => [self::ACTION_CREATE, self::ACTION_UPDATE, self::ACTION_DELETE, self::ACTION_ARCHIVE, self::ACTION_RESTORE]],
             [['changed_field', 'reason'], 'string', 'max' => 255],
             [['old_values', 'new_values'], 'string'],
             [['created_at'], 'safe'],
@@ -82,7 +83,7 @@ class NostroEntryAudit extends ActiveRecord
      * Записать аудит-событие.
      *
      * @param int|null $entryId ID записи (из nostro_entries или original_id из архива)
-     * @param string $action Действие: create|update|delete|archive
+     * @param string $action Действие: create|update|delete|archive|restore
      * @param array|null $oldValues Старые значения полей
      * @param array|null $newValues Новые значения полей
      * @param string|null $changedField Какое поле изменилось

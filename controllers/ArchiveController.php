@@ -394,6 +394,8 @@ class ArchiveController extends BaseController
                     return ['success' => false, 'message' => 'Ошибка восстановления', 'errors' => $entry->errors];
                 }
 
+                $this->writeRestoreAuditRow($archiveRow, $entry);
+
                 $restoredRows[] = $this->formatRestorePreviewRow($archiveRow->toArray(), $entry->id);
                 if ($archiveRow->delete() === false) {
                     $transaction->rollBack();
@@ -842,6 +844,19 @@ class ArchiveController extends BaseController
                 'changed_field', 'archived_id', 'reason', 'created_at',
             ], $auditRows)
             ->execute();
+    }
+
+    private function writeRestoreAuditRow(NostroEntryArchive $archiveRow, NostroEntry $entry): void
+    {
+        NostroEntryAudit::log(
+            (int)$entry->id,
+            NostroEntryAudit::ACTION_RESTORE,
+            $archiveRow->toArray(),
+            $entry->getAttributes(),
+            null,
+            (int)$archiveRow->id,
+            'Запись восстановлена из архива'
+        );
     }
 
     private function findEntryAuditsForArchive(int $entryId): array

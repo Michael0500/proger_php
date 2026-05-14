@@ -81,7 +81,8 @@ var ModalsMixin = {
                 'create':  'fas fa-plus-circle',
                 'update':  'fas fa-edit',
                 'delete':  'fas fa-trash-alt',
-                'archive': 'fas fa-archive'
+                'archive': 'fas fa-archive',
+                'restore': 'fas fa-undo'
             };
             return icons[action] || 'fas fa-clock';
         },
@@ -94,7 +95,8 @@ var ModalsMixin = {
                 'create':  'Создано',
                 'update':  'Изменено',
                 'delete':  'Удалено',
-                'archive': 'Заархивировано'
+                'archive': 'Заархивировано',
+                'restore': 'Восстановлено'
             };
             return labels[action] || action;
         },
