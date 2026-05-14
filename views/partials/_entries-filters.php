@@ -21,7 +21,7 @@ $accountSelectId     = $accountSelectId     ?? 'filter-account-select2';
         <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280">
             <i class="fas fa-filter me-1"></i>Фильтры
         </span>
-        <button class="row-btn delete" @click="clearAllFilters" title="Сбросить все">
+        <button class="row-btn delete" @click="filtersOpen = false" title="Закрыть фильтры">
             <i class="fas fa-times"></i>
         </button>
     </div>

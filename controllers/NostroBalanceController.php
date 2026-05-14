@@ -57,8 +57,9 @@ class NostroBalanceController extends BaseController
         $q = NostroBalance::find()
             ->from(['nb' => NostroBalance::tableName()])
             ->leftJoin(['a' => 'accounts'], 'a.id = nb.account_id')
+            ->leftJoin(['ap' => 'account_pools'], 'ap.id = a.pool_id')
             ->where(['nb.company_id' => $cid])
-            ->addSelect(['nb.*', 'a.name AS account_name']);
+            ->addSelect(['nb.*', 'a.name AS account_name', 'ap.name AS pool_name']);
 
         // Фильтры
         foreach (['ls_type', 'currency', 'section', 'source', 'status'] as $f) {

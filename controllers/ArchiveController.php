@@ -67,8 +67,9 @@ class ArchiveController extends BaseController
         $q = NostroEntryArchive::find()
             ->from(['na' => NostroEntryArchive::tableName()])
             ->leftJoin(['a' => 'accounts'], 'a.id = na.account_id')
+            ->leftJoin(['ap' => 'account_pools'], 'ap.id = a.pool_id')
             ->where(['na.company_id' => $cid])
-            ->addSelect(['na.*', 'a.name AS account_name']);
+            ->addSelect(['na.*', 'a.name AS account_name', 'ap.name AS pool_name']);
 
         // ── Фильтры ──────────────────────────────────────────────
 

@@ -31,6 +31,20 @@
                     <i :class="archiveRunning?'fas fa-spinner fa-spin':'fas fa-archive'"></i>
                     {{ archiveRunning ? 'Архивирование...' : 'Архивировать сейчас' }}
                 </button>
+                <!-- Кнопка управления колонками -->
+                <div style="position:relative">
+                    <button type="button" class="toolbar-btn outline" @click.prevent="toggleArchiveColsDropdown" data-archive-col-toggle
+                            :style="showArchiveColsDropdown ? 'border-color:#7c3aed;color:#7c3aed' : ''">
+                        <i class="fas fa-columns"></i>Столбцы
+                    </button>
+                    <div v-if="showArchiveColsDropdown" class="col-mgr-dropdown">
+                        <div class="col-mgr-title">Видимые столбцы</div>
+                        <label v-for="col in archiveTableColumns" :key="col.key" class="col-mgr-item">
+                            <input type="checkbox" v-model="col.visible">
+                            {{ col.label }}
+                        </label>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -269,98 +283,143 @@
             <div v-else class="table-scroll-wrap" @scroll="onArchiveScroll">
                 <table class="entries-table">
                     <thead><tr>
-                        <th class="th-sort" @click="sortArchive('id')" style="width:55px">
-                            ID <i :class="archiveSortIcon('id')"></i>
+                        <th v-show="archiveColVisible('id')" class="th-sort th-resizable" @click="sortArchive('id')"
+                            :style="{width: archiveColByKey('id').width+'px', minWidth: archiveColByKey('id').width+'px'}">
+                            <span>ID</span> <i :class="archiveSortIcon('id')"></i>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startArchiveColResize($event, archiveColByKey('id'))" @click.stop></div>
                         </th>
-                        <th class="th-sort" @click="sortArchive('account_id')">
-                            Счёт <i :class="archiveSortIcon('account_id')"></i>
+                        <th v-show="archiveColVisible('account_id')" class="th-sort th-resizable" @click="sortArchive('account_id')"
+                            :style="{width: archiveColByKey('account_id').width+'px', minWidth: archiveColByKey('account_id').width+'px'}">
+                            <span>Счёт</span> <i :class="archiveSortIcon('account_id')"></i>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startArchiveColResize($event, archiveColByKey('account_id'))" @click.stop></div>
                         </th>
-                        <th class="th-sort" @click="sortArchive('match_id')">
-                            Match ID <i :class="archiveSortIcon('match_id')"></i>
+                        <th v-show="archiveColVisible('match_id')" class="th-sort th-resizable" @click="sortArchive('match_id')"
+                            :style="{width: archiveColByKey('match_id').width+'px', minWidth: archiveColByKey('match_id').width+'px'}">
+                            <span>Match ID</span> <i :class="archiveSortIcon('match_id')"></i>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startArchiveColResize($event, archiveColByKey('match_id'))" @click.stop></div>
                         </th>
-                        <th class="th-sort" @click="sortArchive('ls')" style="width:48px">
-                            L/S <i :class="archiveSortIcon('ls')"></i>
+                        <th v-show="archiveColVisible('ls')" class="th-sort th-resizable" @click="sortArchive('ls')"
+                            :style="{width: archiveColByKey('ls').width+'px', minWidth: archiveColByKey('ls').width+'px'}">
+                            <span>L/S</span> <i :class="archiveSortIcon('ls')"></i>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startArchiveColResize($event, archiveColByKey('ls'))" @click.stop></div>
                         </th>
-                        <th class="th-sort" @click="sortArchive('dc')" style="width:48px">
-                            D/C <i :class="archiveSortIcon('dc')"></i>
+                        <th v-show="archiveColVisible('dc')" class="th-sort th-resizable" @click="sortArchive('dc')"
+                            :style="{width: archiveColByKey('dc').width+'px', minWidth: archiveColByKey('dc').width+'px'}">
+                            <span>D/C</span> <i :class="archiveSortIcon('dc')"></i>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startArchiveColResize($event, archiveColByKey('dc'))" @click.stop></div>
                         </th>
-                        <th class="th-sort" @click="sortArchive('amount')" style="text-align:right">
-                            Сумма <i :class="archiveSortIcon('amount')"></i>
+                        <th v-show="archiveColVisible('amount')" class="th-sort th-resizable" @click="sortArchive('amount')"
+                            :style="{width: archiveColByKey('amount').width+'px', minWidth: archiveColByKey('amount').width+'px', textAlign:'right'}">
+                            <span>Сумма</span> <i :class="archiveSortIcon('amount')"></i>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startArchiveColResize($event, archiveColByKey('amount'))" @click.stop></div>
                         </th>
-                        <th class="th-sort" @click="sortArchive('currency')" style="width:52px">
-                            Вал. <i :class="archiveSortIcon('currency')"></i>
+                        <th v-show="archiveColVisible('currency')" class="th-sort th-resizable" @click="sortArchive('currency')"
+                            :style="{width: archiveColByKey('currency').width+'px', minWidth: archiveColByKey('currency').width+'px'}">
+                            <span>Вал.</span> <i :class="archiveSortIcon('currency')"></i>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startArchiveColResize($event, archiveColByKey('currency'))" @click.stop></div>
                         </th>
-                        <th class="th-sort" @click="sortArchive('value_date')">
-                            Value Date <i :class="archiveSortIcon('value_date')"></i>
+                        <th v-show="archiveColVisible('value_date')" class="th-sort th-resizable" @click="sortArchive('value_date')"
+                            :style="{width: archiveColByKey('value_date').width+'px', minWidth: archiveColByKey('value_date').width+'px'}">
+                            <span>Value Date</span> <i :class="archiveSortIcon('value_date')"></i>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startArchiveColResize($event, archiveColByKey('value_date'))" @click.stop></div>
                         </th>
-                        <th>Instr. ID</th>
-                        <th>E2E ID</th>
-                        <th>Txn ID</th>
-                        <th>Msg ID</th>
-                        <th class="th-sort" @click="sortArchive('archived_at')">
-                            Архивирован <i :class="archiveSortIcon('archived_at')"></i>
+                        <th v-show="archiveColVisible('instruction_id')" class="th-resizable"
+                            :style="{width: archiveColByKey('instruction_id').width+'px', minWidth: archiveColByKey('instruction_id').width+'px'}">
+                            <span>Instr. ID</span>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startArchiveColResize($event, archiveColByKey('instruction_id'))" @click.stop></div>
                         </th>
-                        <th class="th-sort" @click="sortArchive('expires_at')" style="color:#ef4444">
-                            Хранить до <i :class="archiveSortIcon('expires_at')"></i>
+                        <th v-show="archiveColVisible('end_to_end_id')" class="th-resizable"
+                            :style="{width: archiveColByKey('end_to_end_id').width+'px', minWidth: archiveColByKey('end_to_end_id').width+'px'}">
+                            <span>E2E ID</span>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startArchiveColResize($event, archiveColByKey('end_to_end_id'))" @click.stop></div>
                         </th>
-                        <th style="width:50px;text-align:right;padding-right:12px"></th>
+                        <th v-show="archiveColVisible('transaction_id')" class="th-resizable"
+                            :style="{width: archiveColByKey('transaction_id').width+'px', minWidth: archiveColByKey('transaction_id').width+'px'}">
+                            <span>Txn ID</span>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startArchiveColResize($event, archiveColByKey('transaction_id'))" @click.stop></div>
+                        </th>
+                        <th v-show="archiveColVisible('message_id')" class="th-resizable"
+                            :style="{width: archiveColByKey('message_id').width+'px', minWidth: archiveColByKey('message_id').width+'px'}">
+                            <span>Msg ID</span>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startArchiveColResize($event, archiveColByKey('message_id'))" @click.stop></div>
+                        </th>
+                        <th v-show="archiveColVisible('archived_at')" class="th-sort th-resizable" @click="sortArchive('archived_at')"
+                            :style="{width: archiveColByKey('archived_at').width+'px', minWidth: archiveColByKey('archived_at').width+'px'}">
+                            <span>Архивирован</span> <i :class="archiveSortIcon('archived_at')"></i>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startArchiveColResize($event, archiveColByKey('archived_at'))" @click.stop></div>
+                        </th>
+                        <th v-show="archiveColVisible('expires_at')" class="th-sort th-resizable" @click="sortArchive('expires_at')"
+                            :style="{width: archiveColByKey('expires_at').width+'px', minWidth: archiveColByKey('expires_at').width+'px', color:'#ef4444'}">
+                            <span>Хранить до</span> <i :class="archiveSortIcon('expires_at')"></i>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startArchiveColResize($event, archiveColByKey('expires_at'))" @click.stop></div>
+                        </th>
+                        <th style="width:90px;min-width:90px;text-align:right;padding-right:12px">
+                            <i class="fas fa-cog" style="opacity:.3"></i>
+                        </th>
                     </tr></thead>
                     <tbody>
                     <tr v-for="row in archiveRows" :key="row.id"
                         :style="isExpired(row.expires_at)?'background:#fff5f5':''">
-                        <td style="color:#9ca3af;font-size:11px">{{ row.original_id }}</td>
-                        <td style="font-size:12px;font-weight:600;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-                            :title="row.account_name">{{ row.account_name }}</td>
-                        <td style="font-family:monospace;font-size:11px;color:#4f46e5;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                        <td v-show="archiveColVisible('id')" style="color:#9ca3af;font-size:11px">{{ row.original_id }}</td>
+                        <td v-show="archiveColVisible('account_id')" :title="row.account_name + (row.pool_name ? ' · ' + row.pool_name : '')" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                            <div style="font-size:12px;font-weight:600;color:#374151;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ row.account_name }}</div>
+                            <div v-if="row.pool_name" style="font-size:10px;color:#9ca3af;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                                <i class="fas fa-landmark" style="font-size:9px;color:#4f46e5"></i>
+                                {{ row.pool_name }}
+                            </div>
+                        </td>
+                        <td v-show="archiveColVisible('match_id')" style="font-family:monospace;font-size:11px;color:#4f46e5"
                             :title="row.match_id">{{ row.match_id }}</td>
-                        <td>
+                        <td v-show="archiveColVisible('ls')">
                                     <span :style="row.ls==='L'
                                         ?'background:#dbeafe;color:#1e40af;border-radius:5px;padding:1px 7px;font-size:11px;font-weight:700'
                                         :'background:#fef3c7;color:#92400e;border-radius:5px;padding:1px 7px;font-size:11px;font-weight:700'">
                                         {{ row.ls }}
                                     </span>
                         </td>
-                        <td>
+                        <td v-show="archiveColVisible('dc')">
                                     <span :style="row.dc==='Debit'
                                         ?'color:#dc2626;font-weight:700;font-size:11px'
                                         :'color:#059669;font-weight:700;font-size:11px'">
                                         {{ row.dc==='Debit'?'D':'C' }}
                                     </span>
                         </td>
-                        <td style="text-align:right;font-family:monospace;font-weight:600;font-size:12px">
+                        <td v-show="archiveColVisible('amount')" style="text-align:right;font-family:monospace;font-weight:600;font-size:12px">
                             {{ formatAmount(row.amount) }}
                         </td>
-                        <td style="font-weight:600;font-size:12px">{{ row.currency }}</td>
-                        <td style="white-space:nowrap;font-size:12px">{{ row.value_date_fmt||row.value_date||'—' }}</td>
-                        <td style="font-family:monospace;font-size:11px;color:#6b7280;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                        <td v-show="archiveColVisible('currency')" style="font-weight:600;font-size:12px">{{ row.currency }}</td>
+                        <td v-show="archiveColVisible('value_date')" style="white-space:nowrap;font-size:12px">{{ row.value_date_fmt||row.value_date||'—' }}</td>
+                        <td v-show="archiveColVisible('instruction_id')" class="td-mono-truncate" :title="row.instruction_id">
                             {{ row.instruction_id||'—' }}
                         </td>
-                        <td style="font-family:monospace;font-size:11px;color:#6b7280;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                        <td v-show="archiveColVisible('end_to_end_id')" class="td-mono-truncate" :title="row.end_to_end_id">
                             {{ row.end_to_end_id||'—' }}
                         </td>
-                        <td style="font-family:monospace;font-size:11px;color:#6b7280;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                        <td v-show="archiveColVisible('transaction_id')" class="td-mono-truncate" :title="row.transaction_id">
                             {{ row.transaction_id||'—' }}
                         </td>
-                        <td style="font-family:monospace;font-size:11px;color:#6b7280;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                        <td v-show="archiveColVisible('message_id')" class="td-mono-truncate" :title="row.message_id">
                             {{ row.message_id||'—' }}
                         </td>
-                        <td style="white-space:nowrap;font-size:11px;color:#6b7280">
+                        <td v-show="archiveColVisible('archived_at')" style="white-space:nowrap;font-size:11px;color:#6b7280">
                             {{ row.archived_at_fmt||'—' }}
                         </td>
-                        <td style="white-space:nowrap;font-size:11px"
+                        <td v-show="archiveColVisible('expires_at')" style="white-space:nowrap;font-size:11px"
                             :style="isExpired(row.expires_at)?'color:#dc2626;font-weight:700':isExpiringSoon(row.expires_at)?'color:#d97706;font-weight:600':'color:#6b7280'">
                             <i v-if="isExpired(row.expires_at)" class="fas fa-exclamation-triangle me-1"></i>
                             {{ row.expires_at_fmt||'—' }}
                         </td>
                         <td style="text-align:right;padding-right:12px">
-                            <button type="button" class="row-btn history" @click.prevent="showArchiveHistory(row)"
-                                    title="История изменений">
-                                <i class="fas fa-history"></i>
-                            </button>
-                            <button type="button" class="row-btn edit" @click.prevent="restoreFromArchive(row)"
-                                    title="Восстановить в активные записи">
-                                <i class="fas fa-undo"></i>
-                            </button>
+                            <div style="display:flex;gap:3px;justify-content:flex-end">
+                                <button type="button" class="row-btn history" @click.prevent="showArchiveHistory(row)"
+                                        title="История изменений">
+                                    <i class="fas fa-history"></i>
+                                </button>
+                                <button type="button" class="row-btn edit" @click.prevent="restoreFromArchive(row)"
+                                        title="Восстановить в активные записи">
+                                    <i class="fas fa-undo"></i>
+                                </button>
+                            </div>
                         </td>
                     </tr>
                     </tbody>

@@ -53,7 +53,35 @@ var ArchiveMixin = {
             _archivePoolSelect2Inited:    false,
             _archiveAccountSelect2Inited: false,
             _archiveSubmitGuardBound:     false,
+
+            // ── Управление колонками таблицы архива ───────────────
+            archiveTableColumns: [
+                { key: 'id',             label: 'ID',           visible: false, width: 60  },
+                { key: 'account_id',     label: 'Счёт',         visible: true,  width: 140 },
+                { key: 'match_id',       label: 'Match ID',     visible: true,  width: 110 },
+                { key: 'ls',             label: 'L/S',          visible: true,  width: 55  },
+                { key: 'dc',             label: 'D/C',          visible: true,  width: 55  },
+                { key: 'amount',         label: 'Сумма',        visible: true,  width: 120 },
+                { key: 'currency',       label: 'Вал.',         visible: true,  width: 55  },
+                { key: 'value_date',     label: 'Value Date',   visible: true,  width: 105 },
+                { key: 'instruction_id', label: 'Instr. ID',    visible: true,  width: 110 },
+                { key: 'end_to_end_id',  label: 'E2E ID',       visible: true,  width: 110 },
+                { key: 'transaction_id', label: 'Txn ID',       visible: true,  width: 110 },
+                { key: 'message_id',     label: 'Msg ID',       visible: true,  width: 110 },
+                { key: 'archived_at',    label: 'Архивирован',  visible: true,  width: 115 },
+                { key: 'expires_at',     label: 'Хранить до',   visible: true,  width: 115 },
+            ],
+            showArchiveColsDropdown: false,
+            _archiveTableColumnsLoaded: false,
+            _archiveColsSaveTimer: null,
         };
+    },
+
+    watch: {
+        archiveTableColumns: {
+            handler: function () { this.saveArchiveTableColumnsPrefs(); },
+            deep: true
+        }
     },
 
     computed: {
@@ -651,6 +679,91 @@ var ArchiveMixin = {
                 .finally(function () {
                     self.historyLoading = false;
                 });
+        },
+
+        // ══════════════════════════════════════════════════
+        // УПРАВЛЕНИЕ КОЛОНКАМИ
+        // ══════════════════════════════════════════════════
+        archiveColVisible: function (key) {
+            var col = this.archiveTableColumns.find(function (c) { return c.key === key; });
+            return col ? col.visible : true;
+        },
+        archiveColByKey: function (key) {
+            return this.archiveTableColumns.find(function (c) { return c.key === key; });
+        },
+        toggleArchiveColsDropdown: function () {
+            this.showArchiveColsDropdown = !this.showArchiveColsDropdown;
+        },
+        startArchiveColResize: function (e, col) {
+            e.preventDefault();
+            e.stopPropagation();
+            var startX = e.clientX;
+            var startW = col.width || 100;
+
+            var onMove = function (ev) {
+                ev.preventDefault();
+                col.width = Math.max(50, startW + (ev.clientX - startX));
+            };
+            var onUp = function () {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                document.body.style.userSelect = '';
+                document.body.style.cursor     = '';
+                document.body.classList.remove('resizing-col');
+            };
+            document.body.style.userSelect = 'none';
+            document.body.style.cursor     = 'col-resize';
+            document.body.classList.add('resizing-col');
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        },
+        loadArchiveTableColumnsPrefs: function () {
+            var self = this;
+            SmartMatchApi.get(AppRoutes.userPreferenceGet, { key: 'archive_table_columns' })
+                .then(function (response) {
+                    var r = response.data !== undefined ? response.data : response;
+                    if (r && r.success && Array.isArray(r.value)) {
+                        var saved = {};
+                        r.value.forEach(function (c) {
+                            if (c && typeof c.key === 'string') saved[c.key] = c;
+                        });
+                        self.archiveTableColumns.forEach(function (col) {
+                            var s = saved[col.key];
+                            if (!s) return;
+                            if (typeof s.visible === 'boolean') col.visible = s.visible;
+                            if (typeof s.width === 'number' && s.width >= 40) col.width = s.width;
+                        });
+                    }
+                })
+                .catch(function () { /* no-op */ })
+                .then(function () {
+                    self.$nextTick(function () { self._archiveTableColumnsLoaded = true; });
+                });
+        },
+        saveArchiveTableColumnsPrefs: function () {
+            if (!this._archiveTableColumnsLoaded) return;
+            var self = this;
+            if (self._archiveColsSaveTimer) clearTimeout(self._archiveColsSaveTimer);
+            self._archiveColsSaveTimer = setTimeout(function () {
+                var payload = self.archiveTableColumns.map(function (c) {
+                    return { key: c.key, visible: !!c.visible, width: c.width };
+                });
+                SmartMatchApi.post(AppRoutes.userPreferenceSave, {
+                    key: 'archive_table_columns',
+                    value: payload
+                });
+            }, 600);
+        },
+        _initArchiveColManagement: function () {
+            var self = this;
+            document.addEventListener('click', function (e) {
+                if (!self.showArchiveColsDropdown) return;
+                if (e.target.closest && (e.target.closest('.col-mgr-dropdown') || e.target.closest('[data-archive-col-toggle]'))) return;
+                self.showArchiveColsDropdown = false;
+            });
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') self.showArchiveColsDropdown = false;
+            });
         }
     },
 };

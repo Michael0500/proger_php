@@ -35,6 +35,8 @@
                 var self = this;
                 document.addEventListener('click', function () { self.openRowMenu = null; });
 
+                this._initBalanceColManagement();
+                this.loadBalanceTableColumnsPrefs();
                 this.loadBalanceAccounts();
                 this.loadBalances(true);
             },

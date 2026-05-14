@@ -58,10 +58,36 @@ var BalanceMixin = {
             importResult:       null,
 
             _balanceDebounceTimer: null,
+
+            // ── Управление колонками таблицы баланса ──────────────
+            balanceTableColumns: [
+                { key: 'id',               label: 'ID',           visible: false, width: 60  },
+                { key: 'ls_type',          label: 'L/S',          visible: true,  width: 55  },
+                { key: 'section',          label: 'Раздел',       visible: true,  width: 80  },
+                { key: 'account_id',       label: 'Счёт',         visible: true,  width: 140 },
+                { key: 'currency',         label: 'Валюта',       visible: true,  width: 70  },
+                { key: 'value_date',       label: 'Дата вал.',    visible: true,  width: 100 },
+                { key: 'statement_number', label: '№ выписки',    visible: true,  width: 110 },
+                { key: 'opening_balance',  label: 'Opening',      visible: true,  width: 130 },
+                { key: 'opening_dc',       label: 'D/C Open',     visible: true,  width: 60  },
+                { key: 'closing_balance',  label: 'Closing',      visible: true,  width: 130 },
+                { key: 'closing_dc',       label: 'D/C Close',    visible: true,  width: 60  },
+                { key: 'source',           label: 'Источник',     visible: true,  width: 90  },
+                { key: 'status',           label: 'Статус',       visible: true,  width: 55  },
+                { key: 'comment',          label: 'Комментарий',  visible: true,  width: 170 },
+            ],
+            showBalanceColsDropdown: false,
+            _balanceTableColumnsLoaded: false,
+            _balanceColsSaveTimer: null,
         };
     },
 
-    watch: {},
+    watch: {
+        balanceTableColumns: {
+            handler: function () { this.saveBalanceTableColumnsPrefs(); },
+            deep: true
+        }
+    },
 
     computed: {
         hasMoreBalances: function () {
@@ -611,6 +637,89 @@ var BalanceMixin = {
             $el.off('change.balancePool').on('change.balancePool', function () {
                 self.balancePoolId = jQuery(this).val() || '';
                 self.onBalancePoolChange();
+            });
+        },
+
+        // ── Управление колонками таблицы баланса ──────────────────
+        balanceColVisible: function (key) {
+            var col = this.balanceTableColumns.find(function (c) { return c.key === key; });
+            return col ? col.visible : true;
+        },
+        balanceColByKey: function (key) {
+            return this.balanceTableColumns.find(function (c) { return c.key === key; });
+        },
+        toggleBalanceColsDropdown: function () {
+            this.showBalanceColsDropdown = !this.showBalanceColsDropdown;
+        },
+        startBalanceColResize: function (e, col) {
+            e.preventDefault();
+            e.stopPropagation();
+            var startX = e.clientX;
+            var startW = col.width || 100;
+
+            var onMove = function (ev) {
+                ev.preventDefault();
+                col.width = Math.max(50, startW + (ev.clientX - startX));
+            };
+            var onUp = function () {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                document.body.style.userSelect = '';
+                document.body.style.cursor     = '';
+                document.body.classList.remove('resizing-col');
+            };
+            document.body.style.userSelect = 'none';
+            document.body.style.cursor     = 'col-resize';
+            document.body.classList.add('resizing-col');
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        },
+        loadBalanceTableColumnsPrefs: function () {
+            var self = this;
+            SmartMatchApi.get(window.AppRoutes.userPreferenceGet, { key: 'balance_table_columns' })
+                .then(function (response) {
+                    var r = response.data !== undefined ? response.data : response;
+                    if (r && r.success && Array.isArray(r.value)) {
+                        var saved = {};
+                        r.value.forEach(function (c) {
+                            if (c && typeof c.key === 'string') saved[c.key] = c;
+                        });
+                        self.balanceTableColumns.forEach(function (col) {
+                            var s = saved[col.key];
+                            if (!s) return;
+                            if (typeof s.visible === 'boolean') col.visible = s.visible;
+                            if (typeof s.width === 'number' && s.width >= 40) col.width = s.width;
+                        });
+                    }
+                })
+                .catch(function () { /* no-op */ })
+                .then(function () {
+                    self.$nextTick(function () { self._balanceTableColumnsLoaded = true; });
+                });
+        },
+        saveBalanceTableColumnsPrefs: function () {
+            if (!this._balanceTableColumnsLoaded) return;
+            var self = this;
+            if (self._balanceColsSaveTimer) clearTimeout(self._balanceColsSaveTimer);
+            self._balanceColsSaveTimer = setTimeout(function () {
+                var payload = self.balanceTableColumns.map(function (c) {
+                    return { key: c.key, visible: !!c.visible, width: c.width };
+                });
+                SmartMatchApi.post(window.AppRoutes.userPreferenceSave, {
+                    key: 'balance_table_columns',
+                    value: payload
+                });
+            }, 600);
+        },
+        _initBalanceColManagement: function () {
+            var self = this;
+            document.addEventListener('click', function (e) {
+                if (!self.showBalanceColsDropdown) return;
+                if (e.target.closest && (e.target.closest('.col-mgr-dropdown') || e.target.closest('[data-balance-col-toggle]'))) return;
+                self.showBalanceColsDropdown = false;
+            });
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') self.showBalanceColsDropdown = false;
             });
         },
 

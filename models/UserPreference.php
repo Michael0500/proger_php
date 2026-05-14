@@ -19,6 +19,8 @@ use yii\db\ActiveRecord;
 class UserPreference extends ActiveRecord
 {
     const KEY_ENTRIES_TABLE_COLUMNS = 'entries_table_columns';
+    const KEY_BALANCE_TABLE_COLUMNS = 'balance_table_columns';
+    const KEY_ARCHIVE_TABLE_COLUMNS = 'archive_table_columns';
 
     public static function tableName(): string
     {

@@ -30,7 +30,7 @@ $isReconPage      = (Yii::$app->controller->id === 'recon-report');
 $isNostroBankPage = ($currentRoute === 'account-pool/index');
 $isAccountsPage   = ($currentRoute === 'account/index');
 $isAllNostroPage  = ($currentRoute === 'all-nostro/index');
-$isBalancePage  = ($currentRoute === 'balance/index');
+$isBalancePage  = ($currentRoute === 'nostro-balance/page');
 $isArchivePage  = ($currentRoute === 'archive/page');
 $isReferencePage = ($currentRoute === 'reference/index');
 
@@ -174,8 +174,9 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
 
     <?php elseif ($showApp): ?>
         <!-- ── Любая другая страница залогиненного пользователя ── -->
+        <?php $isWidePage = $isBalancePage || $isArchivePage || $isAllNostroPage; ?>
         <main style="margin-top:52px; padding:24px 28px">
-            <div class="container-fluid" style="max-width:1400px">
+            <div class="container-fluid" style="<?= $isWidePage ? 'max-width:100%' : 'max-width:1400px' ?>">
                 <?= Alert::widget() ?>
                 <?= $content ?>
             </div>

@@ -28,6 +28,8 @@
 
             mounted: function () {
                 this.bindArchiveSubmitGuard();
+                this._initArchiveColManagement();
+                this.loadArchiveTableColumnsPrefs();
                 this.loadArchiveAccountPools();
                 this.loadArchiveAccounts();
                 this.loadArchive(true);

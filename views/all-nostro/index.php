@@ -254,7 +254,7 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                 sortDir: 'desc',
 
                 filters: {},
-                filtersOpen: true,
+                filtersOpen: false,
 
                 detailEntry: null,
 

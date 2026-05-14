@@ -32,6 +32,20 @@
                 <button class="toolbar-btn success" @click="openCreateBalanceModal">
                     <i class="fas fa-plus"></i>Добавить
                 </button>
+                <!-- Кнопка управления колонками -->
+                <div style="position:relative">
+                    <button class="toolbar-btn outline" @click="toggleBalanceColsDropdown" data-balance-col-toggle
+                            :style="showBalanceColsDropdown ? 'border-color:#6366f1;color:#6366f1' : ''">
+                        <i class="fas fa-columns"></i>Столбцы
+                    </button>
+                    <div v-if="showBalanceColsDropdown" class="col-mgr-dropdown">
+                        <div class="col-mgr-title">Видимые столбцы</div>
+                        <label v-for="col in balanceTableColumns" :key="col.key" class="col-mgr-item">
+                            <input type="checkbox" v-model="col.visible">
+                            {{ col.label }}
+                        </label>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -138,55 +152,119 @@
                 </button>
             </div>
             <div v-else class="table-scroll-wrap" @scroll="onBalanceScroll">
-                <table class="entries-table" style="width:100%">
+                <table class="entries-table">
                     <thead>
                     <tr>
-                        <th style="width:50px">ID</th>
-                        <th class="th-sort" @click="sortBalance('ls_type')">L/S</th>
-                        <th>Раздел</th>
-                        <th class="th-sort" @click="sortBalance('account_id')">Счёт</th>
-                        <th class="th-sort" @click="sortBalance('currency')">Валюта</th>
-                        <th class="th-sort" @click="sortBalance('value_date')">Дата вал.</th>
-                        <th>№ выписки</th>
-                        <th style="text-align:right">Opening</th>
-                        <th style="width:36px;text-align:center">D/C</th>
-                        <th style="text-align:right">Closing</th>
-                        <th style="width:36px;text-align:center">D/C</th>
-                        <th>Источник</th>
-                        <th style="width:36px;text-align:center">Ст.</th>
-                        <th>Комментарий</th>
-                        <th style="width:96px;text-align:right;padding-right:12px"></th>
+                        <th v-show="balanceColVisible('id')" class="th-resizable"
+                            :style="{width: balanceColByKey('id').width+'px', minWidth: balanceColByKey('id').width+'px'}">
+                            <span>ID</span>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startBalanceColResize($event, balanceColByKey('id'))" @click.stop></div>
+                        </th>
+                        <th v-show="balanceColVisible('ls_type')" class="th-sort th-resizable" @click="sortBalance('ls_type')"
+                            :style="{width: balanceColByKey('ls_type').width+'px', minWidth: balanceColByKey('ls_type').width+'px'}">
+                            <span>L/S</span>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startBalanceColResize($event, balanceColByKey('ls_type'))" @click.stop></div>
+                        </th>
+                        <th v-show="balanceColVisible('section')" class="th-resizable"
+                            :style="{width: balanceColByKey('section').width+'px', minWidth: balanceColByKey('section').width+'px'}">
+                            <span>Раздел</span>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startBalanceColResize($event, balanceColByKey('section'))" @click.stop></div>
+                        </th>
+                        <th v-show="balanceColVisible('account_id')" class="th-sort th-resizable" @click="sortBalance('account_id')"
+                            :style="{width: balanceColByKey('account_id').width+'px', minWidth: balanceColByKey('account_id').width+'px'}">
+                            <span>Счёт</span>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startBalanceColResize($event, balanceColByKey('account_id'))" @click.stop></div>
+                        </th>
+                        <th v-show="balanceColVisible('currency')" class="th-sort th-resizable" @click="sortBalance('currency')"
+                            :style="{width: balanceColByKey('currency').width+'px', minWidth: balanceColByKey('currency').width+'px'}">
+                            <span>Валюта</span>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startBalanceColResize($event, balanceColByKey('currency'))" @click.stop></div>
+                        </th>
+                        <th v-show="balanceColVisible('value_date')" class="th-sort th-resizable" @click="sortBalance('value_date')"
+                            :style="{width: balanceColByKey('value_date').width+'px', minWidth: balanceColByKey('value_date').width+'px'}">
+                            <span>Дата вал.</span>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startBalanceColResize($event, balanceColByKey('value_date'))" @click.stop></div>
+                        </th>
+                        <th v-show="balanceColVisible('statement_number')" class="th-resizable"
+                            :style="{width: balanceColByKey('statement_number').width+'px', minWidth: balanceColByKey('statement_number').width+'px'}">
+                            <span>№ выписки</span>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startBalanceColResize($event, balanceColByKey('statement_number'))" @click.stop></div>
+                        </th>
+                        <th v-show="balanceColVisible('opening_balance')" class="th-resizable"
+                            :style="{width: balanceColByKey('opening_balance').width+'px', minWidth: balanceColByKey('opening_balance').width+'px', textAlign:'right'}">
+                            <span>Opening</span>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startBalanceColResize($event, balanceColByKey('opening_balance'))" @click.stop></div>
+                        </th>
+                        <th v-show="balanceColVisible('opening_dc')" class="th-resizable"
+                            :style="{width: balanceColByKey('opening_dc').width+'px', minWidth: balanceColByKey('opening_dc').width+'px', textAlign:'center'}">
+                            <span>D/C</span>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startBalanceColResize($event, balanceColByKey('opening_dc'))" @click.stop></div>
+                        </th>
+                        <th v-show="balanceColVisible('closing_balance')" class="th-resizable"
+                            :style="{width: balanceColByKey('closing_balance').width+'px', minWidth: balanceColByKey('closing_balance').width+'px', textAlign:'right'}">
+                            <span>Closing</span>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startBalanceColResize($event, balanceColByKey('closing_balance'))" @click.stop></div>
+                        </th>
+                        <th v-show="balanceColVisible('closing_dc')" class="th-resizable"
+                            :style="{width: balanceColByKey('closing_dc').width+'px', minWidth: balanceColByKey('closing_dc').width+'px', textAlign:'center'}">
+                            <span>D/C</span>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startBalanceColResize($event, balanceColByKey('closing_dc'))" @click.stop></div>
+                        </th>
+                        <th v-show="balanceColVisible('source')" class="th-resizable"
+                            :style="{width: balanceColByKey('source').width+'px', minWidth: balanceColByKey('source').width+'px'}">
+                            <span>Источник</span>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startBalanceColResize($event, balanceColByKey('source'))" @click.stop></div>
+                        </th>
+                        <th v-show="balanceColVisible('status')" class="th-resizable"
+                            :style="{width: balanceColByKey('status').width+'px', minWidth: balanceColByKey('status').width+'px', textAlign:'center'}">
+                            <span>Статус</span>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startBalanceColResize($event, balanceColByKey('status'))" @click.stop></div>
+                        </th>
+                        <th v-show="balanceColVisible('comment')" class="th-resizable"
+                            :style="{width: balanceColByKey('comment').width+'px', minWidth: balanceColByKey('comment').width+'px'}">
+                            <span>Комментарий</span>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startBalanceColResize($event, balanceColByKey('comment'))" @click.stop></div>
+                        </th>
+                        <th style="width:110px;min-width:110px;text-align:right;padding-right:12px">
+                            <i class="fas fa-cog" style="opacity:.3"></i>
+                        </th>
                     </tr>
                     </thead>
                     <tbody>
                     <tr v-for="row in balances" :key="row.id"
                         :style="row.status==='error'?'background:#fff5f5':row.status==='confirmed'?'background:#f8f9fa':''">
-                        <td style="color:#9ca3af;font-size:11px">{{ row.id }}</td>
-                        <td>
+                        <td v-show="balanceColVisible('id')" style="color:#9ca3af;font-size:11px">{{ row.id }}</td>
+                        <td v-show="balanceColVisible('ls_type')">
                             <span :style="row.ls_type==='L'
                                 ?'background:#dbeafe;color:#1e40af;border-radius:5px;padding:1px 7px;font-size:11px;font-weight:700'
                                 :'background:#fef3c7;color:#92400e;border-radius:5px;padding:1px 7px;font-size:11px;font-weight:700'">
                                 {{ row.ls_type }}
                             </span>
                         </td>
-                        <td><span style="background:#1e2532;color:#fff;border-radius:5px;padding:1px 7px;font-size:11px;font-weight:700">{{ row.section }}</span></td>
-                        <td class="td-mono-truncate" :title="row.account_name" style="max-width:120px">{{ row.account_name }}</td>
-                        <td style="font-weight:600;font-size:12px">{{ row.currency }}</td>
-                        <td style="white-space:nowrap;font-size:12px">{{ row.value_date_fmt || row.value_date }}</td>
-                        <td class="td-mono-truncate" :title="row.statement_number" style="max-width:100px">{{ row.statement_number||'—' }}</td>
-                        <td style="text-align:right;font-family:monospace;font-size:12px">{{ formatBalanceAmount(row.opening_balance) }}</td>
-                        <td style="text-align:center">
+                        <td v-show="balanceColVisible('section')"><span style="background:#1e2532;color:#fff;border-radius:5px;padding:1px 7px;font-size:11px;font-weight:700">{{ row.section }}</span></td>
+                        <td v-show="balanceColVisible('account_id')" :title="row.account_name + (row.pool_name ? ' · ' + row.pool_name : '')" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                            <div style="font-size:12px;font-weight:600;color:#374151;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ row.account_name }}</div>
+                            <div v-if="row.pool_name" style="font-size:10px;color:#9ca3af;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                                <i class="fas fa-landmark" style="font-size:9px;color:#4f46e5"></i>
+                                {{ row.pool_name }}
+                            </div>
+                        </td>
+                        <td v-show="balanceColVisible('currency')" style="font-weight:600;font-size:12px">{{ row.currency }}</td>
+                        <td v-show="balanceColVisible('value_date')" style="white-space:nowrap;font-size:12px">{{ row.value_date_fmt || row.value_date }}</td>
+                        <td v-show="balanceColVisible('statement_number')" class="td-mono-truncate" :title="row.statement_number">{{ row.statement_number||'—' }}</td>
+                        <td v-show="balanceColVisible('opening_balance')" style="text-align:right;font-family:monospace;font-size:12px">{{ formatBalanceAmount(row.opening_balance) }}</td>
+                        <td v-show="balanceColVisible('opening_dc')" style="text-align:center">
                             <span :style="row.opening_dc==='D'?'color:#ef4444;font-weight:700;font-size:11px':'color:#059669;font-weight:700;font-size:11px'">{{ row.opening_dc }}</span>
                         </td>
-                        <td style="text-align:right;font-family:monospace;font-size:12px">{{ formatBalanceAmount(row.closing_balance) }}</td>
-                        <td style="text-align:center">
+                        <td v-show="balanceColVisible('closing_balance')" style="text-align:right;font-family:monospace;font-size:12px">{{ formatBalanceAmount(row.closing_balance) }}</td>
+                        <td v-show="balanceColVisible('closing_dc')" style="text-align:center">
                             <span :style="row.closing_dc==='D'?'color:#ef4444;font-weight:700;font-size:11px':'color:#059669;font-weight:700;font-size:11px'">{{ row.closing_dc }}</span>
                         </td>
-                        <td style="font-size:11px;color:#6b7280">{{ row.source }}</td>
-                        <td style="text-align:center" :title="row.comment">
+                        <td v-show="balanceColVisible('source')" style="font-size:11px;color:#6b7280">{{ row.source }}</td>
+                        <td v-show="balanceColVisible('status')" style="text-align:center" :title="row.comment">
                             {{ row.status==='error'?'🔴':row.status==='confirmed'?'⚫':'⚪' }}
                         </td>
-                        <td class="td-mono-truncate" :title="row.comment" style="max-width:160px;font-size:11px;color:#6b7280">{{ row.comment||'' }}</td>
+                        <td v-show="balanceColVisible('comment')" class="td-mono-truncate" :title="row.comment" style="font-size:11px;color:#6b7280">{{ row.comment||'' }}</td>
                         <td style="text-align:right;padding-right:12px">
                             <div style="display:flex;gap:3px;justify-content:flex-end">
                                 <button v-if="row.status==='error'" class="row-btn"

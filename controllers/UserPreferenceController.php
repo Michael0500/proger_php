@@ -25,6 +25,8 @@ class UserPreferenceController extends BaseController
     /** Разрешённые ключи настроек (whitelist). */
     private const ALLOWED_KEYS = [
         UserPreference::KEY_ENTRIES_TABLE_COLUMNS,
+        UserPreference::KEY_BALANCE_TABLE_COLUMNS,
+        UserPreference::KEY_ARCHIVE_TABLE_COLUMNS,
     ];
 
     private function userId(): ?int
