@@ -26,6 +26,7 @@ use yii\db\Expression;
  * @property string      $source
  * @property string      $status            normal|error|confirmed
  * @property string|null $comment
+ * @property string|null $branch_code
  * @property int|null    $created_by
  * @property int|null    $updated_by
  * @property string      $created_at
@@ -107,6 +108,7 @@ class NostroBalance extends ActiveRecord
             [['source'], 'string', 'max' => 20],
             [['status'], 'string', 'max' => 10],
             [['statement_number'], 'string', 'max' => 35],
+            [['branch_code'], 'string', 'max' => 3],
             [['comment'], 'string', 'max' => 255],
 
             // Даты
@@ -168,6 +170,7 @@ class NostroBalance extends ActiveRecord
             'source'           => 'Источник',
             'status'           => 'Статус',
             'comment'          => 'Комментарий',
+            'branch_code'      => 'Код филиала',
             'created_by'       => 'Создал',
             'updated_by'       => 'Изменил',
             'created_at'       => 'Создано',
@@ -253,6 +256,7 @@ class NostroBalance extends ActiveRecord
             'source'           => $this->source,
             'status'           => $this->status,
             'comment'          => $this->comment,
+            'branch_code'      => $this->branch_code,
             'created_at'       => $this->created_at,
             'updated_at'       => $this->updated_at,
         ];

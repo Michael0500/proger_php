@@ -358,7 +358,7 @@ class NostroBalanceController extends BaseController
         $m->account_id        = (int)($p['account_id'] ?? 0);
         $m->ls_type           = $p['ls_type']           ?? NostroBalance::LS_LEDGER;
         $m->statement_number  = ($p['statement_number'] ?? '') ?: null;
-        $m->currency          = strtoupper($p['currency'] ?? 'RUB');
+        $m->currency          = strtoupper(trim($p['currency'] ?? ($m->currency ?: '')));
         $m->value_date        = $p['value_date']         ?? null;
         $m->opening_balance   = $this->normalizeDecimalInput($p['opening_balance'] ?? '0');
         $m->opening_dc        = $p['opening_dc']         ?? NostroBalance::DC_CREDIT;

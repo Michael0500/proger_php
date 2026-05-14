@@ -73,4 +73,4 @@ php yii auto-match/status
 php yii fcc-merge/run
 ```
 
-`fcc-merge/run` переносит строки FCC12 в `nostro_entries` и `nostro_balance` пакетами и после каждой пакетной вставки пишет аудит: `nostro_entry_audit` (`create`) и `nostro_balance_audit` (`import`).
+`fcc-merge/run` переносит строки FCC12 в `nostro_entries` и `nostro_balance` пакетами, сохраняет трассировку `extract_no`, `line_no`, `branch_code` и после каждой пакетной вставки пишет аудит: `nostro_entry_audit` (`create`) и `nostro_balance_audit` (`import`).

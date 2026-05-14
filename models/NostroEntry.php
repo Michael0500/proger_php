@@ -25,6 +25,7 @@ use yii\db\ActiveRecord;
  * @property string|null $other_id
  * @property string|null $comment
  * @property string|null $source
+ * @property string|null $branch_code
  * @property string      $match_status  U/M/I
  * @property int|null    $created_by
  * @property int|null    $updated_by
@@ -75,6 +76,7 @@ class NostroEntry extends ActiveRecord
             [['transaction_id'], 'string', 'max' => 60],
             [['comment'], 'string', 'max' => 40],
             [['source'], 'string', 'max' => 20],
+            [['branch_code'], 'string', 'max' => 3],
             [['match_status'], 'string', 'max' => 1],
             [['match_status'], 'in', 'range' => [self::STATUS_UNMATCHED, self::STATUS_MATCHED, self::STATUS_IGNORED]],
             [['match_status'], 'default', 'value' => self::STATUS_UNMATCHED],
@@ -118,6 +120,7 @@ class NostroEntry extends ActiveRecord
             'other_id'       => 'Other ID',
             'comment'        => 'Комментарий',
             'source'         => 'Источник',
+            'branch_code'    => 'Код филиала',
             'match_status'   => 'Статус квитования',
             'created_by'     => 'Создал',
             'updated_by'     => 'Обновил',

@@ -149,7 +149,7 @@ class NostroEntryController extends BaseController
         $m->ls             = $p['ls']       ?? 'L';
         $m->dc             = $p['dc']       ?? 'Debit';
         $m->amount         = $this->normalizeDecimalInput($p['amount'] ?? '0');
-        $m->currency       = strtoupper(trim($p['currency'] ?? 'USD'));
+        $m->currency       = strtoupper(trim($p['currency'] ?? ''));
         $m->value_date     = ($p['value_date']     ?? '') ?: null;
         $m->post_date      = ($p['post_date']      ?? '') ?: null;
         $m->instruction_id = ($p['instruction_id'] ?? '') ?: null;
@@ -385,7 +385,8 @@ class NostroEntryController extends BaseController
         // Поля, которые показываем в таблице
         $fields = ['account_id', 'ls', 'dc', 'amount', 'currency',
             'value_date', 'post_date', 'instruction_id', 'end_to_end_id',
-            'transaction_id', 'message_id', 'other_id', 'comment', 'match_status', 'match_id'];
+            'transaction_id', 'message_id', 'other_id', 'comment', 'branch_code',
+            'match_status', 'match_id'];
 
         // Стартовое состояние — текущие данные записи (самое актуальное)
         // Идём от новых к старым, чтобы вычислить снапшоты в обратном порядке.

@@ -29,7 +29,7 @@ var EntriesMixin = {
             // ── Форма записи ──────────────────────────────
             editingEntry: {
                 id: null, account_id: null, account_name: '',
-                ls: 'L', dc: 'Debit', amount: '', currency: 'USD',
+                ls: 'L', dc: 'Debit', amount: '', currency: '',
                 value_date: '', post_date: '',
                 instruction_id: '', end_to_end_id: '',
                 transaction_id: '', message_id: '', comment: ''
@@ -426,7 +426,7 @@ var EntriesMixin = {
             self._entrySelect2Inited = false;
             self.editingEntry = {
                 id: null, account_id: null, account_name: '',
-                ls: 'L', dc: 'Debit', amount: '', currency: 'USD',
+                ls: 'L', dc: 'Debit', amount: '', currency: '',
                 value_date: '', post_date: '',
                 instruction_id: '', end_to_end_id: '',
                 transaction_id: '', message_id: '', comment: ''
@@ -509,6 +509,11 @@ var EntriesMixin = {
             if (amountError) {
                 Swal.fire({ icon: 'warning', title: amountError, toast: true,
                     position: 'top-end', timer: 3500, showConfirmButton: false });
+                return;
+            }
+            if (!self.editingEntry.currency) {
+                Swal.fire({ icon: 'warning', title: 'Выберите валюту', toast: true,
+                    position: 'top-end', timer: 2000, showConfirmButton: false });
                 return;
             }
             var isNew = !self.editingEntry.id;

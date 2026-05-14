@@ -175,18 +175,10 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                             <input type="text" v-datepicker class="form-control" v-model="form.date_close">
                         </div>
 
-                        <!-- Статус загрузки -->
-                        <div class="col-md-4">
-                            <label class="form-label">Статус загрузки</label>
-                            <select class="form-select" v-model="form.load_status">
-                                <option value="L">L — Loaded</option>
-                                <option value="P">P — Pending</option>
-                                <option value="E">E — Error</option>
-                            </select>
-                        </div>
 
-                        <!-- Чекбоксы -->
-                        <div class="col-12">
+
+                        <!-- Чекбоксы INV -->
+                        <div v-if="isInvSection" class="col-12">
                             <div style="display:flex;gap:24px;flex-wrap:wrap">
                                 <label class="acc-check">
                                     <input type="checkbox" v-model="form.is_suspense">
@@ -288,6 +280,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 pools: _init.pools || [],
                 loading: false,
                 saving: false,
+                userSection: (window.AppConfig && window.AppConfig.companySection) || '',
 
                 // Фильтры
                 filterPool: '',
@@ -318,6 +311,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
 
                 return list;
+            },
+            isInvSection: function () {
+                return String(this.userSection || '').toUpperCase() === 'INV';
             }
         },
 

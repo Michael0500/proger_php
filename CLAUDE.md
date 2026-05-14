@@ -104,7 +104,7 @@ All DB queries must include `company_id` scoping.
 2. Строки-транзакции (`amount IS NOT NULL`) → `nostro_entries` (ls=L, section=NRE, source=FCC12, company_id=1).
 3. Строки-балансы (`opening_bal`/`closing_bal`) → `nostro_balance` (ls_type=L, section=NRE, source=FCC12).
 4. Счёт находится через `accounts.name = git_no_stro_extract_custom.cbr_cc_no` (company_id=1).
-5. В `nostro_balance`/`nostro_entries` проставляются `extract_no` и `line_no` — трассировка до исходной строки.
+5. В `nostro_balance`/`nostro_entries` проставляются `extract_no`, `line_no` и `branch_code` — трассировка до исходной строки и филиала.
 6. После каждого `batchInsert` создаётся batch-аудит: `nostro_entry_audit` (`action=create`) для транзакций и `nostro_balance_audit` (`action=import`) для балансов, `user_id=0`, `reason='Импорт FCC12'`.
 7. `tds_status.is_merged := true`, исходные строки `git_no_stro_extract_custom` удаляются. Commit.
 

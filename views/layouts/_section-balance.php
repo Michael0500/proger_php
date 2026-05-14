@@ -266,6 +266,7 @@
                         <div>
                             <label class="filter-label">Валюта *</label>
                             <select class="filter-input" v-model="editingBalance.currency" style="width:100%">
+                                <option value="">— выберите —</option>
                                 <option v-for="c in dictCurrencies" :key="c.code" :value="c.code">{{ c.code }}</option>
                             </select>
                         </div>

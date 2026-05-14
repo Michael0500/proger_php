@@ -361,6 +361,7 @@
                     <div class="col-md-3">
                         <label class="form-label-sm">Валюта <span class="required-star">*</span></label>
                         <select class="form-control-sm-custom" v-model="editingEntry.currency">
+                            <option value="">— выберите —</option>
                             <option v-for="c in dictCurrencies" :key="c.code" :value="c.code">{{ c.code }}</option>
                         </select>
                     </div>

@@ -17,7 +17,7 @@ use yii\helpers\Console;
  *   3. Из gitb_nostro_extract_custom выбираем строки с extract_no = tds_status.fcc_extract_no.
  *      - строка-баланс (opening_bal/closing_bal заданы, amount пустая) → nostro_balance
  *      - строка-транзакция (amount задана) → nostro_entries
- *      При этом в обе таблицы пишем extract_no и line_no.
+ *      При этом в обе таблицы пишем extract_no, line_no и branch_code.
  *   4. tds_status.is_merged := true.
  *   5. Удаляем строки из gitb_nostro_extract_custom с этим extract_no.
  *   6. Commit.
@@ -34,7 +34,7 @@ class FccMergeController extends Controller
 
     /** Сколько строк-источников тянуть за один SELECT. */
     const FETCH_CHUNK  = 5000;
-    /** Сколько строк копить перед batchInsert. 17 колонок × 1000 = 17000 параметров (< 65535). */
+    /** Сколько строк копить перед batchInsert. 18 колонок × 1000 = 18000 параметров (< 65535). */
     const INSERT_CHUNK = 1000;
 
     /** --keep-source: не удалять строки из gitb_nostro_extract_custom после обработки */
@@ -141,13 +141,13 @@ class FccMergeController extends Controller
             'account_id', 'company_id', 'ls', 'dc', 'amount', 'currency',
             'value_date', 'post_date', 'instruction_id', 'end_to_end_id',
             'transaction_id', 'source', 'match_status', 'extract_no', 'line_no',
-            'created_at', 'updated_at',
+            'branch_code', 'created_at', 'updated_at',
         ];
         $balanceColumns = [
             'company_id', 'account_id', 'ls_type', 'currency', 'value_date',
             'opening_balance', 'opening_dc', 'closing_balance', 'closing_dc',
             'section', 'source', 'status', 'extract_no', 'line_no',
-            'created_at', 'updated_at',
+            'branch_code', 'created_at', 'updated_at',
         ];
 
         // Кэш account_id по cbr_cc_no (accounts.name) — чтобы не искать в цикле.
@@ -256,6 +256,7 @@ class FccMergeController extends Controller
                         'U',
                         $r['extract_no'],
                         $r['line_no'],
+                        $r['branch_code'] ?? null,
                         $now,
                         $now,
                     ];
@@ -278,6 +279,7 @@ class FccMergeController extends Controller
                         'normal',
                         $r['extract_no'],
                         $r['line_no'],
+                        $r['branch_code'] ?? null,
                         $now,
                         $now,
                     ];
@@ -314,7 +316,7 @@ class FccMergeController extends Controller
             "SELECT id, account_id, company_id, ls, dc, amount, currency,
                     value_date, post_date, instruction_id, end_to_end_id,
                     transaction_id, message_id, other_id, comment, source,
-                    match_status, match_id, extract_no, line_no, created_at, updated_at
+                    match_status, match_id, extract_no, line_no, branch_code, created_at, updated_at
                FROM {{%nostro_entries}}
               WHERE id > :last_id
                 AND source = :source
@@ -370,7 +372,7 @@ class FccMergeController extends Controller
         $rows = Yii::$app->db->createCommand(
             "SELECT id, company_id, account_id, ls_type, statement_number, currency,
                     value_date, opening_balance, opening_dc, closing_balance, closing_dc,
-                    section, source, status, comment, extract_no, line_no, created_at, updated_at
+                    section, source, status, comment, extract_no, line_no, branch_code, created_at, updated_at
                FROM {{%nostro_balance}}
               WHERE id > :last_id
                 AND source = :source
