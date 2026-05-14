@@ -873,6 +873,56 @@ class ArchiveController extends BaseController
 
     private function findEntryAuditsForArchive(int $entryId): array
     {
+        $auditsById = [];
+        $visitedEntryIds = [];
+        $restoredEntryIds = [];
+        $queue = [$entryId];
+
+        while (!empty($queue)) {
+            $currentEntryId = (int)array_shift($queue);
+            if ($currentEntryId <= 0 || isset($visitedEntryIds[$currentEntryId])) {
+                continue;
+            }
+            $visitedEntryIds[$currentEntryId] = true;
+
+            foreach ($this->findAuditsByEntryId($currentEntryId) as $audit) {
+                $auditId = (int)$audit['id'];
+                $auditsById[$auditId] = $audit;
+
+                if (($audit['action'] ?? '') !== NostroEntryAudit::ACTION_RESTORE) {
+                    continue;
+                }
+
+                $oldValues = !empty($audit['old_values']) ? json_decode($audit['old_values'], true) : null;
+                if (is_array($oldValues) && !empty($oldValues['original_id'])) {
+                    $restoredEntryIds[$currentEntryId] = true;
+                    $queue[] = (int)$oldValues['original_id'];
+                }
+            }
+        }
+
+        $audits = array_values($auditsById);
+        if (!empty($restoredEntryIds)) {
+            $audits = array_values(array_filter($audits, function ($audit) use ($restoredEntryIds) {
+                $auditEntryId = (int)($audit['entry_id'] ?? 0);
+                return !(($audit['action'] ?? '') === NostroEntryAudit::ACTION_CREATE
+                    && isset($restoredEntryIds[$auditEntryId]));
+            }));
+        }
+
+        usort($audits, function ($a, $b) {
+            $dateCmp = strcmp((string)$a['created_at'], (string)$b['created_at']);
+            if ($dateCmp !== 0) {
+                return $dateCmp;
+            }
+            return (int)$a['id'] <=> (int)$b['id'];
+        });
+
+        return $audits;
+    }
+
+    private function findAuditsByEntryId(int $entryId): array
+    {
         return Yii::$app->db->createCommand(
             "SELECT *
                FROM {{%nostro_entry_audit}}
