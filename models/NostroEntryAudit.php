@@ -29,11 +29,25 @@ class NostroEntryAudit extends ActiveRecord
     const ACTION_ARCHIVE = 'archive';
     const ACTION_RESTORE = 'restore';
 
+    /**
+     * Возвращает имя таблицы аудита операций выверки.
+     *
+     * @return string Имя таблицы `nostro_entry_audit` с учётом префикса Yii.
+     */
     public static function tableName(): string
     {
         return '{{%nostro_entry_audit}}';
     }
 
+    /**
+     * Описывает правила валидации события аудита.
+     *
+     * Аудит допускает `entry_id = null` для исторических или технических
+     * событий, а значения изменений хранятся JSON-строками без FK на активную
+     * таблицу, чтобы история переживала архивирование и удаление.
+     *
+     * @return array Правила Yii Validator.
+     */
     public function rules(): array
     {
         return [
@@ -47,6 +61,11 @@ class NostroEntryAudit extends ActiveRecord
         ];
     }
 
+    /**
+     * Возвращает подписи полей аудита.
+     *
+     * @return array Массив `attribute => label`.
+     */
     public function attributeLabels(): array
     {
         return [
@@ -64,7 +83,12 @@ class NostroEntryAudit extends ActiveRecord
     }
 
     /**
-     * Связь с записью в nostro_entries (может быть null, если запись удалена).
+     * Возвращает связь с активной записью выверки.
+     *
+     * Связь может не найти строку, если запись уже удалена или перенесена
+     * в архив; это ожидаемое состояние для исторического аудита.
+     *
+     * @return \yii\db\ActiveQuery Запрос связи с `NostroEntry`.
      */
     public function getEntry(): \yii\db\ActiveQuery
     {
@@ -72,7 +96,9 @@ class NostroEntryAudit extends ActiveRecord
     }
 
     /**
-     * Связь с архивной записью (для action=archive).
+     * Возвращает связь с архивной копией для события `archive`.
+     *
+     * @return \yii\db\ActiveQuery Запрос связи с `NostroEntryArchive`.
      */
     public function getArchivedEntry(): \yii\db\ActiveQuery
     {
@@ -80,7 +106,11 @@ class NostroEntryAudit extends ActiveRecord
     }
 
     /**
-     * Записать аудит-событие.
+     * Записывает событие аудита операции выверки.
+     *
+     * Метод используется хуками модели и batch-процессами архива/импорта.
+     * Старые и новые значения кодируются в JSON без дополнительной валидации,
+     * поэтому вызывающий код должен передавать уже подготовленные снимки.
      *
      * @param int|null $entryId ID записи (из nostro_entries или original_id из архива)
      * @param string $action Действие: create|update|delete|archive|restore
@@ -89,6 +119,7 @@ class NostroEntryAudit extends ActiveRecord
      * @param string|null $changedField Какое поле изменилось
      * @param int|null $archivedId ID архивной записи (для action=archive)
      * @param string|null $reason Причина изменения
+     * @return void
      */
     public static function log(
         ?int $entryId,
@@ -112,7 +143,7 @@ class NostroEntryAudit extends ActiveRecord
     }
 
     /**
-     * Получить историю изменений для записи (включая архив).
+     * Возвращает историю изменений по идентификатору исходной записи.
      *
      * @param int $entryId ID записи (из nostro_entries или original_id из архива)
      * @return self[]
@@ -126,7 +157,12 @@ class NostroEntryAudit extends ActiveRecord
     }
 
     /**
-     * Преобразование в API-формат.
+     * Преобразует событие аудита в структуру JSON API.
+     *
+     * JSON-снимки `old_values` и `new_values` декодируются обратно в массивы,
+     * чтобы фронтенд мог строить историю изменения полей.
+     *
+     * @return array Сериализованное событие аудита.
      */
     public function toApiArray(): array
     {

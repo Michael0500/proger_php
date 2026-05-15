@@ -7,14 +7,32 @@ use yii\web\NotFoundHttpException;
 use app\models\Account;
 use app\models\AccountPool;
 
+/**
+ * Контроллер управления ностро-счетами.
+ *
+ * Предоставляет standalone-страницу `/accounts` и JSON API для CRUD счетов
+ * текущей компании. Создание счёта дополнительно инициирует начальный баланс
+ * через хук модели `Account`.
+ */
 class AccountController extends BaseController
 {
+    /**
+     * Отключает CSRF для JSON API счетов.
+     *
+     * @param \yii\base\Action $action Запускаемое действие.
+     * @return bool Можно ли продолжать выполнение action.
+     */
     public function beforeAction($action): bool
     {
         $this->enableCsrfValidation = false;
         return parent::beforeAction($action);
     }
 
+    /**
+     * Возвращает ID компании текущего пользователя.
+     *
+     * @return int|null ID компании или `null`.
+     */
     private function cid(): ?int
     {
         $u = Yii::$app->user->identity;
@@ -22,8 +40,12 @@ class AccountController extends BaseController
     }
 
     /**
-     * GET /accounts
-     * Standalone-страница управления счетами
+     * Рендерит standalone-страницу управления счетами.
+     *
+     * GET `/accounts`. Передаёт во Vue список счетов и ностро-банков
+     * текущей компании.
+     *
+     * @return string|\yii\web\Response HTML-страница или redirect на выбор компании.
      */
     public function actionIndex()
     {
@@ -72,7 +94,12 @@ class AccountController extends BaseController
     // ── JSON API ─────────────────────────────────────────────────
 
     /**
-     * GET /account/list
+     * Возвращает список счетов текущей компании.
+     *
+     * GET `/account/list`, опциональный `pool_id` ограничивает список
+     * одним ностро-банком.
+     *
+     * @return array JSON со списком счетов.
      */
     public function actionList(): array
     {
@@ -107,7 +134,12 @@ class AccountController extends BaseController
     }
 
     /**
-     * POST /account/create
+     * Создаёт ностро-счёт текущей компании.
+     *
+     * POST `/account/create`. Валидирует реквизиты модели, а после успешного
+     * сохранения модель создаёт начальный нулевой баланс.
+     *
+     * @return array JSON с созданным счётом или ошибкой.
      */
     public function actionCreate(): array
     {
@@ -159,7 +191,11 @@ class AccountController extends BaseController
     }
 
     /**
-     * POST /account/update
+     * Обновляет ностро-счёт текущей компании.
+     *
+     * POST `/account/update`.
+     *
+     * @return array JSON с обновлённым счётом или ошибкой.
      */
     public function actionUpdate(): array
     {
@@ -212,7 +248,11 @@ class AccountController extends BaseController
     }
 
     /**
-     * POST /account/delete
+     * Удаляет ностро-счёт текущей компании.
+     *
+     * POST `/account/delete`.
+     *
+     * @return array JSON-результат удаления.
      */
     public function actionDelete(): array
     {

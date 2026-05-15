@@ -17,20 +17,47 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
+/**
+ * Контроллер Reconciliation Report (раккорд) для раздела NRE.
+ *
+ * Формирует отчёт вручную по выбранной категории или ностро-банку. Одна
+ * карточка отчёта соответствует одному `AccountPool` и агрегирует все его
+ * Ledger/Statement-счета. Экспорт поддерживает XLSX, PDF и ZIP для нескольких
+ * ностро-банков.
+ */
 class ReconReportController extends BaseController
 {
+    /**
+     * Отключает CSRF для JSON API генерации отчёта.
+     *
+     * @param \yii\base\Action $action Запускаемое действие.
+     * @return bool Можно ли продолжать выполнение action.
+     */
     public function beforeAction($action): bool
     {
         $this->enableCsrfValidation = false;
         return parent::beforeAction($action);
     }
 
+    /**
+     * Возвращает ID компании текущего пользователя.
+     *
+     * @return int|null ID компании или `null`.
+     */
     private function cid()
     {
         $u = Yii::$app->user->identity;
         return ($u && $u->company_id) ? (int)$u->company_id : null;
     }
 
+    /**
+     * Рендерит страницу Reconciliation Report.
+     *
+     * GET `/recon-report`. Передаёт во Vue списки категорий и ностро-банков
+     * текущей компании.
+     *
+     * @return string|\yii\web\Response HTML-страница или redirect на выбор компании.
+     */
     public function actionIndex()
     {
         $cid = $this->cid();
@@ -61,6 +88,14 @@ class ReconReportController extends BaseController
         ]);
     }
 
+    /**
+     * Генерирует данные отчёта без файлового экспорта.
+     *
+     * POST `/recon-report/generate`. Возвращает одну или несколько карточек
+     * отчёта по выбранной категории/ностро-банку и параметрам даты.
+     *
+     * @return array JSON-результат генерации.
+     */
     public function actionGenerate()
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -89,6 +124,17 @@ class ReconReportController extends BaseController
         }
     }
 
+    /**
+     * Экспортирует отчёт в XLSX или PDF.
+     *
+     * GET `/recon-report/export?format=xlsx|pdf`. Для одного отчёта возвращает
+     * файл напрямую, для нескольких создаёт ZIP. Временные файлы удаляются
+     * после отправки ответа.
+     *
+     * @return \yii\web\Response Ответ отправки файла.
+     * @throws \yii\web\BadRequestHttpException При неверных параметрах.
+     * @throws \yii\web\NotFoundHttpException Если отчёты не найдены.
+     */
     public function actionExport()
     {
         $cid = $this->cid();
@@ -123,6 +169,14 @@ class ReconReportController extends BaseController
         return $this->sendTempFile($zipPath, $zipName, 'application/zip');
     }
 
+    /**
+     * Возвращает счета для выпадающих списков отчёта.
+     *
+     * GET `/recon-report/accounts`, опциональный `pool_id` ограничивает
+     * результат одним ностро-банком.
+     *
+     * @return array JSON со счетами текущей компании.
+     */
     public function actionAccounts()
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -151,6 +205,17 @@ class ReconReportController extends BaseController
         ];
     }
 
+    /**
+     * Читает и валидирует параметры формирования отчёта.
+     *
+     * Допускается выбор либо категории, либо ностро-банка. Если указан период,
+     * `date_recon` автоматически берётся как `date_to`; иначе требуется
+     * отдельная дата раккорда.
+     *
+     * @param array $source POST/GET параметры запроса.
+     * @return array Нормализованные параметры отчёта.
+     * @throws \InvalidArgumentException При некорректном выборе или датах.
+     */
     private function readReportParams(array $source): array
     {
         $poolId = (int)($source['pool_id'] ?? 0);
@@ -186,6 +251,14 @@ class ReconReportController extends BaseController
         ];
     }
 
+    /**
+     * Проверяет дату в формате `Y-m-d`.
+     *
+     * @param string $date Проверяемая дата.
+     * @param string $message Сообщение исключения при ошибке.
+     * @return void
+     * @throws \InvalidArgumentException Если формат даты некорректен.
+     */
     private function assertDate(string $date, string $message): void
     {
         $dt = \DateTime::createFromFormat('Y-m-d', $date);
@@ -195,7 +268,15 @@ class ReconReportController extends BaseController
     }
 
     /**
-     * @return Account[]
+     * Разрешает выбранную категорию или ностро-банк в список счетов.
+     *
+     * Категория разворачивается в ностро-банки, а ностро-банк — во все счета
+     * `accounts.pool_id`. Все счета ограничены текущей компанией.
+     *
+     * @param int $poolId ID ностро-банка или 0.
+     * @param int $categoryId ID категории или 0.
+     * @param int $cid ID компании.
+     * @return Account[] Счета, участвующие в отчёте.
      */
     private function resolveAccounts(int $poolId, int $categoryId, int $cid): array
     {
@@ -235,7 +316,14 @@ class ReconReportController extends BaseController
     }
 
     /**
-     * @return Account[]
+     * Возвращает один счёт текущей компании.
+     *
+     * Метод оставлен как вспомогательный контракт для возможного режима
+     * отчёта по отдельному счёту.
+     *
+     * @param int $accountId ID счёта.
+     * @param int $cid ID компании.
+     * @return Account[] Массив из одного счёта или пустой массив.
      */
     private function resolveSingleAccount(int $accountId, int $cid): array
     {
@@ -243,6 +331,14 @@ class ReconReportController extends BaseController
         return $account ? [$account] : [];
     }
 
+    /**
+     * Возвращает тип и подпись уровня отчёта.
+     *
+     * @param int $poolId ID ностро-банка или 0.
+     * @param int $categoryId ID категории или 0.
+     * @param int $cid ID компании.
+     * @return array Структура `type` и `label`.
+     */
     private function resolveReportLevel(int $poolId, int $categoryId, int $cid): array
     {
         if ($poolId > 0) {
@@ -254,6 +350,18 @@ class ReconReportController extends BaseController
         return ['type' => 'category', 'label' => $category ? $category->name : ''];
     }
 
+    /**
+     * Строит набор отчётов по выбранной области.
+     *
+     * Для категории создаёт отдельный отчёт по каждому ностро-банку. Параметр
+     * `onlyPoolId` используется экспортом одной карточки из уже выбранной области.
+     *
+     * @param array $params Нормализованные параметры отчёта.
+     * @param int $cid ID компании.
+     * @param string $generatedAt Timestamp формирования.
+     * @param int $onlyPoolId Ограничение одним ностро-банком для экспорта.
+     * @return array Список структур отчёта.
+     */
     private function buildReports(array $params, int $cid, string $generatedAt, int $onlyPoolId = 0): array
     {
         $accounts = $this->resolveAccounts($params['pool_id'], $params['category_id'], $cid);
@@ -270,6 +378,13 @@ class ReconReportController extends BaseController
         return $reports;
     }
 
+    /**
+     * Группирует счета по ностро-банкам.
+     *
+     * @param Account[] $accounts Счета выбранной области.
+     * @param int $cid ID компании.
+     * @return array Карта `pool_id => ['pool' => AccountPool, 'accounts' => Account[]]`.
+     */
     private function groupAccountsByPool(array $accounts, int $cid): array
     {
         $groups = [];
@@ -296,6 +411,20 @@ class ReconReportController extends BaseController
         return $groups;
     }
 
+    /**
+     * Формирует данные одной карточки Reconciliation Report.
+     *
+     * Учитывает только несквитованные записи без `match_id` и со статусом `U`.
+     * В режиме даты берутся предыдущий день и дата раккорда на момент
+     * формирования; в режиме периода берётся диапазон `date_from..date_to`.
+     *
+     * @param AccountPool $pool Ностро-банк карточки.
+     * @param Account[] $accounts Счета ностро-банка.
+     * @param array $params Параметры отчёта.
+     * @param int $cid ID компании.
+     * @param string $generatedAt Timestamp формирования.
+     * @return array Данные отчёта для UI и экспорта.
+     */
     private function buildReportData(AccountPool $pool, array $accounts, array $params, int $cid, string $generatedAt): array
     {
         $dateRecon = $params['date_recon'];
@@ -423,6 +552,18 @@ class ReconReportController extends BaseController
         ];
     }
 
+    /**
+     * Суммирует последние Closing Balance по счетам на дату отчёта.
+     *
+     * Для каждого счёта берётся последняя запись `nostro_balance` с датой
+     * не позже указанной, строго в разделе NRE и нужном L/S типе.
+     *
+     * @param int[] $accountIds ID счетов.
+     * @param int $cid ID компании.
+     * @param string $lsType Тип баланса `L` или `S`.
+     * @param string $date Дата отчёта `Y-m-d`.
+     * @return float|null Сумма или `null`, если балансы не найдены.
+     */
     private function sumClosingBalance(array $accountIds, int $cid, string $lsType, string $date): ?float
     {
         if (empty($accountIds)) {
@@ -453,11 +594,24 @@ class ReconReportController extends BaseController
         return empty($seen) ? null : $sum;
     }
 
+    /**
+     * Преобразует баланс и D/C-признак в знаковое значение.
+     *
+     * @param float $amount Абсолютная сумма.
+     * @param string $dc Признак `D` или `C`.
+     * @return float Отрицательное значение для Debit, положительное для Credit.
+     */
     private function signedBalance(float $amount, string $dc): float
     {
         return $dc === NostroBalance::DC_DEBIT ? -abs($amount) : abs($amount);
     }
 
+    /**
+     * Суммирует поле `amount` в строках детализации отчёта.
+     *
+     * @param array $rows Строки outstanding items.
+     * @return float Сумма значений `amount`.
+     */
     private function sumAmount(array $rows): float
     {
         return array_sum(array_map(function ($row) {
@@ -465,6 +619,12 @@ class ReconReportController extends BaseController
         }, $rows));
     }
 
+    /**
+     * Определяет общую валюту группы счетов.
+     *
+     * @param Account[] $accounts Счета отчёта.
+     * @return string Код валюты, `MULTI` при разных валютах или пустая строка.
+     */
     private function commonCurrency(array $accounts): string
     {
         $currencies = [];
@@ -480,6 +640,12 @@ class ReconReportController extends BaseController
         return count($currencies) > 1 ? 'MULTI' : '';
     }
 
+    /**
+     * Создаёт временный XLSX-файл отчёта.
+     *
+     * @param array $report Данные одной карточки отчёта.
+     * @return string Абсолютный путь к временному XLSX-файлу.
+     */
     private function createXlsxFile(array $report): string
     {
         $spreadsheet = new Spreadsheet();
@@ -536,6 +702,12 @@ class ReconReportController extends BaseController
         return $path;
     }
 
+    /**
+     * Настраивает базовые размеры листа XLSX.
+     *
+     * @param mixed $sheet Worksheet PhpSpreadsheet.
+     * @return void
+     */
     private function prepareReconSheet($sheet): void
     {
         $widths = [
@@ -556,6 +728,15 @@ class ReconReportController extends BaseController
         $sheet->getDefaultRowDimension()->setRowHeight(20);
     }
 
+    /**
+     * Записывает простую двухколоночную секцию сводки в XLSX.
+     *
+     * @param mixed $sheet Worksheet PhpSpreadsheet.
+     * @param int $row Стартовая строка.
+     * @param string $title Заголовок секции.
+     * @param array $rows Строки `[label, amount]`.
+     * @return int Следующая свободная строка.
+     */
     private function writeSummarySection($sheet, int $row, string $title, array $rows): int
     {
         $sheet->setCellValue("A{$row}", $title);
@@ -572,6 +753,14 @@ class ReconReportController extends BaseController
         return $row;
     }
 
+    /**
+     * Записывает секцию Reconciliation Summary в XLSX.
+     *
+     * @param mixed $sheet Worksheet PhpSpreadsheet.
+     * @param int $row Стартовая строка.
+     * @param array $report Данные отчёта.
+     * @return int Следующая свободная строка.
+     */
     private function writeReconSummarySection($sheet, int $row, array $report): int
     {
         $sheet->setCellValue("A{$row}", 'Reconciliation Summary');
@@ -601,6 +790,16 @@ class ReconReportController extends BaseController
         return $row;
     }
 
+    /**
+     * Записывает детальную секцию outstanding items в XLSX.
+     *
+     * @param mixed $sheet Worksheet PhpSpreadsheet.
+     * @param int $row Стартовая строка.
+     * @param string $title Заголовок секции.
+     * @param array $rows Строки операций.
+     * @param float $net Итог секции.
+     * @return int Следующая свободная строка.
+     */
     private function writeDetailSection($sheet, int $row, string $title, array $rows, float $net): int
     {
         $sheet->setCellValue("A{$row}", $title);
@@ -631,6 +830,15 @@ class ReconReportController extends BaseController
         return $row + 1;
     }
 
+    /**
+     * Записывает итоговую строку суммы в XLSX.
+     *
+     * @param mixed $sheet Worksheet PhpSpreadsheet.
+     * @param int $row Номер строки.
+     * @param string $label Подпись итога.
+     * @param float $amount Сумма.
+     * @return int Следующая строка.
+     */
     private function writeNetAmountRow($sheet, int $row, string $label, float $amount): int
     {
         $sheet->setCellValue("G{$row}", $label);
@@ -640,6 +848,14 @@ class ReconReportController extends BaseController
         return $row + 1;
     }
 
+    /**
+     * Применяет стиль заголовка группы в XLSX.
+     *
+     * @param mixed $sheet Worksheet PhpSpreadsheet.
+     * @param int $row Номер строки заголовка.
+     * @param string $color RGB-цвет заливки без `#`.
+     * @return void
+     */
     private function styleGroupHeader($sheet, int $row, string $color): void
     {
         $sheet->getStyle("A{$row}:H{$row}")->getFont()->setBold(true)->setSize(12);
@@ -647,6 +863,15 @@ class ReconReportController extends BaseController
         $sheet->getStyle("A{$row}:H{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
     }
 
+    /**
+     * Применяет рамки и выравнивание к блоку XLSX.
+     *
+     * @param mixed $sheet Worksheet PhpSpreadsheet.
+     * @param int $startRow Первая строка блока.
+     * @param int $endRow Последняя строка блока.
+     * @param string $lastCol Последняя колонка блока.
+     * @return void
+     */
     private function styleBlock($sheet, int $startRow, int $endRow, string $lastCol = 'H'): void
     {
         if ($endRow < $startRow) {
@@ -661,6 +886,12 @@ class ReconReportController extends BaseController
         $sheet->getStyle("H{$startRow}:H{$endRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
     }
 
+    /**
+     * Создаёт временный PDF-файл отчёта через mPDF.
+     *
+     * @param array $report Данные одной карточки отчёта.
+     * @return string Абсолютный путь к временному PDF-файлу.
+     */
     private function createPdfFile(array $report): string
     {
         $tempDir = Yii::getAlias('@runtime/mpdf');
@@ -680,6 +911,17 @@ class ReconReportController extends BaseController
         return $path;
     }
 
+    /**
+     * Создаёт ZIP-архив с несколькими отчётами.
+     *
+     * Временные XLSX/PDF файлы отдельных отчётов удаляются после добавления
+     * в архив.
+     *
+     * @param array $reports Список отчётов.
+     * @param string $format Формат вложений `xlsx` или `pdf`.
+     * @return string Абсолютный путь к ZIP-файлу.
+     * @throws \RuntimeException Если ZIP создать не удалось.
+     */
     private function createZipFile(array $reports, string $format): string
     {
         $zipPath = $this->tempPath('zip');
@@ -707,6 +949,14 @@ class ReconReportController extends BaseController
         return $zipPath;
     }
 
+    /**
+     * Возвращает уникальное имя файла внутри ZIP.
+     *
+     * @param string $name Базовое имя файла.
+     * @param array $usedNames Уже занятые имена, обновляется по ссылке.
+     * @param string $fallbackName Дополнительная часть имени при конфликте.
+     * @return string Уникальное имя внутри архива.
+     */
     private function uniqueZipName(string $name, array &$usedNames, string $fallbackName): string
     {
         if (!isset($usedNames[$name])) {
@@ -727,6 +977,12 @@ class ReconReportController extends BaseController
         return $candidate;
     }
 
+    /**
+     * Возвращает секции детализации для PDF-шаблона.
+     *
+     * @param array $report Данные отчёта.
+     * @return array Список секций outstanding items.
+     */
     private function detailSections(array $report): array
     {
         return [
@@ -737,6 +993,12 @@ class ReconReportController extends BaseController
         ];
     }
 
+    /**
+     * Возвращает метаданные отчёта для XLSX/PDF.
+     *
+     * @param array $report Данные отчёта.
+     * @return array Строки `[label, value]`.
+     */
     private function metaRows(array $report): array
     {
         $rows = [
@@ -755,17 +1017,36 @@ class ReconReportController extends BaseController
         return $rows;
     }
 
+    /**
+     * Формирует имя файла отчёта.
+     *
+     * @param array $report Данные отчёта.
+     * @param string $ext Расширение без точки.
+     * @return string Безопасное имя файла.
+     */
     private function reportFilename(array $report, string $ext): string
     {
         return 'ReconReport_' . $this->safeFilename($report['nostro_bank']) . '_' . $this->formatDate($report['date_recon']) . '.' . $ext;
     }
 
+    /**
+     * Очищает строку для использования в имени файла.
+     *
+     * @param string $name Исходная строка.
+     * @return string Безопасная строка имени файла.
+     */
     private function safeFilename(string $name): string
     {
         $name = preg_replace('/[\\\\\/:*?"<>|]+/u', '_', $name);
         return trim($name) ?: 'Report';
     }
 
+    /**
+     * Создаёт путь для временного файла экспорта.
+     *
+     * @param string $ext Расширение файла без точки.
+     * @return string Абсолютный путь в `runtime/recon-report`.
+     */
     private function tempPath(string $ext): string
     {
         $dir = Yii::getAlias('@runtime/recon-report');
@@ -775,6 +1056,14 @@ class ReconReportController extends BaseController
         return $dir . DIRECTORY_SEPARATOR . uniqid('recon_', true) . '.' . $ext;
     }
 
+    /**
+     * Отправляет временный файл пользователю и планирует его удаление.
+     *
+     * @param string $path Абсолютный путь к файлу.
+     * @param string $name Имя файла для скачивания.
+     * @param string $mimeType MIME-тип ответа.
+     * @return \yii\web\Response Ответ отправки файла.
+     */
     private function sendTempFile(string $path, string $name, string $mimeType)
     {
         Yii::$app->response->on(Response::EVENT_AFTER_SEND, function () use ($path) {
@@ -789,6 +1078,12 @@ class ReconReportController extends BaseController
         ]);
     }
 
+    /**
+     * Возвращает MIME-тип для формата экспорта.
+     *
+     * @param string $format `xlsx` или `pdf`.
+     * @return string MIME-тип файла.
+     */
     private function mimeType(string $format): string
     {
         return $format === 'pdf'
@@ -796,11 +1091,23 @@ class ReconReportController extends BaseController
             : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     }
 
+    /**
+     * Форматирует дату для отображения в отчёте и имени файла.
+     *
+     * @param string $date Дата в формате, понимаемом `strtotime`.
+     * @return string Дата `d.m.Y`.
+     */
     private function formatDate(string $date): string
     {
         return date('d.m.Y', strtotime($date));
     }
 
+    /**
+     * Форматирует дату и время для метаданных отчёта.
+     *
+     * @param string $dateTime Дата-время в формате, понимаемом `strtotime`.
+     * @return string Дата-время `d.m.Y H:i:s`.
+     */
     private function formatDateTime(string $dateTime): string
     {
         return date('d.m.Y H:i:s', strtotime($dateTime));

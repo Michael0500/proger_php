@@ -13,6 +13,13 @@ use yii\db\Migration;
  */
 class m260225115036_create_account_pool_filters_table extends Migration
 {
+    /**
+     * Применяет миграцию `m260225115036_create_account_pool_filters_table`.
+     *
+     * Создаёт или изменяет структуру БД согласно назначению файла миграции.
+     *
+     * @return void
+     */
     public function safeUp()
     {
         $this->createTable('{{%account_pool_filters}}', [
@@ -46,6 +53,13 @@ class m260225115036_create_account_pool_filters_table extends Migration
         $this->dropColumn('{{%account_pools}}', 'filter_criteria');
     }
 
+    /**
+     * Откатывает миграцию `m260225115036_create_account_pool_filters_table`.
+     *
+     * Возвращает структуру БД к состоянию до применения этой миграции, если откат поддерживается.
+     *
+     * @return void
+     */
     public function safeDown()
     {
         $this->dropForeignKey('fk_pool_filters_pool_id', '{{%account_pool_filters}}');

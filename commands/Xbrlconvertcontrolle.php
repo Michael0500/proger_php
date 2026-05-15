@@ -104,6 +104,12 @@ class XbrlConvertController extends Controller
     /** Какие разделы фактически содержат данные (для заполнения sr_sved_purcb) */
     private array $sectionsHaveData = [];
 
+    /**
+     * Регистрирует CLI-опции конвертера XBRL-CSV.
+     *
+     * @param string $actionID ID action.
+     * @return array Список поддерживаемых опций.
+     */
     public function options($actionID)
     {
         return array_merge(parent::options($actionID), [
@@ -113,6 +119,14 @@ class XbrlConvertController extends Controller
         ]);
     }
 
+    /**
+     * Выполняет полный цикл конвертации XLSX в пакет XBRL-CSV.
+     *
+     * Открывает входной файл, строит реестр concept'ов, формирует CSV по
+     * разделам, служебную таблицу сведений, `mapping.json` и опциональный ZIP.
+     *
+     * @return int Код завершения консольной команды.
+     */
     public function actionRun(): int
     {
         try {
@@ -170,6 +184,11 @@ class XbrlConvertController extends Controller
      * Резолвит пути входа и выхода относительно корня Yii2-приложения.
      * Гарантирует существование выходного каталога.
      */
+    /**
+     * Вычисляет абсолютные пути входного XLSX и выходной директории.
+     *
+     * @return void
+     */
     private function resolvePaths(): void
     {
         $appRoot = \Yii::getAlias('@app');
@@ -178,6 +197,12 @@ class XbrlConvertController extends Controller
         FileHelper::createDirectory($this->output);
     }
 
+    /**
+     * Проверяет обязательные параметры и наличие входного файла.
+     *
+     * @return void
+     * @throws \InvalidArgumentException Если параметры или файл некорректны.
+     */
     private function validate(): void
     {
         if (!is_file($this->input)) {
@@ -213,6 +238,15 @@ class XbrlConvertController extends Controller
     // ПАРСИНГ ПРИЛ 1
     // =====================================================================
 
+    /**
+     * Парсит лист "Прил 1" и строит реестр concept'ов.
+     *
+     * Побочный эффект: заполняет `$registry` и `$roleUriBySection`.
+     *
+     * @param Spreadsheet $book Загруженная книга XLSX.
+     * @return void
+     * @throws \RuntimeException Если лист "Прил 1" отсутствует.
+     */
     private function parsePril1(Spreadsheet $book): void
     {
         $sheet = $book->getSheetByName(self::SHEET_PRIL1);
@@ -261,6 +295,12 @@ class XbrlConvertController extends Controller
         }
     }
 
+    /**
+     * Извлекает номер раздела из названия формы/листа таксономии.
+     *
+     * @param string $form Текстовое название формы.
+     * @return int|null Номер раздела или `null`.
+     */
     private function extractSectionNumber(string $form): ?int
     {
         if (preg_match('/Раздел\s+(\d+)/u', $form, $m)) {
@@ -273,6 +313,13 @@ class XbrlConvertController extends Controller
      * Имя колонки в CSV. Правило (по эталону):
      *   - dim-int:* (открытые оси)            → "dim_int_X" (просто :→_, -→_)
      *   - всё остальное (concept-показатели)  → "purcb_dic_X_dimGrp_1_periodGrp_1"
+     */
+    /**
+     * Строит идентификатор колонки CSV по QName и префиксу.
+     *
+     * @param string $qname QName concept'а из шаблона.
+     * @param string $prefix Префикс раздела.
+     * @return string ID колонки в CSV.
      */
     private function buildColumnId(string $qname, string $prefix): string
     {
@@ -287,6 +334,12 @@ class XbrlConvertController extends Controller
      * Преобразует QName "purcb-dic:Asst_Amnt" в "xbrl:concept" формат "purcb-dic_Asst_Amnt"
      * (двоеточие → подчёркивание, дефис в префиксе остаётся).
      */
+    /**
+     * Преобразует QName в ссылку concept для mapping.json.
+     *
+     * @param string $qname QName из таксономии.
+     * @return string Строка concept.
+     */
     private function qnameToConcept(string $qname): string
     {
         return str_replace(':', '_', $qname);
@@ -294,6 +347,12 @@ class XbrlConvertController extends Controller
 
     /**
      * Преобразует "dim-int:C_CdTaxis" в "dim-int_C_CdTaxis" (для поля dimension).
+     */
+    /**
+     * Преобразует QName измерения в идентификатор dimension.
+     *
+     * @param string $qname QName измерения.
+     * @return string Строка dimension.
      */
     private function qnameToDimension(string $qname): string
     {
@@ -307,6 +366,17 @@ class XbrlConvertController extends Controller
     /**
      * Возвращает структуру для tables[] в mapping.json, или null если раздел пустой
      * (по спецификации пустые таблицы не включаются в пакет).
+     */
+    /**
+     * Обрабатывает один раздел XLSX и создаёт CSV-файл.
+     *
+     * Если лист или данные раздела отсутствуют, возвращает `null` и отмечает
+     * раздел как не содержащий данных для `sr_sved_purcb.csv`.
+     *
+     * @param Spreadsheet $book Загруженная книга XLSX.
+     * @param int $sectionNo Номер раздела 1..11.
+     * @param string $pkgDir Директория пакета.
+     * @return array|null Метаданные таблицы для mapping.json или `null`.
      */
     private function processSection(Spreadsheet $book, int $sectionNo, string $pkgDir): ?array
     {
@@ -364,6 +434,12 @@ class XbrlConvertController extends Controller
      * Сортирует реестр: dim-int (открытые оси) в начале, в порядке их появления.
      * По спецификации (§2.2.5.1 и §2.3.2) колонки открытых осей должны идти первыми.
      */
+    /**
+     * Сортирует реестр колонок в порядке исходного шаблона.
+     *
+     * @param array $registry Реестр колонок раздела.
+     * @return array Отсортированный реестр.
+     */
     private function orderRegistry(array $registry): array
     {
         $dims = [];
@@ -375,6 +451,13 @@ class XbrlConvertController extends Controller
         return $dims + $facts;
     }
 
+    /**
+     * Находит лист книги, соответствующий разделу.
+     *
+     * @param Spreadsheet $book Загруженная книга.
+     * @param int $sectionNo Номер раздела.
+     * @return Worksheet|null Лист раздела или `null`.
+     */
     private function findSectionSheet(Spreadsheet $book, int $sectionNo): ?Worksheet
     {
         foreach (["Раздел {$sectionNo}.", "Раздел {$sectionNo}"] as $name) {
@@ -388,6 +471,13 @@ class XbrlConvertController extends Controller
      * Из заголовка строки 4: "Идентификатор клиента (dim-int:C_CdTaxis)" → ['B' => 'dim_int_C_CdTaxis']
      *
      * @return array<string,string>  excelCol → columnId
+     */
+    /**
+     * Сопоставляет колонки листа с concept'ами реестра.
+     *
+     * @param Worksheet $sheet Лист раздела.
+     * @param array $registry Реестр колонок раздела.
+     * @return array Карта `excelColumn => columnId`.
      */
     private function mapSheetColumns(Worksheet $sheet, array $registry): array
     {
@@ -417,6 +507,16 @@ class XbrlConvertController extends Controller
 
     /**
      * Возвращает массив строк, где каждая — [columnId => нормализованное_значение].
+     */
+    /**
+     * Извлекает строки данных раздела из XLSX.
+     *
+     * Пустые строки пропускаются, значения нормализуются по метаданным concept'а.
+     *
+     * @param Worksheet $sheet Лист раздела.
+     * @param array $excelToColumnId Карта Excel-колонок в ID CSV.
+     * @param array $registry Реестр колонок раздела.
+     * @return array Список строк CSV.
      */
     private function extractDataRows(Worksheet $sheet, array $excelToColumnId, array $registry): array
     {
@@ -488,6 +588,14 @@ class XbrlConvertController extends Controller
         return $rows;
     }
 
+    /**
+     * Читает значение ячейки Excel с учётом calculated/formatted value.
+     *
+     * @param Worksheet $sheet Лист Excel.
+     * @param string $col Буква колонки.
+     * @param int $row Номер строки.
+     * @return mixed Значение ячейки.
+     */
     private function readCellValue(Worksheet $sheet, string $col, int $row)
     {
         $cell = $sheet->getCell($col . $row);
@@ -500,6 +608,16 @@ class XbrlConvertController extends Controller
 
     /**
      * Нормализация по itemType из Прил 1.
+     */
+    /**
+     * Нормализует значение ячейки для XBRL-CSV.
+     *
+     * Приводит даты, числа, boolean и строки к формату, ожидаемому правилами
+     * Банка России для CSV-пакета.
+     *
+     * @param mixed $value Исходное значение ячейки.
+     * @param array $meta Метаданные concept'а.
+     * @return string Нормализованное строковое значение.
      */
     private function normalizeValue($value, array $meta): string
     {
@@ -553,6 +671,15 @@ class XbrlConvertController extends Controller
      *   - обрамление кавычками — только если значение содержит разделитель или кавычку
      *   - пустые значения = две границы подряд
      */
+    /**
+     * Записывает CSV-файл раздела.
+     *
+     * @param string $path Путь к CSV.
+     * @param string[] $columnIds Колонки CSV.
+     * @param array $rows Строки данных.
+     * @param array $registry Реестр метаданных колонок.
+     * @return void
+     */
     private function writeCsv(string $path, array $columnIds, array $rows, array $registry): void
     {
         FileHelper::createDirectory(dirname($path));
@@ -575,6 +702,12 @@ class XbrlConvertController extends Controller
 
     /**
      * Экранирование значения для CSV (RFC 4180 + правила ЦБ §2.3.5).
+     */
+    /**
+     * Экранирует значение для CSV с выбранным разделителем.
+     *
+     * @param string $v Значение.
+     * @return string Экранированное CSV-значение.
      */
     private function csvEscape(string $v): string
     {
@@ -607,6 +740,12 @@ class XbrlConvertController extends Controller
      *
      * Колонки в реальном пакете ЦБ берутся из эталона: их состав фиксирован и
      * включает identifier/period поля. Здесь упрощённая версия по флагам разделов.
+     */
+    /**
+     * Формирует служебную таблицу `sr_sved_purcb.csv`.
+     *
+     * @param string $pkgDir Директория пакета.
+     * @return array Метаданные таблицы для mapping.json.
      */
     private function buildSvedTable(string $pkgDir): array
     {
@@ -687,6 +826,12 @@ class XbrlConvertController extends Controller
     /**
      * Строит массив columns[] для одной таблицы в mapping.json.
      */
+    /**
+     * Строит описание колонок таблицы для `mapping.json`.
+     *
+     * @param array $registry Реестр колонок.
+     * @return array Описание колонок.
+     */
     private function buildColumnsForMapping(array $registry): array
     {
         $columns = [];
@@ -713,6 +858,13 @@ class XbrlConvertController extends Controller
     /**
      * Строит описание колонки-показателя.
      */
+    /**
+     * Создаёт описание fact-колонки для `mapping.json`.
+     *
+     * @param string $columnId ID колонки CSV.
+     * @param array $meta Метаданные concept'а.
+     * @return array Описание колонки.
+     */
     private function buildFactColumn(string $columnId, array $meta): array
     {
         $itemType = $meta['itemType'];
@@ -735,6 +887,12 @@ class XbrlConvertController extends Controller
     /**
      * Строит блок aspect.type на основе itemType из Прил 1.
      * Соответствует наблюдаемым 7 комбинациям в эталоне.
+     */
+    /**
+     * Определяет aspect type для fact-колонки.
+     *
+     * @param string $itemType Тип item из таксономии.
+     * @return array Описание aspect type.
      */
     private function buildAspectType(string $itemType): array
     {
@@ -800,6 +958,12 @@ class XbrlConvertController extends Controller
     /**
      * Если в TYPED_DOMAINS нет записи — пытаемся угадать по соглашению Taxis→TypedName.
      */
+    /**
+     * Подбирает typedDomain для dimension.
+     *
+     * @param string $dimension Идентификатор dimension.
+     * @return string typedDomain из справочника или эвристики.
+     */
     private function guessTypedDomain(string $dimension): string
     {
         if (preg_match('/^(.+)Taxis$/', $dimension, $m)) {
@@ -810,6 +974,13 @@ class XbrlConvertController extends Controller
 
     /**
      * Пишет mapping.json в полном виде по разделу 2.2 Правил.
+     */
+    /**
+     * Записывает `mapping.json` пакета XBRL-CSV.
+     *
+     * @param string $pkgDir Директория пакета.
+     * @param array $tables Метаданные CSV-таблиц.
+     * @return void
      */
     private function writeMappingJson(string $pkgDir, array $tables): void
     {
@@ -856,6 +1027,11 @@ class XbrlConvertController extends Controller
     // ZIP
     // =====================================================================
 
+    /**
+     * Создаёт чистую директорию пакета.
+     *
+     * @return string Путь к директории пакета.
+     */
     private function preparePackageDir(): string
     {
         // Имя архива по §2.1: CSV_<ОГРН>_<ТочкаВхода>_<Запрос>_<Дата>
@@ -870,6 +1046,13 @@ class XbrlConvertController extends Controller
 
     /**
      * По §2.1: пакет собирается в один zip без вложенных папок (CSV + mapping.json).
+     */
+    /**
+     * Упаковывает директорию пакета в ZIP.
+     *
+     * @param string $pkgDir Директория пакета.
+     * @return string Путь к ZIP-файлу.
+     * @throws \RuntimeException Если архив создать не удалось.
      */
     private function zipPackage(string $pkgDir): string
     {
@@ -895,6 +1078,14 @@ class XbrlConvertController extends Controller
     // УТИЛИТЫ
     // =====================================================================
 
+    /**
+     * Возвращает строковое значение ячейки.
+     *
+     * @param Worksheet $sheet Лист Excel.
+     * @param string $col Буква колонки.
+     * @param int $row Номер строки.
+     * @return string Обрезанное строковое значение.
+     */
     private function cellString(Worksheet $sheet, string $col, int $row): string
     {
         $v = $sheet->getCell($col . $row)->getValue();
@@ -903,7 +1094,27 @@ class XbrlConvertController extends Controller
         return trim((string)$v);
     }
 
+    /**
+     * Печатает информационное сообщение.
+     *
+     * @param string $msg Сообщение.
+     * @return void
+     */
     private function info(string $msg): void   { $this->stdout($msg . "\n"); }
+
+    /**
+     * Печатает предупреждение.
+     *
+     * @param string $msg Сообщение.
+     * @return void
+     */
     private function warn(string $msg): void   { $this->stdout($msg . "\n", Console::FG_YELLOW); }
+
+    /**
+     * Печатает сообщение об успехе.
+     *
+     * @param string $msg Сообщение.
+     * @return void
+     */
     private function success(string $msg): void{ $this->stdout($msg . "\n", Console::FG_GREEN); }
 }

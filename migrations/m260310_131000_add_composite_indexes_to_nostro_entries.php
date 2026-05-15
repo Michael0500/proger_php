@@ -46,11 +46,25 @@ class m260310_131000_add_composite_indexes_to_nostro_entries extends Migration
     private const TABLE = '{{%nostro_entries}}';
 
     /** Отключаем транзакцию: CREATE INDEX CONCURRENTLY запрещён в транзакционном блоке */
+    /**
+     * Выполняет вспомогательную операцию миграции.
+     *
+     * Используется только внутри данного класса миграции.
+     *
+     * @return void
+     */
     public function transaction(): ?string
     {
         return null;
     }
 
+    /**
+     * Применяет миграцию `m260310_131000_add_composite_indexes_to_nostro_entries`.
+     *
+     * Создаёт или изменяет структуру БД согласно назначению файла миграции.
+     *
+     * @return bool Результат выполнения миграции.
+     */
     public function up(): bool
     {
         // ── 1. Основной индекс: company_id + match_status + currency + account_id ──
@@ -100,6 +114,13 @@ class m260310_131000_add_composite_indexes_to_nostro_entries extends Migration
         return true;
     }
 
+    /**
+     * Откатывает миграцию `m260310_131000_add_composite_indexes_to_nostro_entries`.
+     *
+     * Возвращает структуру БД к состоянию до применения этой миграции, если откат поддерживается.
+     *
+     * @return bool Результат выполнения миграции.
+     */
     public function down(): bool
     {
         $this->execute('DROP INDEX CONCURRENTLY IF EXISTS "' . self::IDX_FULL    . '"');

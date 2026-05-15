@@ -3,6 +3,11 @@
 use yii\db\Migration;
 use yii\rbac\DbManager;
 
+/**
+ * Миграция `m260209_092304_create_rbac_tables`.
+ *
+ * Фиксирует изменение схемы PostgreSQL для SmartMatch и должна применяться через `php yii migrate`.
+ */
 class m260209_092304_create_rbac_tables extends Migration
 {
     /**
@@ -126,6 +131,13 @@ class m260209_092304_create_rbac_tables extends Migration
         echo "RBAC инициализирован успешно!\n";
     }
 
+    /**
+     * Откатывает миграцию `m260209_092304_create_rbac_tables`.
+     *
+     * Возвращает структуру БД к состоянию до применения этой миграции, если откат поддерживается.
+     *
+     * @return void
+     */
     public function safeDown()
     {
         $this->dropTable('{{%auth_assignment}}');

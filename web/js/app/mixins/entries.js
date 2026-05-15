@@ -1,8 +1,18 @@
 /**
- * entries.js — единая таблица NostroEntry
- * Infinite scroll, сортировка, колоночная фильтрация, Select2, debounce
+ * Mixin таблицы активных записей NostroEntry.
+ *
+ * Обслуживает основную таблицу выверки: загрузку записей выбранного
+ * ностро-банка, сортировку, фильтры, Select2, CRUD, inline-комментарии,
+ * историю аудита, детальную панель и пользовательские настройки колонок.
+ * Сервер применяет `company_id`, проверку прав, денежную точность и статусы
+ * квитования; клиент хранит только состояние UI и отправляет параметры.
  */
 var EntriesMixin = {
+    /**
+     * Начальное состояние таблицы выверки и связанных модалок.
+     *
+     * @returns {Object} Vue data для записей, фильтров, форм, истории и колонок.
+     */
     data: function () {
         return {
             // ── Таблица ───────────────────────────────────
@@ -26,7 +36,17 @@ var EntriesMixin = {
             _filterPoolSelect2Inited: false,
             _entrySelect2Inited:      false,
 
-            // ── Форма записи ──────────────────────────────
+            /**
+             * Форма создания/редактирования NostroEntry.
+             *
+             * @type {Object}
+             * @property {?number} id ID записи; `null` означает создание.
+             * @property {?number} account_id ID счёта текущей компании.
+             * @property {string} ls Сторона записи: `L` Ledger или `S` Statement.
+             * @property {string} dc Направление суммы: `Debit` или `Credit`.
+             * @property {string} amount Сумма в формате decimal-строки.
+             * @property {string} currency Код валюты.
+             */
             editingEntry: {
                 id: null, account_id: null, account_name: '',
                 ls: 'L', dc: 'Debit', amount: '', currency: '',
@@ -53,7 +73,14 @@ var EntriesMixin = {
             historyItems:   [],
             historyEntry:   null,
 
-            // ── Управление колонками таблицы ──────────────
+            /**
+             * Конфигурация колонок таблицы выверки.
+             *
+             * `key` должен совпадать с полем API/шаблона; `visible` и `width`
+             * сохраняются в `user_preferences.entries_table_columns`.
+             *
+             * @type {Array<{key: string, label: string, visible: boolean, width: number}>}
+             */
             tableColumns: [
                 { key: 'id',             label: 'ID',             visible: false, width: 60  },
                 { key: 'account_id',     label: 'Счёт',           visible: false, width: 120 },
@@ -84,30 +111,65 @@ var EntriesMixin = {
 
     watch: {
         tableColumns: {
+            /**
+             * Сохраняет пользовательские настройки колонок после изменения.
+             *
+             * @returns {void}
+             */
             handler: function () { this.saveTableColumnsPrefs(); },
             deep: true
         }
     },
 
     computed: {
+        /**
+         * Проверяет наличие следующей страницы записей.
+         *
+         * @returns {boolean} `true`, если загружено меньше строк, чем `entriesTotal`.
+         */
         hasMoreEntries: function () {
             return this.entries.length < this.entriesTotal;
         },
+        /**
+         * Возвращает несквитованные записи текущей страницы.
+         *
+         * @returns {Array<Object>} Записи со статусом `match_status = U`.
+         */
         unmatchedEntries: function () {
             return this.entries.filter(function (e) { return e.match_status === 'U'; });
         },
+        /**
+         * Возвращает ID несквитованных записей текущей страницы.
+         *
+         * @returns {Array<number|string>} ID записей, доступных для массового выбора.
+         */
         unmatchedIds: function () {
             return this.unmatchedEntries.map(function (e) { return e.id; });
         },
+        /**
+         * Проверяет, выбраны ли все несквитованные записи текущей страницы.
+         *
+         * @returns {boolean} `true`, если каждый ID из `unmatchedIds` выбран.
+         */
         allUnmatchedSelected: function () {
             var uids = this.unmatchedIds;
             if (!uids.length) return false;
             var sel  = this.selectedIds;
             return uids.every(function (id) { return sel.indexOf(id) !== -1; });
         },
+        /**
+         * Проверяет частичный выбор для tri-state checkbox.
+         *
+         * @returns {boolean} `true`, если выбрана часть записей.
+         */
         someSelected: function () {
             return this.selectedIds.length > 0 && !this.allUnmatchedSelected;
         },
+        /**
+         * Проверяет минимальное количество записей для ручного квитования.
+         *
+         * @returns {boolean} `true`, если выбрано минимум две записи.
+         */
         hasSelection: function () {
             return this.selectedIds.length >= 2;
         }
@@ -115,9 +177,10 @@ var EntriesMixin = {
 
     methods: {
         /**
-         * Склонение слова "запись" в зависимости от числа
-         * @param {number} count - количество записей
-         * @returns {string} - "запись", "записи" или "записей"
+         * Подбирает русскую форму слова "запись" для счётчиков таблицы.
+         *
+         * @param {number} count Количество записей.
+         * @returns {string} Подходящая форма: `запись`, `записи` или `записей`.
          */
         recordText: function (count) {
             var n = Math.abs(count) % 100;
@@ -128,10 +191,14 @@ var EntriesMixin = {
             if (n1 === 1) return 'запись';
             return 'записей';
         },
-        // ══════════════════════════════════════════════════
-        // ЗАГРУЗКА
-        // ══════════════════════════════════════════════════
-
+        /**
+         * Загружает список ностро-банков для фильтров таблицы.
+         *
+         * Вызывает GET `accountPoolList` и заполняет `accountPools` короткими
+         * объектами `{id, name}`. Ошибки API не блокируют основную таблицу.
+         *
+         * @returns {void}
+         */
         loadAccountPools: function () {
             var self = this;
             SmartMatchApi.get(window.AppRoutes.accountPoolList).then(function (r) {
@@ -144,6 +211,16 @@ var EntriesMixin = {
             });
         },
 
+        /**
+         * Загружает страницу активных записей выбранного ностро-банка.
+         *
+         * Читает `selectedPool`, пагинацию, сортировку и `filters`, вызывает GET
+         * `entryList`, обновляет `entries` и `entriesTotal`. При `reset` очищает
+         * выбор строк и summary квитования.
+         *
+         * @param {boolean} reset Нужно ли начать загрузку с первой страницы.
+         * @returns {void}
+         */
         loadEntries: function (reset) {
             if (!this.selectedPool) return;
             if (reset) {
@@ -176,16 +253,25 @@ var EntriesMixin = {
             });
         },
 
+        /**
+         * Догружает следующую страницу записей для infinite scroll.
+         *
+         * @returns {void}
+         */
         loadMoreEntries: function () {
             if (this.entriesLoadingMore || !this.hasMoreEntries) return;
             this.entriesPage++;
             this.loadEntries(false);
         },
 
-        // ══════════════════════════════════════════════════
-        // СОРТИРОВКА
-        // ══════════════════════════════════════════════════
-
+        /**
+         * Меняет сортировку таблицы и перезагружает записи.
+         *
+         * Повторный клик по той же колонке переключает направление сортировки.
+         *
+         * @param {string} col Ключ колонки API-сортировки.
+         * @returns {void}
+         */
         sortBy: function (col) {
             if (this.sortCol === col) {
                 this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc';
@@ -196,15 +282,27 @@ var EntriesMixin = {
             this.loadEntries(true);
         },
 
+        /**
+         * Возвращает CSS-класс иконки сортировки для колонки.
+         *
+         * @param {string} col Ключ колонки.
+         * @returns {string} CSS-класс Font Awesome.
+         */
         sortIcon: function (col) {
             if (this.sortCol !== col) return 'fas fa-sort';
             return this.sortDir === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down';
         },
 
-        // ══════════════════════════════════════════════════
-        // ФИЛЬТРЫ
-        // ══════════════════════════════════════════════════
-
+        /**
+         * Применяет фильтр таблицы и перезагружает записи.
+         *
+         * Пустое значение удаляет фильтр. Итоговый набор фильтров сериализуется
+         * в JSON и отправляется в GET `entryList`.
+         *
+         * @param {string} field Имя фильтра, ожидаемое сервером.
+         * @param {*} value Значение фильтра из input или Select2.
+         * @returns {void}
+         */
         applyFilter: function (field, value) {
             var v = (value === null || value === undefined) ? '' : String(value).trim();
             if (v === '') {
@@ -215,7 +313,13 @@ var EntriesMixin = {
             this.loadEntries(true);
         },
 
-        /** debounce для текстовых полей — задержка 400мс */
+        /**
+         * Применяет текстовый фильтр с задержкой ввода.
+         *
+         * @param {string} field Имя фильтра.
+         * @param {*} value Значение из поля ввода.
+         * @returns {void}
+         */
         debouncedFilter: function (field, value) {
             var self = this;
             if (self._filterDebounceTimer) clearTimeout(self._filterDebounceTimer);
@@ -224,11 +328,25 @@ var EntriesMixin = {
             }, 400);
         },
 
+        /**
+         * Удаляет один фильтр таблицы и перезагружает записи.
+         *
+         * @param {string} field Имя фильтра.
+         * @returns {void}
+         */
         clearFilter: function (field) {
             this.$delete(this.filters, field);
             this.loadEntries(true);
         },
 
+        /**
+         * Очищает все фильтры таблицы и связанные Select2.
+         *
+         * Побочные эффекты: сбрасывает `filters`, значения `#filter-account-select2`
+         * и `#filter-pool-select2`, затем загружает первую страницу.
+         *
+         * @returns {void}
+         */
         clearAllFilters: function () {
             this.filters = {};
             var $fs = $('#filter-account-select2');
@@ -238,10 +356,21 @@ var EntriesMixin = {
             this.loadEntries(true);
         },
 
+        /**
+         * Проверяет, активен ли конкретный фильтр.
+         *
+         * @param {string} field Имя фильтра.
+         * @returns {boolean} `true`, если фильтр заполнен.
+         */
         hasFilter: function (field) {
             return this.filters[field] !== undefined && this.filters[field] !== '';
         },
 
+        /**
+         * Считает количество активных фильтров таблицы.
+         *
+         * @returns {number} Количество непустых фильтров.
+         */
         activeFilterCount: function () {
             var self = this, cnt = 0;
             Object.keys(self.filters).forEach(function (k) {
@@ -250,6 +379,11 @@ var EntriesMixin = {
             return cnt;
         },
 
+        /**
+         * Переключает панель фильтров и инициализирует Select2 после открытия.
+         *
+         * @returns {void}
+         */
         toggleFiltersPanel: function () {
             var self = this;
             self.filtersOpen = !self.filtersOpen;
@@ -261,10 +395,14 @@ var EntriesMixin = {
             }
         },
 
-        // ══════════════════════════════════════════════════
-        // SELECT2 — ФИЛЬТР
-        // ══════════════════════════════════════════════════
-
+        /**
+         * Инициализирует Select2 фильтра счёта.
+         *
+         * Виджет ищет счета через GET `entrySearchAccounts` с текущим
+         * `pool_id`, а выбор/очистка синхронизируются с фильтром `account_id`.
+         *
+         * @returns {void}
+         */
         initFilterAccountSelect2: function () {
             var self = this;
             var $el  = $('#filter-account-select2');
@@ -305,6 +443,14 @@ var EntriesMixin = {
             });
         },
 
+        /**
+         * Инициализирует Select2 фильтра ностро-банка.
+         *
+         * Использует локально загруженный `accountPools`; выбор записывает
+         * `account_pool_id` в фильтры, очистка удаляет фильтр.
+         *
+         * @returns {void}
+         */
         initFilterPoolSelect2: function () {
             var self = this;
             var $el  = $('#filter-pool-select2');
@@ -340,7 +486,15 @@ var EntriesMixin = {
             });
         },
 
-        /** Программно обновляет выбранное значение в Pool Select2 (без реинициализации) */
+        /**
+         * Программно обновляет выбранное значение фильтра ностро-банка.
+         *
+         * Не пересоздаёт Select2 и не вызывает бизнес-логику загрузки записей;
+         * только синхронизирует визуальное состояние виджета.
+         *
+         * @param {number|string|null} poolId ID ностро-банка или пустое значение.
+         * @returns {void}
+         */
         updateFilterPoolSelect2: function (poolId) {
             var $el = $('#filter-pool-select2');
             if (!$el.length || !$el.data('select2')) return;
@@ -351,10 +505,15 @@ var EntriesMixin = {
             }
         },
 
-        // ══════════════════════════════════════════════════
-        // SELECT2 — ФОРМА ЗАПИСИ
-        // ══════════════════════════════════════════════════
-
+        /**
+         * Инициализирует Select2 выбора счёта в форме записи.
+         *
+         * Ищет счета через GET `entrySearchAccounts` с текущим `pool_id`,
+         * записывает выбранный `account_id` и `account_name` в `editingEntry`,
+         * а валюту подставляет из счёта, если поле ещё пустое.
+         *
+         * @returns {void}
+         */
         initEntryAccountSelect2: function () {
             var self = this;
             var $el  = $('#entry-account-select2');
@@ -417,10 +576,14 @@ var EntriesMixin = {
             }
         },
 
-        // ══════════════════════════════════════════════════
-        // CRUD
-        // ══════════════════════════════════════════════════
-
+        /**
+         * Открывает модалку создания записи выверки.
+         *
+         * Сбрасывает `editingEntry`, Select2 счёта и привязывает обработчик
+         * статического backdrop, чтобы пользователь подтверждал отмену.
+         *
+         * @returns {void}
+         */
         showAddEntryModal: function () {
             var self = this;
             self._entrySelect2Inited = false;
@@ -438,6 +601,15 @@ var EntriesMixin = {
             setTimeout(function () { self.initEntryAccountSelect2(); }, 300);
         },
 
+        /**
+         * Открывает модалку редактирования записи выверки.
+         *
+         * Копирует запись в `editingEntry`, инициализирует Select2 и добавляет
+         * текущий счёт как выбранную option, чтобы форма отобразила значение.
+         *
+         * @param {Object} entry Запись NostroEntry из таблицы.
+         * @returns {void}
+         */
         editEntry: function (entry) {
             var self = this;
             self._entrySelect2Inited = false;
@@ -456,7 +628,11 @@ var EntriesMixin = {
             }, 300);
         },
 
-        /** Биндит обработчик клика по backdrop (static) — один раз на открытие */
+        /**
+         * Подключает подтверждение закрытия формы записи при клике по backdrop.
+         *
+         * @returns {void}
+         */
         _bindEntryModalHidePrevented: function () {
             var self = this;
             var el = document.getElementById('entryModal');
@@ -466,7 +642,14 @@ var EntriesMixin = {
             });
         },
 
-        /** Закрывает модалку с подтверждением (Cancel, X, клик вне окна) */
+        /**
+         * Запрашивает подтверждение закрытия модалки записи без сохранения.
+         *
+         * Побочный эффект: показывает SweetAlert и при подтверждении закрывает
+         * `entryModal`.
+         *
+         * @returns {void}
+         */
         closeEntryModal: function () {
             var self = this;
             Swal.fire({
@@ -486,12 +669,25 @@ var EntriesMixin = {
             });
         },
 
-        /** Закрывает модалку без подтверждения (после успешного сохранения) */
+        /**
+         * Закрывает модалку записи без подтверждения после успешного сохранения.
+         *
+         * @returns {void}
+         */
         _forceCloseEntryModal: function () {
             this._hideModal('entryModal');
             this._entrySelect2Inited = false;
         },
 
+        /**
+         * Создаёт или обновляет запись выверки.
+         *
+         * Валидирует счёт, сумму и валюту, нормализует decimal-ввод без float,
+         * отправляет POST `entryCreate` или `entryUpdate`, закрывает модалку и
+         * перезагружает таблицу. Сервер пишет аудит и проверяет `company_id`.
+         *
+         * @returns {void}
+         */
         saveEntry: function () {
             var self = this;
             if (!self.editingEntry.account_id) {
@@ -532,6 +728,15 @@ var EntriesMixin = {
             });
         },
 
+        /**
+         * Удаляет запись выверки после подтверждения.
+         *
+         * Вызывает POST `entryDelete`; при успехе локально удаляет строку из
+         * текущей страницы и уменьшает `entriesTotal`.
+         *
+         * @param {Object} entry Запись NostroEntry из таблицы.
+         * @returns {void}
+         */
         deleteEntry: function (entry) {
             var self = this;
             Swal.fire({
@@ -561,26 +766,40 @@ var EntriesMixin = {
             });
         },
 
-        // ══════════════════════════════════════════════════
-        // ВЫДЕЛЕНИЕ
-        // (isSelected / toggleEntrySelection / clearSelection /
-        //  updateSummary — в MatchingMixin)
-        // ══════════════════════════════════════════════════
-
+        /**
+         * Массово выбирает или снимает выбор со всех несквитованных записей.
+         *
+         * Меняет `selectedIds` только для записей со статусом `U` и
+         * пересчитывает summary квитования.
+         *
+         * @param {boolean} checked Состояние checkbox "выбрать все".
+         * @returns {void}
+         */
         toggleSelectAll: function (checked) {
             this.selectedIds = checked ? this.unmatchedIds.slice() : [];
             this.updateSummary();
         },
 
-        // ══════════════════════════════════════════════════
-        // INLINE КОММЕНТАРИЙ
-        // ══════════════════════════════════════════════════
-
+        /**
+         * Включает inline-редактирование комментария записи.
+         *
+         * @param {Object} entry Запись NostroEntry из таблицы.
+         * @returns {void}
+         */
         startEditComment: function (entry) {
             this.editingCommentId    = entry.id;
             this.editingCommentValue = entry.comment || '';
         },
 
+        /**
+         * Сохраняет inline-комментарий записи.
+         *
+         * Вызывает POST `entryUpdateComment`, при успехе обновляет поле строки
+         * локально и выходит из режима редактирования.
+         *
+         * @param {Object} entry Запись NostroEntry из таблицы.
+         * @returns {void}
+         */
         saveComment: function (entry) {
             var self = this;
             SmartMatchApi.post(window.AppRoutes.entryUpdateComment, {
@@ -593,14 +812,21 @@ var EntriesMixin = {
             });
         },
 
+        /**
+         * Отменяет inline-редактирование комментария без запроса к API.
+         *
+         * @returns {void}
+         */
         cancelEditComment: function () {
             this.editingCommentId = null;
         },
 
-        // ══════════════════════════════════════════════════
-        // INFINITE SCROLL
-        // ══════════════════════════════════════════════════
-
+        /**
+         * Обрабатывает прокрутку контейнера таблицы для догрузки записей.
+         *
+         * @param {Event} e Событие scroll от контейнера таблицы.
+         * @returns {void}
+         */
         onTableScroll: function (e) {
             var el = e.target;
             if (el.scrollTop + el.clientHeight >= el.scrollHeight - 160) {
@@ -608,10 +834,16 @@ var EntriesMixin = {
             }
         },
 
-        // ══════════════════════════════════════════════════
-        // УТИЛИТЫ
-        // ══════════════════════════════════════════════════
-
+        /**
+         * Форматирует сумму для таблицы записей.
+         *
+         * Не использует `parseFloat` для итоговой строки, чтобы не терять
+         * точность отображения decimal(20,2). Некорректные значения показываются
+         * как прочерк.
+         *
+         * @param {string|number|null|undefined} val Значение суммы из API.
+         * @returns {string} Сумма в формате `1,234.00` или `—`.
+         */
         formatAmount: function (val) {
             if (val === null || val === undefined || val === '') return '—';
             var s = String(val).trim();
@@ -628,21 +860,30 @@ var EntriesMixin = {
             return sign + intPart + '.' + decPart;
         },
 
-        /** Нормализует ввод суммы. Если встречаются и точка, и запятая —
-         *  крайний правый разделитель считается десятичным, остальные убираются.
-         *  Примеры: "555 444.344,33" → "555444344.33", "555,444,344.33" → "555444344.33"
-         *  Логика теперь такая:
+        /**
+         * Нормализует пользовательский ввод суммы записи.
          *
-         *   - Есть и точка, и запятая → крайний правый разделитель считается десятичным, остальные удаляются:
-         *     - 555 444.344,33 → запятая правее → 555444344.33
-         *     - 555,444,344.33 → точка правее → 555444344.33
-         *   - Только запятая, одна, после неё 1-2 цифры → десятичный разделитель (555 444 344,33 → 555444344.33)
-         *   - Только запятая, несколько или 3+ цифры после → разделитель тысяч (555,444,344 → 555444344)
-         *   - Только точка → оставляется (десятичный разделитель)*/
+         * Делегирует `normalizeMoneyInput()` без разрешения отрицательных сумм:
+         * записи выверки хранят положительную сумму и отдельный признак D/C.
+         *
+         * @param {string|number|null|undefined} val Пользовательский ввод суммы.
+         * @returns {string} Нормализованная сумма в формате с точкой.
+         */
         normalizeAmount: function (val) {
             return this.normalizeMoneyInput(val, false);
         },
 
+        /**
+         * Нормализует денежный ввод с поддержкой разных разделителей.
+         *
+         * Если встречаются точка и запятая, крайний правый разделитель считается
+         * десятичным, остальные удаляются. Возвращает строку с двумя знаками
+         * после точки, чтобы сохранить контракт decimal(20,2).
+         *
+         * @param {string|number|null|undefined} val Пользовательский ввод.
+         * @param {boolean} allowNegative Разрешать ли отрицательные значения.
+         * @returns {string} Нормализованное значение или пустая строка.
+         */
         normalizeMoneyInput: function (val, allowNegative) {
             if (val === null || val === undefined || val === '') return '';
             var s = String(val).trim();
@@ -679,6 +920,16 @@ var EntriesMixin = {
             return sign + s;
         },
 
+        /**
+         * Валидирует денежное значение по ограничениям базы.
+         *
+         * Проверяет числовой формат, максимум 2 знака после точки и не более
+         * 18 цифр до точки для decimal(20,2).
+         *
+         * @param {string|number|null|undefined} val Значение суммы.
+         * @param {boolean} allowNegative Разрешать ли отрицательные значения.
+         * @returns {string} Текст ошибки или пустая строка.
+         */
         validateMoneyAmount: function (val, allowNegative) {
             var s = this.normalizeMoneyInput(val, allowNegative);
             var re = allowNegative ? /^-?\d+(\.\d{1,2})?$/ : /^\d+(\.\d{1,2})?$/;
@@ -691,12 +942,15 @@ var EntriesMixin = {
             return '';
         },
 
-        // ══════════════════════════════════════════════════
-        // ИСТОРИЯ ИЗМЕНЕНИЙ
-        // ══════════════════════════════════════════════════
-
         /**
-         * Открыть модальное окно истории для записи
+         * Открывает модалку истории изменений активной записи.
+         *
+         * Вызывает GET `entryHistory`, заполняет `historyItems` и показывает
+         * общий Bootstrap modal `entryHistoryModal`. Сервер восстанавливает
+         * snapshot-цепочку аудита, включая restore/archive-сценарии.
+         *
+         * @param {Object} entry Запись NostroEntry из таблицы.
+         * @returns {void}
          */
         showHistory: function (entry) {
             var self = this;
@@ -722,22 +976,55 @@ var EntriesMixin = {
                 });
         },
 
-        // ── Управление колонками ──────────────────────────────────────────
+        /**
+         * Проверяет видимость колонки таблицы выверки.
+         *
+         * @param {string} key Ключ колонки.
+         * @returns {boolean} `true`, если колонка должна отображаться.
+         */
         tblColVisible: function (key) {
             var col = this.tableColumns.find(function (c) { return c.key === key; });
             return col ? col.visible : true;
         },
+        /**
+         * Переключает выпадающий список управления колонками.
+         *
+         * @returns {void}
+         */
         toggleColsDropdown: function () {
             this.showColsDropdown = !this.showColsDropdown;
         },
+        /**
+         * Открывает боковую/оверлейную детальную панель записи.
+         *
+         * Побочный эффект: блокирует прокрутку body, пока карточка деталей открыта.
+         *
+         * @param {Object} entry Запись NostroEntry для подробного просмотра.
+         * @returns {void}
+         */
         openEntryDetail: function (entry) {
             this.detailEntry = entry;
             document.body.style.overflow = 'hidden';
         },
+        /**
+         * Закрывает детальную панель записи и возвращает прокрутку страницы.
+         *
+         * @returns {void}
+         */
         closeEntryDetail: function () {
             this.detailEntry = null;
             document.body.style.overflow = '';
         },
+        /**
+         * Запускает изменение ширины колонки таблицы.
+         *
+         * Меняет `col.width` во время mousemove; watcher `tableColumns`
+         * сохраняет результат в пользовательские настройки.
+         *
+         * @param {MouseEvent} e Событие mousedown на ресайзере колонки.
+         * @param {Object} col Описание колонки из `tableColumns`.
+         * @returns {void}
+         */
         startColResize: function (e, col) {
             e.preventDefault();
             e.stopPropagation();
@@ -762,7 +1049,15 @@ var EntriesMixin = {
             document.addEventListener('mousemove', onMove);
             document.addEventListener('mouseup', onUp);
         },
-        // ── Сохранение настроек колонок в БД (user_preferences) ───────────
+        /**
+         * Загружает персональные настройки колонок таблицы выверки.
+         *
+         * Вызывает GET `userPreferenceGet` с ключом `entries_table_columns`,
+         * применяет сохранённые `visible` и `width` только к известным колонкам,
+         * затем включает флаг, разрешающий сохранение watcher'ом.
+         *
+         * @returns {void}
+         */
         loadTableColumnsPrefs: function () {
             var self = this;
             SmartMatchApi.get(window.AppRoutes.userPreferenceGet, { key: 'entries_table_columns' })
@@ -788,6 +1083,15 @@ var EntriesMixin = {
                 });
         },
 
+        /**
+         * Сохраняет персональные настройки колонок таблицы выверки.
+         *
+         * После debounce отправляет POST `userPreferenceSave` с ключом
+         * `entries_table_columns`. Не выполняется до завершения загрузки
+         * начальных настроек.
+         *
+         * @returns {void}
+         */
         saveTableColumnsPrefs: function () {
             if (!this._tableColumnsLoaded) return;
             var self = this;
@@ -803,6 +1107,14 @@ var EntriesMixin = {
             }, 600);
         },
 
+        /**
+         * Подключает глобальные обработчики закрытия UI управления колонками.
+         *
+         * Клик вне меню закрывает dropdown, Escape закрывает dropdown и детальную
+         * панель записи.
+         *
+         * @returns {void}
+         */
         _initColManagement: function () {
             var self = this;
             document.addEventListener('click', function (e) {

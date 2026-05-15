@@ -1,8 +1,22 @@
+/**
+ * Интеграция flatpickr с Vue-формами SmartMatch.
+ *
+ * Модуль локализует календарь на русский язык, добавляет общий форматтер дат
+ * для таблиц и регистрирует директиву `v-datepicker`. Директива синхронизирует
+ * flatpickr с `v-model` через события `input` и `change`, поэтому формы
+ * продолжают отправлять серверный формат `YYYY-MM-DD`.
+ */
 (function() {
     flatpickr.localize(flatpickr.l10ns.ru);
 
     Vue.mixin({
         methods: {
+            /**
+             * Форматирует дату из API в пользовательский вид.
+             *
+             * @param {string|null|undefined} dateStr Дата в формате `YYYY-MM-DD` или ISO-строка.
+             * @returns {string} Дата в формате `DD.MM.YYYY`, исходное значение при нестандартном формате или `—`.
+             */
             fmtDate: function(dateStr) {
                 if (!dateStr) return '—';
                 var parts = String(dateStr).substring(0, 10).split('-');
@@ -13,6 +27,15 @@
     });
 
     Vue.directive('datepicker', {
+        /**
+         * Инициализирует flatpickr на input-элементе и подключает синхронизацию с Vue.
+         *
+         * Читает ограничения `min` и `max` из DOM, создаёт альтернативное поле
+         * отображения `d.m.Y`, а реальное значение оставляет в серверном формате.
+         *
+         * @param {HTMLInputElement} el DOM-элемент, к которому применена директива.
+         * @returns {void}
+         */
         inserted: function(el) {
             var config = {
                 dateFormat: 'Y-m-d',
@@ -45,6 +68,15 @@
             }
         },
 
+        /**
+         * Синхронизирует flatpickr после изменения Vue-состояния или атрибутов.
+         *
+         * Используется при программном изменении дат, очистке формы и обновлении
+         * динамических ограничений `min`/`max`.
+         *
+         * @param {HTMLInputElement} el DOM-элемент с экземпляром flatpickr.
+         * @returns {void}
+         */
         componentUpdated: function(el) {
             var fp = el._flatpickr;
             if (!fp) return;
@@ -62,6 +94,12 @@
             fp.set('maxDate', el.getAttribute('max') || undefined);
         },
 
+        /**
+         * Уничтожает экземпляр flatpickr при удалении input из DOM.
+         *
+         * @param {HTMLInputElement} el DOM-элемент директивы.
+         * @returns {void}
+         */
         unbind: function(el) {
             if (el._flatpickr) el._flatpickr.destroy();
         }

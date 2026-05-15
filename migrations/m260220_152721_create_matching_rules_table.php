@@ -8,6 +8,13 @@ use yii\db\Migration;
  */
 class m260220_152721_create_matching_rules_table extends Migration
 {
+    /**
+     * Применяет миграцию `m260220_152721_create_matching_rules_table`.
+     *
+     * Создаёт или изменяет структуру БД согласно назначению файла миграции.
+     *
+     * @return void
+     */
     public function safeUp()
     {
         $this->createTable('{{%matching_rules}}', [
@@ -54,6 +61,13 @@ class m260220_152721_create_matching_rules_table extends Migration
         );
     }
 
+    /**
+     * Откатывает миграцию `m260220_152721_create_matching_rules_table`.
+     *
+     * Возвращает структуру БД к состоянию до применения этой миграции, если откат поддерживается.
+     *
+     * @return void
+     */
     public function safeDown()
     {
         $this->dropForeignKey('fk_matching_rules_company', '{{%matching_rules}}');

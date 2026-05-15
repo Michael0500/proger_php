@@ -44,15 +44,53 @@ php yii migrate/create descriptive_name
 
 ### Запуск тестов
 
+Тесты запускаются через Codeception и используют отдельную PostgreSQL-базу `smartmatch_test`.
+
+Создать тестовую базу один раз:
+
+```sql
+CREATE DATABASE smartmatch_test;
+```
+
+Применить миграции в тестовую базу:
+
 ```bash
-vendor/bin/codecept run
-vendor/bin/codecept run unit
-vendor/bin/codecept run functional
-vendor/bin/codecept run unit tests/unit/SomeTest.php
+php tests/bin/yii migrate --interactive=0
+```
+
+Если в окружении другое имя БД или другой доступ к PostgreSQL, задайте переменные:
+
+```bash
+SMARTMATCH_TEST_DSN="pgsql:host=PostgreSQL-17;port=5432;dbname=smartmatch_test"
+SMARTMATCH_TEST_DB_USERNAME="postgres"
+SMARTMATCH_TEST_DB_PASSWORD=""
+```
+
+После изменения состава модулей Codeception или actor-классов:
+
+```bash
+vendor/bin/codecept build
+```
+
+Основные команды:
+
+```bash
+vendor/bin/codecept run                                      # все активные suites
+vendor/bin/codecept run unit                                 # модели и сервисы
+vendor/bin/codecept run functional                           # web/API сценарии через Yii request layer
+vendor/bin/codecept run unit tests/unit/models/NostroEntryTest.php
+vendor/bin/codecept run functional tests/functional/ArchiveApiCest.php
 vendor/bin/codecept run --coverage --coverage-html
 ```
 
-Тестовая конфигурация находится в `codeception.yml`, `config/test.php` и `config/test_db.php`.
+Тестовая конфигурация находится в `codeception.yml`, `config/test.php` и `config/test_db.php`. Подробная карта тестов, назначение каждого suite и список проверок описаны в [TESTING.md](TESTING.md).
+
+Назначение текущих тестов:
+
+- `unit` — быстрая проверка доменной логики без HTTP: валидация денежных значений, `NostroEntry` audit hooks, `NostroBalance` continuity/sequence, `UserPreference`, `ArchiveSettings`, ручное и автоматическое квитование в `MatchingService`.
+- `functional` — проверка пользовательских и API-сценариев через Yii: login flow, настройки UI, список/создание/обновление записей с `company_id` scope, ручное квитование, расквитование, `/all-nostro`, архивирование/восстановление группы, генерация раккорда.
+
+Все тесты очищают тестовые бизнес-таблицы через `SmartMatchTestHelper`; рабочую базу `smartmatch` использовать для тестов нельзя.
 
 ## 2. Стек и структура проекта
 
@@ -510,10 +548,20 @@ Frontend использует несколько изолированных Vue-
 vendor/bin/codecept run unit
 ```
 
+Unit-тесты должны покрывать чистую доменную логику: модели, сервисы, валидацию, расчетные методы, audit hooks и SQL-логику, которую можно проверить без полноценного web-запроса.
+
 Для контроллеров и пользовательских сценариев:
 
 ```bash
 vendor/bin/codecept run functional
+```
+
+Functional-тесты нужны для маршрутов, access control, JSON API, `company_id` scoping и сценариев, где важно поведение приложения целиком: авторизация, request parsing, response format, транзакции контроллеров.
+
+Для полного регресса:
+
+```bash
+vendor/bin/codecept run
 ```
 
 Для миграций:

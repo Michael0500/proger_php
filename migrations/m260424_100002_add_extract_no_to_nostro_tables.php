@@ -9,6 +9,13 @@ use yii\db\Migration;
  */
 class m260424_100002_add_extract_no_to_nostro_tables extends Migration
 {
+    /**
+     * Применяет миграцию `m260424_100002_add_extract_no_to_nostro_tables`.
+     *
+     * Создаёт или изменяет структуру БД согласно назначению файла миграции.
+     *
+     * @return void
+     */
     public function safeUp()
     {
         // nostro_balance
@@ -36,6 +43,13 @@ class m260424_100002_add_extract_no_to_nostro_tables extends Migration
         );
     }
 
+    /**
+     * Откатывает миграцию `m260424_100002_add_extract_no_to_nostro_tables`.
+     *
+     * Возвращает структуру БД к состоянию до применения этой миграции, если откат поддерживается.
+     *
+     * @return void
+     */
     public function safeDown()
     {
         $this->dropIndex('idx_nostro_entries_extract_no', '{{%nostro_entries}}');

@@ -15,6 +15,12 @@ use app\models\Country;
  */
 class ReferenceController extends BaseController
 {
+    /**
+     * Отключает CSRF для JSON API справочников.
+     *
+     * @param \yii\base\Action $action Запускаемое действие.
+     * @return bool Можно ли продолжать выполнение action.
+     */
     public function beforeAction($action): bool
     {
         $this->enableCsrfValidation = false;
@@ -22,7 +28,11 @@ class ReferenceController extends BaseController
     }
 
     /**
-     * GET /references
+     * Рендерит страницу общесистемных справочников.
+     *
+     * GET `/references`. Передаёт во Vue списки валют и стран.
+     *
+     * @return string HTML страницы справочников.
      */
     public function actionIndex()
     {
@@ -40,6 +50,11 @@ class ReferenceController extends BaseController
 
     // ── JSON API: валюты ─────────────────────────────────────────
 
+    /**
+     * Возвращает список валют.
+     *
+     * @return array JSON со справочником валют.
+     */
     public function actionCurrencies(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -52,6 +67,11 @@ class ReferenceController extends BaseController
         ];
     }
 
+    /**
+     * Создаёт валюту в общесистемном справочнике.
+     *
+     * @return array JSON с созданной валютой или ошибками валидации.
+     */
     public function actionCurrencyCreate(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -69,6 +89,11 @@ class ReferenceController extends BaseController
         return ['success' => false, 'message' => $this->firstError($m), 'errors' => $m->errors];
     }
 
+    /**
+     * Обновляет валюту справочника.
+     *
+     * @return array JSON с обновлённой валютой или ошибкой.
+     */
     public function actionCurrencyUpdate(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -90,6 +115,11 @@ class ReferenceController extends BaseController
         return ['success' => false, 'message' => $this->firstError($m), 'errors' => $m->errors];
     }
 
+    /**
+     * Удаляет валюту из справочника.
+     *
+     * @return array JSON-результат удаления.
+     */
     public function actionCurrencyDelete(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -106,6 +136,11 @@ class ReferenceController extends BaseController
 
     // ── JSON API: страны ─────────────────────────────────────────
 
+    /**
+     * Возвращает список стран.
+     *
+     * @return array JSON со справочником стран.
+     */
     public function actionCountries(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -118,6 +153,11 @@ class ReferenceController extends BaseController
         ];
     }
 
+    /**
+     * Создаёт страну в общесистемном справочнике.
+     *
+     * @return array JSON с созданной страной или ошибками валидации.
+     */
     public function actionCountryCreate(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -135,6 +175,11 @@ class ReferenceController extends BaseController
         return ['success' => false, 'message' => $this->firstError($m), 'errors' => $m->errors];
     }
 
+    /**
+     * Обновляет страну справочника.
+     *
+     * @return array JSON с обновлённой страной или ошибкой.
+     */
     public function actionCountryUpdate(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -156,6 +201,11 @@ class ReferenceController extends BaseController
         return ['success' => false, 'message' => $this->firstError($m), 'errors' => $m->errors];
     }
 
+    /**
+     * Удаляет страну из справочника.
+     *
+     * @return array JSON-результат удаления.
+     */
     public function actionCountryDelete(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -172,6 +222,12 @@ class ReferenceController extends BaseController
 
     // ── helpers ─────────────────────────────────────────────────
 
+    /**
+     * Сериализует валюту для JSON API.
+     *
+     * @param Currency $c Модель валюты.
+     * @return array JSON-совместимые данные валюты.
+     */
     private function serializeCurrency(Currency $c): array
     {
         return [
@@ -184,6 +240,12 @@ class ReferenceController extends BaseController
         ];
     }
 
+    /**
+     * Сериализует страну для JSON API.
+     *
+     * @param Country $c Модель страны.
+     * @return array JSON-совместимые данные страны.
+     */
     private function serializeCountry(Country $c): array
     {
         return [
@@ -196,6 +258,12 @@ class ReferenceController extends BaseController
         ];
     }
 
+    /**
+     * Возвращает первую ошибку валидации модели.
+     *
+     * @param \yii\base\Model $m Модель с ошибками.
+     * @return string Текст первой ошибки или общий текст.
+     */
     private function firstError(\yii\base\Model $m): string
     {
         foreach ($m->errors as $field => $messages) {

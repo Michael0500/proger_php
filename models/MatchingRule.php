@@ -36,11 +36,25 @@ class MatchingRule extends ActiveRecord
     const PAIR_LL = 'LL'; // Ledger + Ledger
     const PAIR_SS = 'SS'; // Statement + Statement
 
+    /**
+     * Возвращает имя таблицы правил автоквитования.
+     *
+     * @return string Имя таблицы `matching_rules` с учётом префикса Yii.
+     */
     public static function tableName(): string
     {
         return '{{%matching_rules}}';
     }
 
+    /**
+     * Описывает правила валидации условия автоквитования.
+     *
+     * Правило обязательно привязано к компании, разделу и типу пары. Набор
+     * boolean-флагов определяет SQL-условия, которые `MatchingService`
+     * применяет при поиске уникальных пар.
+     *
+     * @return array Правила Yii Validator.
+     */
     public function rules(): array
     {
         return [
@@ -57,6 +71,11 @@ class MatchingRule extends ActiveRecord
         ];
     }
 
+    /**
+     * Возвращает подписи атрибутов правила для формы настройки.
+     *
+     * @return array Массив `attribute => label`.
+     */
     public function attributeLabels(): array
     {
         return [
@@ -78,6 +97,12 @@ class MatchingRule extends ActiveRecord
         ];
     }
 
+    /**
+     * Обновляет даты создания и изменения правила.
+     *
+     * @param bool $insert Признак создания нового правила.
+     * @return bool Можно ли продолжать сохранение.
+     */
     public function beforeSave($insert): bool
     {
         if (parent::beforeSave($insert)) {
@@ -88,11 +113,21 @@ class MatchingRule extends ActiveRecord
         return false;
     }
 
+    /**
+     * Возвращает список разделов, для которых можно создавать правила.
+     *
+     * @return array Карта `код раздела => название`.
+     */
     public static function sectionList(): array
     {
         return [self::SECTION_NRE => 'NRE', self::SECTION_INV => 'INV'];
     }
 
+    /**
+     * Возвращает список типов пар для автоквитования.
+     *
+     * @return array Карта `код типа пары => описание`.
+     */
     public static function pairTypeList(): array
     {
         return [
@@ -102,13 +137,23 @@ class MatchingRule extends ActiveRecord
         ];
     }
 
+    /**
+     * Возвращает компанию-владельца правила.
+     *
+     * @return \yii\db\ActiveQuery Запрос связи с `Company`.
+     */
     public function getCompany()
     {
         return $this->hasOne(Company::class, ['id' => 'company_id']);
     }
 
     /**
-     * Описание условий правила одной строкой (для отображения в таблице)
+     * Формирует краткое описание включённых условий правила.
+     *
+     * Используется в таблице правил, чтобы пользователь видел, какие поля
+     * участвуют в автоквитовании и включён ли перекрёстный поиск ID.
+     *
+     * @return string Список условий через запятую или тире, если условий нет.
      */
     public function getConditionsSummary(): string
     {

@@ -53,7 +53,11 @@ class MigrateDataController extends Controller
     private $batchSize = 1000;
 
     /**
-     * Мигрировать всё: сначала пулы, потом счета
+     * Запускает полную миграцию данных из старой БД.
+     *
+     * Последовательно переносит ностро-банки, счета и записи выверки.
+     *
+     * @return int Код завершения консольной команды.
      */
     public function actionRun()
     {
@@ -67,7 +71,12 @@ class MigrateDataController extends Controller
     }
 
     /**
-     * Мигрировать account_pool → account_pools
+     * Мигрирует старую таблицу `account_pool` в `account_pools`.
+     *
+     * Пулы сопоставляются по имени внутри новой компании. Уже существующие
+     * записи не дублируются, а добавляются в карту `poolMap`.
+     *
+     * @return void
      */
     public function actionPools()
     {
@@ -123,7 +132,12 @@ class MigrateDataController extends Controller
     }
 
     /**
-     * Мигрировать account → accounts
+     * Мигрирует старую таблицу `account` в `accounts`.
+     *
+     * Использует карту старых и новых пулов, пропускает записи без имени и
+     * дубликаты по имени внутри компании.
+     *
+     * @return void
      */
     public function actionAccounts()
     {
@@ -203,7 +217,12 @@ class MigrateDataController extends Controller
     }
 
     /**
-     * Мигрировать item → nostro_entries
+     * Мигрирует старую таблицу `item` в `nostro_entries`.
+     *
+     * Переносит ID-поля, даты, суммы, L/S, D/C и `match_id`, выполняя
+     * пакетные вставки. Записи с неизвестными счетами или кодами пропускаются.
+     *
+     * @return int Код завершения консольной команды.
      */
     public function actionEntries()
     {
@@ -339,7 +358,11 @@ class MigrateDataController extends Controller
     }
 
     /**
-     * Построить маппинг account_id (старый → новый) по совпадению number_x → name
+     * Строит карту старых и новых счетов по совпадению `number_x -> name`.
+     *
+     * @param \yii\db\Connection $oldDb Подключение к старой БД.
+     * @param \yii\db\Connection $newDb Подключение к новой БД.
+     * @return void
      */
     private function buildAccountMap($oldDb, $newDb)
     {
@@ -376,7 +399,10 @@ class MigrateDataController extends Controller
     }
 
     /**
-     * Парсинг даты из различных форматов
+     * Нормализует дату из старой БД в формат `Y-m-d`.
+     *
+     * @param mixed $value Исходное значение даты.
+     * @return string|null Дата `Y-m-d` или `null`, если распознать нельзя.
      */
     private function parseDate($value)
     {
@@ -391,7 +417,11 @@ class MigrateDataController extends Controller
     }
 
     /**
-     * Построить маппинг pool_id (старый → новый) по совпадению имён
+     * Строит карту старых и новых ностро-банков по имени.
+     *
+     * @param \yii\db\Connection $oldDb Подключение к старой БД.
+     * @param \yii\db\Connection $newDb Подключение к новой БД.
+     * @return void
      */
     private function buildPoolMap($oldDb, $newDb)
     {
@@ -418,7 +448,11 @@ class MigrateDataController extends Controller
     }
 
     /**
-     * @return \yii\db\Connection
+     * Возвращает подключение к старой БД.
+     *
+     * При отсутствии компонента `oldDb` печатает инструкцию и завершает процесс.
+     *
+     * @return \yii\db\Connection Подключение к старой базе.
      */
     private function getOldDb()
     {

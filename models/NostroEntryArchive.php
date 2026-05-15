@@ -42,11 +42,28 @@ class NostroEntryArchive extends ActiveRecord
 {
     const STATUS_ARCHIVED = 'A';
 
+    /**
+     * Возвращает имя таблицы архивных записей выверки.
+     *
+     * Архив хранит сквитованные операции после batch-переноса из
+     * `nostro_entries` и сохраняет `original_id` для восстановления аудита.
+     *
+     * @return string Имя таблицы `nostro_entries_archive` с учётом префикса Yii.
+     */
     public static function tableName(): string
     {
         return '{{%nostro_entries_archive}}';
     }
 
+    /**
+     * Описывает правила валидации архивной записи.
+     *
+     * В архивной строке обязательны ссылка на исходную запись, `match_id`,
+     * счёт, компания и основные реквизиты операции. Дата квитования сохраняется
+     * для восстановления группы квитования без потери исходной истории.
+     *
+     * @return array Правила Yii Validator.
+     */
     public function rules(): array
     {
         return [
@@ -64,6 +81,11 @@ class NostroEntryArchive extends ActiveRecord
         ];
     }
 
+    /**
+     * Возвращает подписи архивных атрибутов для UI и ошибок.
+     *
+     * @return array Массив `attribute => label`.
+     */
     public function attributeLabels(): array
     {
         return [
@@ -97,21 +119,33 @@ class NostroEntryArchive extends ActiveRecord
 
     // ─── Отношения ─────────────────────────────────────────────
 
+    /**
+     * Возвращает связь архивной записи с ностро-счётом.
+     *
+     * @return \yii\db\ActiveQuery Запрос связи `account_id -> accounts.id`.
+     */
     public function getAccount(): \yii\db\ActiveQuery
     {
         return $this->hasOne(Account::class, ['id' => 'account_id']);
     }
 
+    /**
+     * Возвращает связь архивной записи с компанией.
+     *
+     * @return \yii\db\ActiveQuery Запрос связи `company_id -> company.id`.
+     */
     public function getCompany(): \yii\db\ActiveQuery
     {
         return $this->hasOne(Company::class, ['id' => 'company_id']);
     }
 
     /**
-     * Получить историю изменений записи (по original_id).
-     * История доступна и после переноса в архив.
+     * Возвращает историю изменений исходной активной записи.
      *
-     * @return NostroEntryAudit[]
+     * История ищется по `original_id`, поэтому остаётся доступной после
+     * удаления строки из `nostro_entries`.
+     *
+     * @return \yii\db\ActiveQuery Запрос к событиям аудита исходной записи.
      */
     public function getAudits(): \yii\db\ActiveQuery
     {
@@ -122,8 +156,17 @@ class NostroEntryArchive extends ActiveRecord
     // ─── Статический хелпер: перенести NostroEntry в архив ─────
 
     /**
-     * Архивировать запись из nostro_entries.
-     * Возвращает созданную архивную запись или null при ошибке.
+     * Создаёт архивную копию активной записи выверки.
+     *
+     * Метод переносит бизнес-реквизиты операции, `match_id`, `matched_at`,
+     * исходные даты создания/изменения и рассчитывает `expires_at` по сроку
+     * хранения. Физическое удаление активной записи и групповой аудит выполняет
+     * вызывающий сервис/контроллер.
+     *
+     * @param NostroEntry $entry Активная запись, которую нужно скопировать в архив.
+     * @param int $retentionYears Срок хранения архивной записи в годах.
+     * @param int|null $archivedBy ID пользователя или системного процесса.
+     * @return self|null Созданная архивная запись или `null`, если сохранить не удалось.
      */
     public static function archiveEntry(NostroEntry $entry, int $retentionYears = 5, ?int $archivedBy = null): ?self
     {
@@ -158,6 +201,14 @@ class NostroEntryArchive extends ActiveRecord
 
     // ─── API-форматирование ────────────────────────────────────
 
+    /**
+     * Преобразует архивную запись в структуру JSON API.
+     *
+     * Возвращает только поля, нужные архивному интерфейсу и предпросмотру
+     * восстановления, включая ссылку на исходную запись и сроки хранения.
+     *
+     * @return array Сериализованные данные архивной записи.
+     */
     public function toApiArray(): array
     {
         return [

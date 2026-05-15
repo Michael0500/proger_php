@@ -67,11 +67,24 @@ class NostroBalance extends ActiveRecord
     const SOURCE_BARS_GL = 'BARS_GL';
     const SOURCE_MANUAL  = 'MANUAL';
 
+    /**
+     * Возвращает имя таблицы остатков по ностро-счетам.
+     *
+     * @return string Имя таблицы `nostro_balance` с учётом префикса Yii.
+     */
     public static function tableName(): string
     {
         return '{{%nostro_balance}}';
     }
 
+    /**
+     * Подключает автоматическое заполнение времени и пользователя.
+     *
+     * `TimestampBehavior` использует `NOW()` PostgreSQL, а `BlameableBehavior`
+     * фиксирует пользователя, создавшего или изменившего баланс.
+     *
+     * @return array Конфигурация Yii behaviors.
+     */
     public function behaviors(): array
     {
         return [
@@ -89,6 +102,15 @@ class NostroBalance extends ActiveRecord
         ];
     }
 
+    /**
+     * Описывает правила валидации балансовой записи.
+     *
+     * Валидируются обязательные реквизиты, тип L/S, D/C-знаки остатков,
+     * раздел NRE/INV, источник загрузки и денежная точность `decimal(20,2)`.
+     * Для Statement-записей номер выписки обязателен.
+     *
+     * @return array Правила Yii Validator.
+     */
     public function rules(): array
     {
         return [
@@ -137,6 +159,16 @@ class NostroBalance extends ActiveRecord
         ];
     }
 
+    /**
+     * Проверяет денежное поле баланса на формат `decimal(20,2)`.
+     *
+     * В отличие от операций выверки, баланс может быть отрицательным.
+     * D/C-признак хранится отдельно, но импортированные остатки всё равно
+     * проверяются на допустимый размер и шкалу.
+     *
+     * @param string $attribute Имя атрибута баланса.
+     * @return void
+     */
     public function validateMoneyAmount($attribute): void
     {
         $value = trim((string)$this->$attribute);
@@ -152,6 +184,11 @@ class NostroBalance extends ActiveRecord
         }
     }
 
+    /**
+     * Возвращает подписи атрибутов баланса для форм, таблиц и ошибок.
+     *
+     * @return array Массив `attribute => label`.
+     */
     public function attributeLabels(): array
     {
         return [
@@ -180,16 +217,31 @@ class NostroBalance extends ActiveRecord
 
     // ─── Отношения ────────────────────────────────────────────────
 
+    /**
+     * Возвращает связь балансовой записи с ностро-счётом.
+     *
+     * @return \yii\db\ActiveQuery Запрос связи `account_id -> accounts.id`.
+     */
     public function getAccount(): \yii\db\ActiveQuery
     {
         return $this->hasOne(Account::class, ['id' => 'account_id']);
     }
 
+    /**
+     * Возвращает связь балансовой записи с компанией.
+     *
+     * @return \yii\db\ActiveQuery Запрос связи `company_id -> company.id`.
+     */
     public function getCompany(): \yii\db\ActiveQuery
     {
         return $this->hasOne(Company::class, ['id' => 'company_id']);
     }
 
+    /**
+     * Возвращает события аудита баланса.
+     *
+     * @return \yii\db\ActiveQuery Запрос к `nostro_balance_audit`, отсортированный от новых к старым.
+     */
     public function getAuditLogs(): \yii\db\ActiveQuery
     {
         return $this->hasMany(NostroBalanceAudit::class, ['balance_id' => 'id'])
@@ -199,7 +251,9 @@ class NostroBalance extends ActiveRecord
     // ─── Хелперы ──────────────────────────────────────────────────
 
     /**
-     * Дата в формате DD/MM/YYYY для вывода в UI
+     * Возвращает дату валютирования в формате для интерфейса.
+     *
+     * @return string Дата `d.m.Y` или пустая строка, если дата не задана.
      */
     public function getValueDateFormatted(): string
     {
@@ -208,7 +262,9 @@ class NostroBalance extends ActiveRecord
     }
 
     /**
-     * Иконка статуса
+     * Возвращает визуальный маркер статуса баланса.
+     *
+     * @return string Символ статуса для таблицы балансов.
      */
     public function getStatusIcon(): string
     {
@@ -218,7 +274,9 @@ class NostroBalance extends ActiveRecord
     }
 
     /**
-     * Список источников для формы
+     * Возвращает список допустимых источников балансов.
+     *
+     * @return array Карта `код источника => название для формы`.
      */
     public static function sourceList(): array
     {
@@ -235,7 +293,12 @@ class NostroBalance extends ActiveRecord
     }
 
     /**
-     * Преобразовать модель в массив для JSON-ответа
+     * Преобразует баланс в структуру JSON API.
+     *
+     * Формат используется страницей балансов и импортом, поэтому включает
+     * исходные значения остатков, D/C-признаки, статус проверки и служебные даты.
+     *
+     * @return array Сериализованные данные баланса.
      */
     public function toApiArray(): array
     {
@@ -265,9 +328,14 @@ class NostroBalance extends ActiveRecord
     // ─── Валидация последовательности и балансов ─────────────────
 
     /**
-     * Проверить, совпадает ли opening_balance текущей записи
-     * с closing_balance предыдущей (по той же account+currency+section).
-     * Возвращает null если ОК, или строку с описанием расхождения.
+     * Проверяет непрерывность остатков Statement-выписок.
+     *
+     * Для Statement-записи сравнивает signed opening текущей выписки с signed
+     * closing предыдущей по тому же счёту, валюте и разделу. Ledger-балансы
+     * не проверяются этим правилом.
+     *
+     * @param float $tolerance Допустимое абсолютное расхождение.
+     * @return string|null Текст ошибки или `null`, если расхождений нет.
      */
     public function checkBalanceContinuity(float $tolerance = 0.01): ?string
     {
@@ -308,8 +376,12 @@ class NostroBalance extends ActiveRecord
     }
 
     /**
-     * Проверить уникальность и последовательность номеров выписок
-     * для данного account+currency+section.
+     * Проверяет уникальность номера Statement-выписки.
+     *
+     * Проверка выполняется внутри одного счёта, валюты и раздела. Метод пока
+     * фиксирует только дубликаты номера, без проверки числовой последовательности.
+     *
+     * @return string|null Текст ошибки или `null`, если номер допустим.
      */
     public function checkStatementSequence(): ?string
     {
@@ -337,7 +409,14 @@ class NostroBalance extends ActiveRecord
     }
 
     /**
-     * Запускает все проверки и устанавливает status/comment
+     * Запускает проверки качества баланса и обновляет `status/comment`.
+     *
+     * Настройки позволяют отключить проверку номеров или непрерывности остатков
+     * и задать допустимую погрешность. Метод меняет только объект модели;
+     * сохранение в БД выполняет вызывающий код.
+     *
+     * @param array $settings Настройки `enable_sequence_check`, `enable_balance_check`, `balance_tolerance`.
+     * @return void
      */
     public function runValidations(array $settings = []): void
     {
@@ -369,6 +448,13 @@ class NostroBalance extends ActiveRecord
 
     // ─── Приватные хелперы ────────────────────────────────────────
 
+    /**
+     * Преобразует сумму и D/C-признак в знаковое значение.
+     *
+     * @param float $amount Абсолютная сумма.
+     * @param string $dc Признак `D` или `C`.
+     * @return float Отрицательное значение для Debit и положительное для Credit.
+     */
     private function signedAmount(float $amount, string $dc): float
     {
         return $dc === self::DC_DEBIT ? -$amount : $amount;

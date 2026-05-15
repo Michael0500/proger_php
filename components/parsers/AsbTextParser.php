@@ -20,13 +20,19 @@ use app\models\NostroBalance;
  */
 class AsbTextParser
 {
+    /** @var string[] Ошибки последнего парсинга */
     private array $errors = [];
 
     /**
-     * @param string $filePath  Путь к файлу
-     * @param int    $accountId FK счёта
-     * @param string $section   NRE|INV
-     * @return array[]
+     * Парсит текстовый файл АСБ и возвращает строки для `NostroBalance`.
+     *
+     * Поддерживает UTF-8, Windows-1251 и KOI8-R. Многосекционные файлы
+     * разбиваются на отдельные выписки.
+     *
+     * @param string $filePath Путь к файлу.
+     * @param int $accountId ID счёта.
+     * @param string $section Раздел `NRE` или `INV`.
+     * @return array[] Массив строк балансов.
      */
     public function parse(string $filePath, int $accountId, string $section): array
     {
@@ -58,6 +64,11 @@ class AsbTextParser
         return $rows;
     }
 
+    /**
+     * Возвращает ошибки последнего парсинга.
+     *
+     * @return string[] Список ошибок.
+     */
     public function getErrors(): array
     {
         return $this->errors;
@@ -65,6 +76,15 @@ class AsbTextParser
 
     // ─── Приватные ────────────────────────────────────────────────
 
+    /**
+     * Разбирает одну секцию выписки АСБ.
+     *
+     * @param string $text Текст секции.
+     * @param int $accountId ID счёта.
+     * @param string $section Раздел баланса.
+     * @param string $filePath Путь к файлу для извлечения номера выписки.
+     * @return array|null Строка баланса или `null`, если секция некорректна.
+     */
     private function parseSection(string $text, int $accountId, string $section, string $filePath): ?array
     {
         $fields = $this->extractFields($text);
@@ -113,7 +133,10 @@ class AsbTextParser
     }
 
     /**
-     * Извлекает поля вида Ключ=Значение из текста (одна строка — одна пара)
+     * Извлекает поля вида `Ключ=Значение`.
+     *
+     * @param string $text Текст секции.
+     * @return array Карта полей.
      */
     private function extractFields(string $text): array
     {
@@ -134,7 +157,10 @@ class AsbTextParser
     }
 
     /**
-     * Разделить файл на блоки (для многосекционных файлов)
+     * Разделяет файл на блоки выписок.
+     *
+     * @param string $text Текст файла в UTF-8.
+     * @return string[] Секции файла.
      */
     private function splitSections(string $text): array
     {
@@ -144,7 +170,10 @@ class AsbTextParser
     }
 
     /**
-     * Конвертация в UTF-8: пробуем win-1251 и koi8-r
+     * Конвертирует содержимое файла в UTF-8.
+     *
+     * @param string $raw Сырые байты файла.
+     * @return string UTF-8 строка или исходная строка, если конвертация не удалась.
      */
     private function toUtf8(string $raw): string
     {
@@ -166,8 +195,10 @@ class AsbTextParser
     }
 
     /**
-     * Преобразовать дату в YYYY-MM-DD
-     * Форматы: DD.MM.YYYY, DD/MM/YYYY, YYYY-MM-DD
+     * Преобразует дату в формат `Y-m-d`.
+     *
+     * @param string $raw Исходная дата.
+     * @return string|null Нормализованная дата или `null`.
      */
     private function parseDate(string $raw): ?string
     {
@@ -184,7 +215,10 @@ class AsbTextParser
     }
 
     /**
-     * Преобразовать строку суммы в float (запятая → точка)
+     * Преобразует строку суммы в число.
+     *
+     * @param string $raw Сумма с возможными пробелами и запятой.
+     * @return float Числовое значение.
      */
     private function parseAmount(string $raw): float
     {
@@ -195,8 +229,10 @@ class AsbTextParser
     }
 
     /**
-     * Извлечь предполагаемый номер выписки из имени файла
-     * Например: statement_2024_001.txt → 2024_001
+     * Извлекает предполагаемый номер выписки из имени файла.
+     *
+     * @param string $filePath Путь к файлу.
+     * @return string|null Номер выписки или имя файла без расширения.
      */
     private function extractFromFileName(string $filePath): ?string
     {

@@ -34,6 +34,12 @@ class SeedController extends Controller
 
     private $batchSize = 1000; // количество строк в одном пакете
 
+    /**
+     * Регистрирует CLI-опции генератора данных.
+     *
+     * @param string $actionID ID action.
+     * @return array Список поддерживаемых опций.
+     */
     public function options($actionID)
     {
         return array_merge(parent::options($actionID), [
@@ -41,6 +47,11 @@ class SeedController extends Controller
         ]);
     }
 
+    /**
+     * Возвращает короткие/альтернативные имена CLI-опций.
+     *
+     * @return array Карта alias => option.
+     */
     public function optionAliases()
     {
         return array_merge(parent::optionAliases(), [
@@ -48,6 +59,15 @@ class SeedController extends Controller
         ]);
     }
 
+    /**
+     * Генерирует тестовые записи `nostro_entries`.
+     *
+     * Создаёт сквитованные пары, пары для автоквитования и одиночные
+     * несквитованные записи. Использует batchInsert и может предварительно
+     * создать тестовую категорию, ностро-банк и счета.
+     *
+     * @return int Код завершения консольной команды.
+     */
     public function actionNostro()
     {
         // 1. Определяем компанию
@@ -261,7 +281,10 @@ class SeedController extends Controller
     }
 
     /**
-     * Создаёт категорию, ностро-банк и тестовые счета если их нет
+     * Создаёт тестовую категорию, ностро-банк и счета, если их нет.
+     *
+     * @param int $companyId ID компании.
+     * @return void
      */
     private function ensureTestStructure(int $companyId): void
     {
@@ -320,6 +343,13 @@ class SeedController extends Controller
         }
     }
 
+    /**
+     * Возвращает случайную дату внутри заданного диапазона.
+     *
+     * @param string $from Начальная дата `Y-m-d`.
+     * @param string $to Конечная дата `Y-m-d`.
+     * @return string Случайная дата `Y-m-d`.
+     */
     private function rDate(string $from, string $to): string
     {
         $tf = strtotime($from);

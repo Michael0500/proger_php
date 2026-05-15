@@ -1,11 +1,23 @@
 /**
- * Mixin: Categories
- * Всё что касается Category — загрузка, создание, редактирование, удаление.
- * Категория содержит ностро-банки (pools), привязанные напрямую через pool.category_id.
+ * Mixin управления категориями страницы выверки.
+ *
+ * Категории являются верхним уровнем навигации сайдбара и группируют
+ * ностро-банки (`AccountPool`) через `pool.category_id`. Mixin загружает дерево
+ * категорий, восстанавливает выбранный контекст пользователя и выполняет CRUD
+ * через API, где данные ограничиваются `company_id`.
  */
 var CategoriesMixin = {
     methods: {
 
+        /**
+         * Загружает дерево категорий и ностро-банков для сайдбара.
+         *
+         * Читает `categoriesExpanded`, `selectedCategoryId` и `selectedPoolId`
+         * из `StateStorage`, сортирует ностро-банки по русской локали и при
+         * восстановленном банке запускает загрузку записей выверки.
+         *
+         * @returns {void}
+         */
         loadCategories: function () {
             var self = this;
             self.loadingCategories = true;
@@ -55,6 +67,16 @@ var CategoriesMixin = {
                 });
         },
 
+        /**
+         * Выбирает или сворачивает категорию в сайдбаре.
+         *
+         * Изменяет `selectedCategory`, при смене категории сбрасывает
+         * `selectedPool`, сохраняет раскрытые категории и выбранные ID в
+         * `StateStorage`. Загрузку записей выполняет выбор конкретного банка.
+         *
+         * @param {Object} category Категория из `categories`.
+         * @returns {void}
+         */
         toggleCategory: function (category) {
             var self = this;
             var index = self.categories.findIndex(function (c) { return c.id === category.id; });
@@ -73,12 +95,27 @@ var CategoriesMixin = {
             if (!self.selectedPool) StateStorage.set('selectedPoolId', null);
         },
 
-        // Добавление
+        /**
+         * Открывает модалку создания категории.
+         *
+         * Сбрасывает `newCategory` и показывает Bootstrap modal
+         * `addCategoryModal`.
+         *
+         * @returns {void}
+         */
         showAddCategoryModal: function () {
             this.newCategory = { name: '', description: '' };
             this._showModal('addCategoryModal');
         },
 
+        /**
+         * Создаёт категорию из формы сайдбара.
+         *
+         * Валидирует обязательное имя, вызывает POST `categoryCreate`, закрывает
+         * модалку и перезагружает дерево категорий при успешном ответе API.
+         *
+         * @returns {void}
+         */
         createCategory: function () {
             var self = this;
             if (!self.newCategory.name || !self.newCategory.name.trim()) {
@@ -98,12 +135,28 @@ var CategoriesMixin = {
                 .catch(function () { Swal.fire('Ошибка', 'Не удалось создать категорию', 'error'); });
         },
 
-        // Редактирование
+        /**
+         * Открывает модалку редактирования категории.
+         *
+         * Копирует данные строки в `editingCategory`, чтобы форма не меняла
+         * список до успешного сохранения.
+         *
+         * @param {Object} category Категория из текущего дерева.
+         * @returns {void}
+         */
         editCategory: function (category) {
             this.editingCategory = { id: category.id, name: category.name, description: category.description || '' };
             this._showModal('editCategoryModal');
         },
 
+        /**
+         * Сохраняет изменения категории.
+         *
+         * Валидирует имя, вызывает POST `categoryUpdate`, закрывает модалку и
+         * перезагружает дерево категорий. При ошибке API показывает SweetAlert.
+         *
+         * @returns {void}
+         */
         updateCategory: function () {
             var self = this;
             if (!self.editingCategory.name || !self.editingCategory.name.trim()) {
@@ -123,7 +176,16 @@ var CategoriesMixin = {
                 .catch(function () { Swal.fire('Ошибка', 'Не удалось обновить категорию', 'error'); });
         },
 
-        // Удаление
+        /**
+         * Удаляет категорию после подтверждения пользователя.
+         *
+         * Сервер отвязывает ностро-банки от категории, но не удаляет сами банки.
+         * При удалении выбранной категории локально сбрасывает выбранный контекст
+         * выверки.
+         *
+         * @param {Object} category Категория, которую нужно удалить.
+         * @returns {void}
+         */
         deleteCategory: function (category) {
             var self = this;
             Swal.fire({

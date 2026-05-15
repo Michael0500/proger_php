@@ -7,12 +7,17 @@ use yii\data\ActiveDataProvider;
 use app\models\Account;
 
 /**
- * AccountSearch represents the model behind the search form of `app\models\Account`.
+ * Поисковая модель ностро-счетов.
+ *
+ * Используется CRUD-страницами Yii для построения `ActiveDataProvider`
+ * поверх `Account` с фильтрами по реквизитам счёта.
  */
 class AccountSearch extends Account
 {
     /**
-     * {@inheritdoc}
+     * Возвращает правила фильтрации поисковой формы.
+     *
+     * @return array Правила Yii Validator.
      */
     public function rules()
     {
@@ -24,7 +29,11 @@ class AccountSearch extends Account
     }
 
     /**
-     * {@inheritdoc}
+     * Возвращает стандартные сценарии `Model`.
+     *
+     * Сценарии родительской ActiveRecord-модели не нужны для поисковой формы.
+     *
+     * @return array Сценарии модели.
      */
     public function scenarios()
     {
@@ -33,12 +42,12 @@ class AccountSearch extends Account
     }
 
     /**
-     * Creates data provider instance with search query applied
+     * Создаёт data provider со всеми применёнными фильтрами.
      *
-     * @param array $params
-     * @param string|null $formName Form name to be used into `->load()` method.
+     * @param array $params Параметры фильтрации из запроса.
+     * @param string|null $formName Имя формы для метода `load()`.
      *
-     * @return ActiveDataProvider
+     * @return ActiveDataProvider Провайдер счетов для GridView.
      */
     public function search($params, $formName = null)
     {

@@ -18,11 +18,24 @@ use yii\db\ActiveRecord;
  */
 class Country extends ActiveRecord
 {
+    /**
+     * Возвращает имя таблицы справочника стран.
+     *
+     * @return string Имя таблицы `countries` с учётом префикса Yii.
+     */
     public static function tableName(): string
     {
         return '{{%countries}}';
     }
 
+    /**
+     * Описывает правила валидации страны.
+     *
+     * Код страны хранится в формате ISO 3166-1 alpha-2, а alpha-3 код
+     * нормализуется при сохранении, если указан.
+     *
+     * @return array Правила Yii Validator.
+     */
     public function rules(): array
     {
         return [
@@ -40,6 +53,11 @@ class Country extends ActiveRecord
         ];
     }
 
+    /**
+     * Возвращает подписи атрибутов страны.
+     *
+     * @return array Массив `attribute => label`.
+     */
     public function attributeLabels(): array
     {
         return [
@@ -54,6 +72,12 @@ class Country extends ActiveRecord
         ];
     }
 
+    /**
+     * Нормализует коды страны и обновляет служебные даты.
+     *
+     * @param bool $insert Признак создания новой страны.
+     * @return bool Можно ли продолжать сохранение.
+     */
     public function beforeSave($insert): bool
     {
         if (!parent::beforeSave($insert)) {
@@ -73,7 +97,7 @@ class Country extends ActiveRecord
     }
 
     /**
-     * Возвращает список активных стран, отсортированный по sort_order, name.
+     * Возвращает список активных стран для справочников и форм.
      *
      * @return self[]
      */

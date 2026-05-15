@@ -15,6 +15,13 @@ use yii\db\Migration;
  */
 class m260225_000001_create_nostro_entry_audit_table extends Migration
 {
+    /**
+     * Применяет миграцию `m260225_000001_create_nostro_entry_audit_table`.
+     *
+     * Создаёт или изменяет структуру БД согласно назначению файла миграции.
+     *
+     * @return void
+     */
     public function safeUp()
     {
         $this->createTable('{{%nostro_entry_audit}}', [
@@ -46,6 +53,13 @@ class m260225_000001_create_nostro_entry_audit_table extends Migration
         );
     }
 
+    /**
+     * Откатывает миграцию `m260225_000001_create_nostro_entry_audit_table`.
+     *
+     * Возвращает структуру БД к состоянию до применения этой миграции, если откат поддерживается.
+     *
+     * @return void
+     */
     public function safeDown()
     {
         $this->dropForeignKey('fk_nea_entry', '{{%nostro_entry_audit}}');

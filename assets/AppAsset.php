@@ -5,6 +5,12 @@ namespace app\assets;
 use yii\web\AssetBundle;
 use yii\web\View;
 
+/**
+ * Основной asset bundle веб-приложения.
+ *
+ * Регистрирует CSS/JS Bootstrap-страниц, Vue 2, axios, datepicker, Select2,
+ * SweetAlert2 и стартеры Vue-страниц SmartMatch.
+ */
 class AppAsset extends AssetBundle
 {
     public $basePath = '@webroot';

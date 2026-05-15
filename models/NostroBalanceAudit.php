@@ -24,11 +24,24 @@ class NostroBalanceAudit extends ActiveRecord
     const ACTION_EDIT    = 'edit';
     const ACTION_IMPORT  = 'import';
 
+    /**
+     * Возвращает имя таблицы аудита балансов.
+     *
+     * @return string Имя таблицы `nostro_balance_audit` с учётом префикса Yii.
+     */
     public static function tableName(): string
     {
         return '{{%nostro_balance_audit}}';
     }
 
+    /**
+     * Описывает правила валидации события аудита баланса.
+     *
+     * События фиксируют подтверждение, ручное изменение и импорт балансов.
+     * Снимки старых и новых значений хранятся JSON-строками.
+     *
+     * @return array Правила Yii Validator.
+     */
     public function rules(): array
     {
         return [
@@ -41,13 +54,28 @@ class NostroBalanceAudit extends ActiveRecord
         ];
     }
 
+    /**
+     * Возвращает связь события аудита с балансовой записью.
+     *
+     * @return \yii\db\ActiveQuery Запрос связи с `NostroBalance`.
+     */
     public function getBalance(): \yii\db\ActiveQuery
     {
         return $this->hasOne(NostroBalance::class, ['id' => 'balance_id']);
     }
 
     /**
-     * Записать аудит-событие
+     * Записывает событие аудита баланса.
+     *
+     * Метод используется ручным редактированием, подтверждением и импортом.
+     * Переданные массивы кодируются в JSON без дополнительной нормализации.
+     *
+     * @param int $balanceId ID балансовой записи.
+     * @param string $action Действие `confirm`, `edit` или `import`.
+     * @param array|null $oldValues Старые значения баланса.
+     * @param array|null $newValues Новые значения баланса.
+     * @param string|null $reason Комментарий или причина события.
+     * @return void
      */
     public static function log(
         int $balanceId,
@@ -66,6 +94,11 @@ class NostroBalanceAudit extends ActiveRecord
         $log->save(false);
     }
 
+    /**
+     * Преобразует событие аудита баланса в структуру JSON API.
+     *
+     * @return array Сериализованное событие с декодированными JSON-снимками.
+     */
     public function toApiArray(): array
     {
         return [

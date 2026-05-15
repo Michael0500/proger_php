@@ -6,8 +6,19 @@ use yii\console\Controller;
 use app\models\User;
 use yii\helpers\Console;
 
+/**
+ * Консольные команды управления пользователями.
+ */
 class UserController extends Controller
 {
+    /**
+     * Создаёт администратора и назначает роль `admin`.
+     *
+     * @param string $username Логин администратора.
+     * @param string $email Email администратора.
+     * @param string $password Пароль в открытом виде.
+     * @return void
+     */
     public function actionCreateAdmin($username, $email, $password)
     {
         $user = new User();

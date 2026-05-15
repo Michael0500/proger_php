@@ -34,13 +34,24 @@ class AutoMatchController extends Controller
     /** @var bool Вывести SQL без выполнения */
     public $debug = false;
 
+    /**
+     * Регистрирует CLI-опции команды.
+     *
+     * @param string $actionID ID action.
+     * @return array Список поддерживаемых опций.
+     */
     public function options($actionID): array
     {
         return array_merge(parent::options($actionID), ['company', 'account', 'debug']);
     }
 
     /**
-     * Запустить автоквитование.
+     * Запускает автоквитование для выбранных компаний.
+     *
+     * Учитывает опции `--company`, `--account` и `--debug`. В обычном режиме
+     * вызывает `MatchingService::autoMatch()` и печатает прогресс по правилам.
+     *
+     * @return int Код завершения консольной команды.
      */
     public function actionRun(): int
     {
@@ -154,7 +165,9 @@ class AutoMatchController extends Controller
     }
 
     /**
-     * Показать статистику незаквитованных записей.
+     * Показывает статистику записей и правил без запуска квитования.
+     *
+     * @return int Код завершения консольной команды.
      */
     public function actionStatus(): int
     {
@@ -210,7 +223,11 @@ class AutoMatchController extends Controller
     }
 
     /**
-     * Вывести SQL для каждого правила без выполнения.
+     * Печатает диагностический SQL для активных правил компании.
+     *
+     * @param int $companyId ID компании.
+     * @param int|null $accountId Ограничение по счёту.
+     * @return void
      */
     private function printDebugSql(int $companyId, ?int $accountId): void
     {
@@ -237,7 +254,9 @@ class AutoMatchController extends Controller
     }
 
     /**
-     * Получить список компаний для обработки.
+     * Возвращает список компаний для обработки командой.
+     *
+     * @return Company[] Список компаний с учётом опции `--company`.
      */
     private function getCompanies(): array
     {

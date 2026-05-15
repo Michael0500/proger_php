@@ -10,22 +10,41 @@ use app\models\NostroEntry;
 use app\models\User;
 
 /**
- * Контроллер квитования.
- * Все методы возвращают JSON.
+ * JSON-контроллер квитования.
+ *
+ * Контроллер принимает запросы UI для ручного квитования, расквитования,
+ * пошагового автоквитования и CRUD правил. Все операции ограничиваются
+ * компанией текущего пользователя.
  */
 class MatchingController extends BaseController
 {
+    /**
+     * Отключает CSRF для JSON API квитования.
+     *
+     * @param \yii\base\Action $action Запускаемое действие.
+     * @return bool Можно ли продолжать выполнение action.
+     */
     public function beforeAction($action): bool
     {
         $this->enableCsrfValidation = false;
         return parent::beforeAction($action);
     }
 
+    /**
+     * Создаёт сервис бизнес-логики квитования.
+     *
+     * @return MatchingService Новый экземпляр сервиса.
+     */
     private function service(): MatchingService
     {
         return new MatchingService();
     }
 
+    /**
+     * Возвращает ID компании текущего пользователя.
+     *
+     * @return int|null ID компании или `null`, если компания не выбрана.
+     */
     private function companyId(): ?int
     {
         $user = User::findOne(Yii::$app->user->id);
@@ -33,7 +52,9 @@ class MatchingController extends BaseController
     }
 
     /**
-     * Определить секцию (NRE/INV) по коду компании текущего пользователя.
+     * Определяет секцию NRE/INV по коду компании текущего пользователя.
+     *
+     * @return string|null `NRE`, `INV` или `null`, если секцию определить нельзя.
      */
     private function companySection(): ?string
     {
@@ -52,8 +73,11 @@ class MatchingController extends BaseController
     // ── Ручное квитование ─────────────────────────────────────────────
 
     /**
-     * POST /matching/match-manual
-     * body: ids[]=1&ids[]=2&...  section=INV|NRE (опционально)
+     * Выполняет ручное квитование выбранных записей.
+     *
+     * POST `/matching/match-manual`, body: `ids[]=...`, `section=INV|NRE`.
+     *
+     * @return array JSON-результат `MatchingService::matchManual()`.
      */
     public function actionMatchManual(): array
     {
@@ -65,18 +89,25 @@ class MatchingController extends BaseController
         if (!is_array($ids) || count($ids) < 1) {
             return ['success' => false, 'message' => 'Выберите записи для квитования'];
         }
+        $companyId = $this->companyId();
+        if (!$companyId) {
+            return ['success' => false, 'message' => 'Компания не определена'];
+        }
 
         // Если 1 запись — сервис проверит что сумма = 0, иначе отклонит
         if (count($ids) < 2) {
             // разрешаем пройти в сервис, он сам проверит amount = 0
         }
 
-        return $this->service()->matchManual(array_map('intval', $ids), $section);
+        return $this->service()->matchManual(array_map('intval', $ids), $section, $companyId);
     }
 
     /**
-     * POST /matching/unmatch
-     * body: match_id=MTCHxxxxxxxx
+     * Расквитовывает группу записей по `match_id`.
+     *
+     * POST `/matching/unmatch`, body: `match_id=MTCH...`.
+     *
+     * @return array JSON-результат `MatchingService::unmatch()`.
      */
     public function actionUnmatch(): array
     {
@@ -86,14 +117,20 @@ class MatchingController extends BaseController
         if (!$matchId) {
             return ['success' => false, 'message' => 'Не указан Match ID'];
         }
+        $companyId = $this->companyId();
+        if (!$companyId) {
+            return ['success' => false, 'message' => 'Компания не определена'];
+        }
 
-        return $this->service()->unmatch($matchId);
+        return $this->service()->unmatch($matchId, $companyId);
     }
 
     /**
-     * POST /matching/calc-summary
-     * body: ids[]=1&ids[]=2
-     * Подсчёт сумм для выбранных записей (перед квитованием)
+     * Считает суммы по выбранным записям перед ручным квитованием.
+     *
+     * POST `/matching/calc-summary`, body: `ids[]=...`.
+     *
+     * @return array JSON со сводкой или ошибкой.
      */
     public function actionCalcSummary(): array
     {
@@ -103,17 +140,25 @@ class MatchingController extends BaseController
         if (!is_array($ids)) {
             return ['success' => false, 'message' => 'Нет данных'];
         }
+        $companyId = $this->companyId();
+        if (!$companyId) {
+            return ['success' => false, 'message' => 'Компания не определена'];
+        }
 
-        $summary = $this->service()->calcSummary(array_map('intval', $ids));
+        $summary = $this->service()->calcSummary(array_map('intval', $ids), $companyId);
         return ['success' => true, 'data' => $summary];
     }
 
     // ── Автоквитование ────────────────────────────────────────────────
 
     /**
-     * POST /matching/auto-match
-     * body: account_id=X (опционально)
-     * Синхронный запуск (обратная совместимость).
+     * Запускает синхронное автоквитование.
+     *
+     * POST `/matching/auto-match`, body: `account_id` и `section` опциональны.
+     * Метод сохранён для обратной совместимости; основной UI использует
+     * пошаговый запуск с прогрессом.
+     *
+     * @return array JSON-результат автоквитования.
      */
     public function actionAutoMatch(): array
     {
@@ -134,10 +179,12 @@ class MatchingController extends BaseController
     }
 
     /**
-     * POST /matching/auto-match-start
-     * Инициализация пошагового автоквитования с прогрессом.
-     * body: account_id=X (опционально), section=NRE|INV (опционально, по умолчанию из компании)
-     * Возвращает job_id и количество правил.
+     * Инициализирует пошаговое автоквитование с прогрессом.
+     *
+     * POST `/matching/auto-match-start`. Принимает `account_id`, `section`,
+     * `scope_type`, `scope_id` и возвращает `job_id` для последующих шагов.
+     *
+     * @return array JSON с параметрами созданного задания.
      */
     public function actionAutoMatchStart(): array
     {
@@ -160,9 +207,11 @@ class MatchingController extends BaseController
     }
 
     /**
-     * POST /matching/auto-match-step
-     * Выполнить следующее правило автоквитования.
-     * body: job_id=xxx
+     * Выполняет следующий шаг пошагового автоквитования.
+     *
+     * POST `/matching/auto-match-step`, body: `job_id`.
+     *
+     * @return array JSON-прогресс задания.
      */
     public function actionAutoMatchStep(): array
     {
@@ -179,8 +228,11 @@ class MatchingController extends BaseController
     // ── Просмотр сквитованной группы ─────────────────────────────────
 
     /**
-     * GET /matching/match-group?match_id=MTCHxxxxxxxx
-     * Возвращает все записи с данным match_id.
+     * Возвращает записи одной группы квитования.
+     *
+     * GET `/matching/match-group?match_id=MTCH...`.
+     *
+     * @return array JSON со строками текущей компании и указанным `match_id`.
      */
     public function actionMatchGroup(): array
     {
@@ -217,7 +269,11 @@ class MatchingController extends BaseController
     // ── CRUD правил квитования ────────────────────────────────────────
 
     /**
-     * GET /matching/get-rules
+     * Возвращает правила автоквитования текущей компании.
+     *
+     * GET `/matching/get-rules`.
+     *
+     * @return array JSON-список правил с человекочитаемыми подписями.
      */
     public function actionGetRules(): array
     {
@@ -255,8 +311,12 @@ class MatchingController extends BaseController
     }
 
     /**
-     * POST /matching/save-rule
-     * Создать или обновить правило
+     * Создаёт или обновляет правило автоквитования.
+     *
+     * POST `/matching/save-rule`. Все сохраняемые правила принудительно
+     * привязываются к компании текущего пользователя.
+     *
+     * @return array JSON-результат сохранения или ошибки валидации.
      */
     public function actionSaveRule(): array
     {
@@ -294,7 +354,11 @@ class MatchingController extends BaseController
     }
 
     /**
-     * POST /matching/delete-rule
+     * Удаляет правило автоквитования текущей компании.
+     *
+     * POST `/matching/delete-rule`, body: `id`.
+     *
+     * @return array JSON-результат удаления.
      */
     public function actionDeleteRule(): array
     {

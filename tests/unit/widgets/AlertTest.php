@@ -5,8 +5,17 @@ namespace tests\unit\widgets;
 use app\widgets\Alert;
 use Yii;
 
+/**
+ * Тестовый класс `AlertTest`.
+ *
+ * Проверяет поведение соответствующего участка SmartMatch в рамках Codeception suite.
+ */
 class AlertTest extends \Codeception\Test\Unit
 {
+    /**
+     * Проверяет сценарий: single error message.
+     * @return void
+     */
     public function testSingleErrorMessage()
     {
         $message = 'This is an error message';
@@ -23,6 +32,10 @@ class AlertTest extends \Codeception\Test\Unit
         verify($renderingResult)->stringNotContainsString('alert-warning');
     }
 
+    /**
+     * Проверяет сценарий: multiple error messages.
+     * @return void
+     */
     public function testMultipleErrorMessages()
     {
         $firstMessage = 'This is the first error message';
@@ -41,6 +54,10 @@ class AlertTest extends \Codeception\Test\Unit
         verify($renderingResult)->stringNotContainsString('alert-warning');
     }
 
+    /**
+     * Проверяет сценарий: single danger message.
+     * @return void
+     */
     public function testSingleDangerMessage()
     {
         $message = 'This is a danger message';
@@ -57,6 +74,10 @@ class AlertTest extends \Codeception\Test\Unit
         verify($renderingResult)->stringNotContainsString('alert-warning');
     }
 
+    /**
+     * Проверяет сценарий: multiple danger messages.
+     * @return void
+     */
     public function testMultipleDangerMessages()
     {
         $firstMessage = 'This is the first danger message';
@@ -75,6 +96,10 @@ class AlertTest extends \Codeception\Test\Unit
         verify($renderingResult)->stringNotContainsString('alert-warning');
     }
 
+    /**
+     * Проверяет сценарий: single success message.
+     * @return void
+     */
     public function testSingleSuccessMessage()
     {
         $message = 'This is a success message';
@@ -91,6 +116,10 @@ class AlertTest extends \Codeception\Test\Unit
         verify($renderingResult)->stringNotContainsString('alert-warning');
     }
 
+    /**
+     * Проверяет сценарий: multiple success messages.
+     * @return void
+     */
     public function testMultipleSuccessMessages()
     {
         $firstMessage = 'This is the first danger message';
@@ -109,6 +138,10 @@ class AlertTest extends \Codeception\Test\Unit
         verify($renderingResult)->stringNotContainsString('alert-warning');
     }
 
+    /**
+     * Проверяет сценарий: single info message.
+     * @return void
+     */
     public function testSingleInfoMessage()
     {
         $message = 'This is an info message';
@@ -125,6 +158,10 @@ class AlertTest extends \Codeception\Test\Unit
         verify($renderingResult)->stringNotContainsString('alert-warning');
     }
 
+    /**
+     * Проверяет сценарий: multiple info messages.
+     * @return void
+     */
     public function testMultipleInfoMessages()
     {
         $firstMessage = 'This is the first info message';
@@ -143,6 +180,10 @@ class AlertTest extends \Codeception\Test\Unit
         verify($renderingResult)->stringNotContainsString('alert-warning');
     }
 
+    /**
+     * Проверяет сценарий: single warning message.
+     * @return void
+     */
     public function testSingleWarningMessage()
     {
         $message = 'This is a warning message';
@@ -159,6 +200,10 @@ class AlertTest extends \Codeception\Test\Unit
         verify($renderingResult)->stringNotContainsString('alert-info');
     }
 
+    /**
+     * Проверяет сценарий: multiple warning messages.
+     * @return void
+     */
     public function testMultipleWarningMessages()
     {
         $firstMessage = 'This is the first warning message';
@@ -177,6 +222,10 @@ class AlertTest extends \Codeception\Test\Unit
         verify($renderingResult)->stringNotContainsString('alert-info');
     }
 
+    /**
+     * Проверяет сценарий: single mixed messages.
+     * @return void
+     */
     public function testSingleMixedMessages()
     {
         $errorMessage = 'This is an error message';
@@ -205,6 +254,10 @@ class AlertTest extends \Codeception\Test\Unit
         verify($renderingResult)->stringContainsString('alert-warning');
     }
 
+    /**
+     * Проверяет сценарий: multiple mixed messages.
+     * @return void
+     */
     public function testMultipleMixedMessages()
     {
         $firstErrorMessage = 'This is the first error message';
@@ -243,6 +296,10 @@ class AlertTest extends \Codeception\Test\Unit
         verify($renderingResult)->stringContainsString('alert-warning');
     }
 
+    /**
+     * Проверяет сценарий: flash integrity.
+     * @return void
+     */
     public function testFlashIntegrity()
     {
         $errorMessage = 'This is an error message';

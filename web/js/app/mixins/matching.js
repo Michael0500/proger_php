@@ -1,8 +1,18 @@
 /**
- * MatchingMixin — квитование, автоквитование, правила.
- * Работает с плоским массивом this.entries (из EntriesMixin).
+ * Mixin квитования, автоквитования и правил matching.
+ *
+ * Работает с массивом `entries` из EntriesMixin и управляет выбранными
+ * NostroEntry, ручным квитованием, просмотром групп по `match_id`,
+ * расквитованием, пошаговым автоквитованием и CRUD правил. Сервер проверяет
+ * баланс выбранных записей, уникальность `match_id`, область компании и
+ * допустимость операций с архивом.
  */
 var MatchingMixin = {
+    /**
+     * Начальное состояние подсистемы квитования.
+     *
+     * @returns {Object} Vue data для выбора строк, модалок, правил и прогресса автоквитования.
+     */
     data: function () {
         return {
             selectedIds:      [],
@@ -12,6 +22,15 @@ var MatchingMixin = {
             matchGroupLoading: false,
             matchingRules:    [],
             loadingRules:     false,
+            /**
+             * Форма создания/редактирования правила автоквитования.
+             *
+             * @type {Object}
+             * @property {?number} id ID правила; `null` означает создание.
+             * @property {string} pair_type Тип пары: `LS`, `LL` или `SS`.
+             * @property {boolean} cross_id_search Включён ли поиск совпадений между любыми ID-полями.
+             * @property {number} priority Приоритет выполнения правила.
+             */
             editingRule: {
                 id: null, name: '', section: 'NRE', pair_type: 'LS',
                 match_dc: true, match_amount: true, match_value_date: true,
@@ -20,6 +39,15 @@ var MatchingMixin = {
                 cross_id_search: false, is_active: true, priority: 100, description: ''
             },
             autoMatchRunning: false,
+            /**
+             * Состояние пошагового автоквитования.
+             *
+             * @type {?Object}
+             * @property {string} job_id ID задачи в серверном FileCache.
+             * @property {number} total_steps Количество правил/шагов.
+             * @property {number} current_step Номер выполненного шага.
+             * @property {number} total_matched Общее количество найденных пар.
+             */
             autoMatchProgress: null,  // { job_id, total_steps, current_step, total_matched, rules, step_results, unmatched_count }
             autoMatchScope: {
                 type: 'all',   // 'all' | 'pool' | 'group' | 'category'
@@ -30,9 +58,22 @@ var MatchingMixin = {
     },
 
     computed: {
+        /**
+         * Возвращает раздел компании пользователя, влияющий на проверку баланса.
+         *
+         * @returns {string} Раздел компании, например `NRE` или `INV`.
+         */
         userSection: function () {
             return (window.AppConfig && window.AppConfig.companySection) || '';
         },
+        /**
+         * Проверяет, достаточно ли выбранных записей для ручного квитования.
+         *
+         * В INV допускается одна запись с нулевой разницей, в остальных случаях
+         * требуется минимум две записи.
+         *
+         * @returns {boolean} `true`, если кнопка квитования может быть активна.
+         */
         hasSelection: function () {
             // Разрешаем 1 запись если diff = 0 (например, сумма записи = 0)
             if (this.selectedIds.length === 1 && this.selectionSummary && this.summaryDiff === 0) {
@@ -40,6 +81,14 @@ var MatchingMixin = {
             }
             return this.selectedIds.length >= 2;
         },
+        /**
+         * Возвращает актуальную разницу выбранных записей.
+         *
+         * Для INV и записей одного счёта сравнение идёт по Debit/Credit, для
+         * остальных NRE-сценариев — по Ledger/Statement.
+         *
+         * @returns {number|null} Разница сумм или `null`, если нет summary.
+         */
         summaryDiff: function () {
             if (!this.selectionSummary) return null;
             // В INV всегда сравниваем Debit-Credit. В NRE — если все выбранные
@@ -49,12 +98,25 @@ var MatchingMixin = {
             }
             return this.selectionSummary.diff;
         },
+        /**
+         * Проверяет, сбалансирована ли текущая выборка для квитования.
+         *
+         * @returns {boolean|null} `true`, если разница равна нулю.
+         */
         summaryBalanced: function () { return this.selectionSummary && this.summaryDiff === 0; }
     },
 
     methods: {
 
-        // ─── Выбор ─────────────────────────────────────────────────
+        /**
+         * Переключает выбор записи выверки.
+         *
+         * Изменяет `selectedIds` и пересчитывает summary для панели ручного
+         * квитования.
+         *
+         * @param {number|string} id Идентификатор NostroEntry.
+         * @returns {void}
+         */
         toggleEntrySelection: function (id) {
             var i = this.selectedIds.indexOf(id);
             if (i === -1) this.selectedIds.push(id);
@@ -62,14 +124,33 @@ var MatchingMixin = {
             this.updateSummary();
         },
 
+        /**
+         * Проверяет, выбрана ли запись.
+         *
+         * @param {number|string} id Идентификатор NostroEntry.
+         * @returns {boolean} `true`, если ID присутствует в `selectedIds`.
+         */
         isSelected: function (id) { return this.selectedIds.indexOf(id) !== -1; },
 
+        /**
+         * Очищает текущий выбор и summary ручного квитования.
+         *
+         * @returns {void}
+         */
         clearSelection: function () {
             this.selectedIds      = [];
             this.selectionSummary = null;
         },
 
-        // ─── Пересчёт суммы ────────────────────────────────────────
+        /**
+         * Пересчитывает суммы выбранных записей для проверки баланса.
+         *
+         * Читает `entries` и `selectedIds`, заполняет `selectionSummary` суммами
+         * Ledger/Statement и Debit/Credit. Значения округляются до копеек для
+         * отображения UI; окончательная проверка выполняется на сервере.
+         *
+         * @returns {void}
+         */
         updateSummary: function () {
             var self = this;
             if (!self.selectedIds.length) { self.selectionSummary = null; return; }
@@ -98,7 +179,15 @@ var MatchingMixin = {
             };
         },
 
-        // ─── Ручное квитование ─────────────────────────────────────
+        /**
+         * Запускает сценарий ручного квитования выбранных записей.
+         *
+         * Проверяет минимальное количество выбранных записей и, если есть
+         * дисбаланс, запрашивает подтверждение пользователя перед вызовом
+         * `_doMatch()`.
+         *
+         * @returns {void}
+         */
         matchSelected: function () {
             var self = this;
             if (!self.hasSelection) {
@@ -121,6 +210,15 @@ var MatchingMixin = {
             self._doMatch();
         },
 
+        /**
+         * Отправляет выбранные записи на серверное ручное квитование.
+         *
+         * Вызывает POST `matchManual` с `ids` и section, затем перезагружает
+         * таблицу записей при успехе. Сервер присваивает `match_id`, `matched_at`
+         * и пишет аудит.
+         *
+         * @returns {void}
+         */
         _doMatch: function () {
             var self = this;
             var payload = { ids: self.selectedIds };
@@ -137,7 +235,15 @@ var MatchingMixin = {
             });
         },
 
-        // ─── Просмотр сквитованной группы ─────────────────────────
+        /**
+         * Открывает модалку состава сквитованной группы.
+         *
+         * Загружает все активные записи с указанным `match_id` через GET
+         * `matchGroup`; при ошибке закрывает модалку и показывает SweetAlert.
+         *
+         * @param {string} matchId Идентификатор группы квитования.
+         * @returns {void}
+         */
         showMatchGroup: function (matchId) {
             if (!matchId) return;
             var self = this;
@@ -165,12 +271,25 @@ var MatchingMixin = {
                 .finally(function () { self.matchGroupLoading = false; });
         },
 
+        /**
+         * Закрывает модалку группы квитования и очищает её состояние.
+         *
+         * @returns {void}
+         */
         closeMatchGroupModal: function () {
             this._hideModal('matchGroupModal');
             this.matchGroupEntries = [];
             this.matchGroupId = null;
         },
 
+        /**
+         * Запускает расквитование из модалки группы.
+         *
+         * Использует текущий `matchGroupId`, закрывает модалку и передаёт ID в
+         * `unmatchEntry()`.
+         *
+         * @returns {void}
+         */
         unmatchFromGroup: function () {
             var self = this;
             var matchId = self.matchGroupId;
@@ -179,7 +298,15 @@ var MatchingMixin = {
             self.unmatchEntry(matchId);
         },
 
-        // ─── Расквитование ─────────────────────────────────────────
+        /**
+         * Расквитовывает все активные записи с указанным `match_id`.
+         *
+         * После подтверждения вызывает POST `unmatch`; сервер очищает `match_id`,
+         * `matched_at`, возвращает `match_status = U` и пишет аудит.
+         *
+         * @param {string} matchId Идентификатор группы квитования.
+         * @returns {void}
+         */
         unmatchEntry: function (matchId) {
             if (!matchId) return;
             var self = this;
@@ -203,7 +330,14 @@ var MatchingMixin = {
             });
         },
 
-        // ─── Автоквитование — открыть модалку выбора области ─────
+        /**
+         * Открывает модалку выбора области автоквитования.
+         *
+         * По умолчанию область ограничивается выбранным ностро-банком, чтобы
+         * пользователь явно подтвердил запуск правил.
+         *
+         * @returns {void}
+         */
         runAutoMatch: function () {
             var self = this;
             if (!self.selectedPool) return;
@@ -220,7 +354,14 @@ var MatchingMixin = {
             self._showModal('autoMatchScopeModal');
         },
 
-        // ─── Автоквитование — подтвердить и запустить ─────────────
+        /**
+         * Создаёт серверную задачу пошагового автоквитования.
+         *
+         * Вызывает POST `autoMatchStart`, сохраняет `job_id`, список правил и
+         * счётчики прогресса, затем запускает `_runAutoMatchNextStep()`.
+         *
+         * @returns {void}
+         */
         confirmAutoMatch: function () {
             var self = this;
             self._hideModal('autoMatchScopeModal');
@@ -258,6 +399,15 @@ var MatchingMixin = {
             });
         },
 
+        /**
+         * Выполняет следующий шаг серверного автоквитования.
+         *
+         * Рекурсивно вызывает POST `autoMatchStep` до `is_finished`, обновляет
+         * прогресс UI, перезагружает таблицу записей и показывает итог по
+         * правилам. Ошибки отдельного шага останавливают процесс.
+         *
+         * @returns {void}
+         */
         _runAutoMatchNextStep: function () {
             var self = this;
             if (!self.autoMatchProgress) return;
@@ -315,7 +465,13 @@ var MatchingMixin = {
             });
         },
 
-        // ─── Правила ───────────────────────────────────────────────
+        /**
+         * Загружает правила автоквитования.
+         *
+         * Вызывает GET `getRules` и заполняет `matchingRules` для таблицы правил.
+         *
+         * @returns {void}
+         */
         loadMatchingRules: function () {
             var self = this;
             self.loadingRules = true;
@@ -328,6 +484,14 @@ var MatchingMixin = {
                 .finally(function () { self.loadingRules = false; });
         },
 
+        /**
+         * Открывает форму создания правила автоквитования.
+         *
+         * Сбрасывает `editingRule` к дефолтному LS/NRE правилу и показывает
+         * `ruleModal`.
+         *
+         * @returns {void}
+         */
         showAddRuleModal: function () {
             this.editingRule = {
                 id: null, name: '', section: 'NRE', pair_type: 'LS',
@@ -339,9 +503,29 @@ var MatchingMixin = {
             this._showModal('ruleModal');
         },
 
+        /**
+         * Открывает форму редактирования правила автоквитования.
+         *
+         * @param {Object} rule Правило из `matchingRules`.
+         * @returns {void}
+         */
         editRule:       function (rule) { this.editingRule = Object.assign({}, rule); this._showModal('ruleModal'); },
+        /**
+         * Закрывает модалку правила без сохранения.
+         *
+         * @returns {void}
+         */
         closeRuleModal: function ()     { this._hideModal('ruleModal'); },
 
+        /**
+         * Сохраняет правило автоквитования.
+         *
+         * Валидирует имя, вызывает POST `saveRule`, закрывает модалку и
+         * перезагружает список правил. Сервер хранит приоритет, pair_type,
+         * набор критериев и флаг `cross_id_search`.
+         *
+         * @returns {void}
+         */
         saveRule: function () {
             var self = this;
             if (!self.editingRule.name) {
@@ -363,6 +547,12 @@ var MatchingMixin = {
             });
         },
 
+        /**
+         * Удаляет правило автоквитования после подтверждения.
+         *
+         * @param {Object} rule Правило из `matchingRules`.
+         * @returns {void}
+         */
         deleteRule: function (rule) {
             var self = this;
             Swal.fire({

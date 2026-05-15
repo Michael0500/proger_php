@@ -57,11 +57,30 @@ class NostroEntry extends ActiveRecord
     const STATUS_MATCHED   = 'M';
     const STATUS_IGNORED   = 'I';
 
+    /**
+     * Возвращает имя таблицы активных записей выверки.
+     *
+     * Таблица хранит рабочий набор Ledger/Statement операций до их переноса
+     * в архив. Все выборки прикладного уровня должны дополнительно скоупиться
+     * по `company_id`.
+     *
+     * @return string Имя таблицы `nostro_entries` с учётом префикса Yii.
+     */
     public static function tableName(): string
     {
         return '{{%nostro_entries}}';
     }
 
+    /**
+     * Описывает правила валидации записи выверки.
+     *
+     * Валидация закрепляет обязательные поля операции, допустимые значения
+     * `ls`, `dc`, `match_status`, связи со счётом и компанией, а также
+     * денежную точность `decimal(20,2)` без приведения пользовательского
+     * ввода к `float`.
+     *
+     * @return array Правила Yii Validator для формы и ActiveRecord.
+     */
     public function rules(): array
     {
         return [
@@ -88,6 +107,16 @@ class NostroEntry extends ActiveRecord
         ];
     }
 
+    /**
+     * Проверяет денежное поле на формат `decimal(20,2)`.
+     *
+     * Для операций выверки допустимы только положительные суммы: знак проводки
+     * хранится отдельно в `dc`. Ограничение в 18 цифр до десятичного разделителя
+     * соответствует колонке `amount decimal(20,2)`.
+     *
+     * @param string $attribute Имя проверяемого атрибута суммы.
+     * @return void
+     */
     public function validateMoneyAmount($attribute): void
     {
         $value = trim((string)$this->$attribute);
@@ -103,6 +132,11 @@ class NostroEntry extends ActiveRecord
         }
     }
 
+    /**
+     * Возвращает человекочитаемые подписи атрибутов для форм и ошибок.
+     *
+     * @return array Массив `attribute => label`.
+     */
     public function attributeLabels(): array
     {
         return [
@@ -137,11 +171,21 @@ class NostroEntry extends ActiveRecord
     // Связи
     // -----------------------------------------------------------------
 
+    /**
+     * Возвращает связь с ностро-счётом операции.
+     *
+     * @return \yii\db\ActiveQuery Запрос связи `nostro_entries.account_id -> accounts.id`.
+     */
     public function getAccount(): \yii\db\ActiveQuery
     {
         return $this->hasOne(Account::class, ['id' => 'account_id']);
     }
 
+    /**
+     * Возвращает связь с компанией-владельцем операции.
+     *
+     * @return \yii\db\ActiveQuery Запрос связи `nostro_entries.company_id -> company.id`.
+     */
     public function getCompany(): \yii\db\ActiveQuery
     {
         return $this->hasOne(Company::class, ['id' => 'company_id']);
@@ -151,7 +195,11 @@ class NostroEntry extends ActiveRecord
     // Хелперы
     // -----------------------------------------------------------------
 
-    /** Метки статусов квитования */
+    /**
+     * Возвращает пользовательские названия статусов квитования.
+     *
+     * @return array Карта `код статуса => русская метка`.
+     */
     public static function matchStatusLabels(): array
     {
         return [
@@ -161,14 +209,22 @@ class NostroEntry extends ActiveRecord
         ];
     }
 
-    /** CSS-класс бейджа для статуса */
+    /**
+     * Подбирает Bootstrap-класс бейджа для текущего статуса квитования.
+     *
+     * @return string CSS-модификатор бейджа.
+     */
     public function matchStatusBadge(): string
     {
         $map = [self::STATUS_MATCHED => 'success', self::STATUS_IGNORED => 'secondary'];
         return $map[$this->match_status] ?? 'warning';
     }
 
-    /** Форматирование суммы: 455566558754.23 → 455,566,558,754.23 */
+    /**
+     * Форматирует сумму операции для вывода в интерфейсе.
+     *
+     * @return string Сумма с двумя знаками и разделителями тысяч.
+     */
     public function formattedAmount(): string
     {
         return number_format((float)$this->amount, 2, '.', ',');
@@ -178,6 +234,16 @@ class NostroEntry extends ActiveRecord
     // Хуки
     // -----------------------------------------------------------------
 
+    /**
+     * Заполняет служебные поля перед сохранением записи.
+     *
+     * При создании фиксирует автора и дату создания, при любом сохранении
+     * обновляет `updated_at/updated_by`. Для статуса `M` автоматически
+     * проставляет `matched_at`, а для остальных статусов очищает дату квитования.
+     *
+     * @param bool $insert Признак создания новой строки.
+     * @return bool Можно ли продолжать сохранение.
+     */
     public function beforeSave($insert): bool
     {
         if (!parent::beforeSave($insert)) {
@@ -202,6 +268,17 @@ class NostroEntry extends ActiveRecord
         return true;
     }
 
+    /**
+     * Пишет аудит создания и изменения записи после успешного сохранения.
+     *
+     * Технические изменения `updated_at` и `updated_by` не логируются отдельно.
+     * При восстановлении из архива или массовом импорте аудит может быть
+     * подавлен через `skipAudit`, если вызывающий код пишет специальные события.
+     *
+     * @param bool $insert Признак создания новой строки.
+     * @param array $changedAttributes Старые значения изменённых атрибутов.
+     * @return void
+     */
     public function afterSave($insert, $changedAttributes)
     {
         parent::afterSave($insert, $changedAttributes);
@@ -240,6 +317,14 @@ class NostroEntry extends ActiveRecord
         }
     }
 
+    /**
+     * Пишет аудит удаления до физического удаления активной записи.
+     *
+     * Событие создаётся заранее, чтобы `entry_id` ещё ссылался на исходную
+     * запись и историю можно было восстановить после удаления или архивации.
+     *
+     * @return bool Можно ли продолжать удаление.
+     */
     public function beforeDelete()
     {
         // Логирование удаления (ДО фактического удаления, чтобы entry_id ещё существовал)
@@ -256,15 +341,23 @@ class NostroEntry extends ActiveRecord
         return parent::beforeDelete();
     }
 
+    /**
+     * Выполняет стандартную обработку Yii после удаления записи.
+     *
+     * Сейчас дополнительной бизнес-логики нет, но метод оставлен как точка
+     * расширения для операций после удаления.
+     *
+     * @return void
+     */
     public function afterDelete()
     {
         parent::afterDelete();
     }
 
     /**
-     * Получить историю изменений записи.
+     * Возвращает историю изменений активной записи.
      *
-     * @return NostroEntryAudit[]
+     * @return \yii\db\ActiveQuery Запрос к событиям аудита, отсортированный от новых к старым.
      */
     public function getAudits(): \yii\db\ActiveQuery
     {
@@ -273,10 +366,14 @@ class NostroEntry extends ActiveRecord
     }
 
     /**
-     * Логирование архивирования записи.
-     * Вызывается при переносе в архив.
+     * Логирует перенос активной записи в архив.
+     *
+     * Метод вызывается процессом архивирования после создания строки в
+     * `nostro_entries_archive`, чтобы аудит сохранил связь активной записи
+     * с архивной копией.
      *
      * @param int $archivedId ID созданной архивной записи
+     * @return void
      */
     public function logArchive(int $archivedId): void
     {
@@ -292,7 +389,9 @@ class NostroEntry extends ActiveRecord
     }
 
     /**
-     * Получить атрибуты для аудита (без служебных полей).
+     * Возвращает снимок атрибутов записи для сохранения в аудите.
+     *
+     * @return array Текущие значения атрибутов ActiveRecord.
      */
     private function getAttributesForAudit(): array
     {

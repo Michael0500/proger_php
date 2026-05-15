@@ -7,6 +7,13 @@ use yii\db\Migration;
  */
 class m260514_120000_add_branch_code_to_nostro_tables extends Migration
 {
+    /**
+     * Применяет миграцию `m260514_120000_add_branch_code_to_nostro_tables`.
+     *
+     * Создаёт или изменяет структуру БД согласно назначению файла миграции.
+     *
+     * @return void
+     */
     public function safeUp()
     {
         $this->addColumn('{{%nostro_entries}}', 'branch_code', $this->char(3)->null()
@@ -26,6 +33,13 @@ class m260514_120000_add_branch_code_to_nostro_tables extends Migration
         );
     }
 
+    /**
+     * Откатывает миграцию `m260514_120000_add_branch_code_to_nostro_tables`.
+     *
+     * Возвращает структуру БД к состоянию до применения этой миграции, если откат поддерживается.
+     *
+     * @return void
+     */
     public function safeDown()
     {
         $this->dropIndex('idx_nbalance_branch_code', '{{%nostro_balance}}');

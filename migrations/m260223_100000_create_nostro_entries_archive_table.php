@@ -10,6 +10,13 @@ use yii\db\Migration;
  */
 class m260223_100000_create_nostro_entries_archive_table extends Migration
 {
+    /**
+     * Применяет миграцию `m260223_100000_create_nostro_entries_archive_table`.
+     *
+     * Создаёт или изменяет структуру БД согласно назначению файла миграции.
+     *
+     * @return void
+     */
     public function safeUp()
     {
         $this->createTable('{{%nostro_entries_archive}}', [
@@ -79,6 +86,13 @@ class m260223_100000_create_nostro_entries_archive_table extends Migration
         ");
     }
 
+    /**
+     * Откатывает миграцию `m260223_100000_create_nostro_entries_archive_table`.
+     *
+     * Возвращает структуру БД к состоянию до применения этой миграции, если откат поддерживается.
+     *
+     * @return void
+     */
     public function safeDown()
     {
         $this->dropIndex('idx_nea_fulltext', '{{%nostro_entries_archive}}');

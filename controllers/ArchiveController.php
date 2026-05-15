@@ -11,41 +11,57 @@ use app\models\ArchiveSettings;
 use app\models\Account;
 
 /**
- * Контроллер архивирования.
+ * JSON-контроллер архивирования записей выверки.
  *
- * GET  /archive/list            — список архивных записей (поиск + фильтры)
- * POST /archive/run             — запустить архивирование вручную
- * GET  /archive/restore-preview — показать связанные архивные строки по match_id
- * POST /archive/restore         — восстановить группу записей из архива в nostro_entries
- * POST /archive/purge-expired   — удалить просроченные (истёк retention)
- * GET  /archive/settings        — получить настройки
- * POST /archive/settings        — сохранить настройки
- * GET  /archive/stats           — статистика (сколько в архиве, сколько ожидает)
+ * Архивирование переносит сквитованные записи из `nostro_entries` в
+ * `nostro_entries_archive` пакетами, пишет явные события аудита и удаляет
+ * активные строки. Восстановление выполняется группой по `match_id`, чтобы
+ * сохранить целостность квитования.
  */
 class ArchiveController extends BaseController
 {
+    /**
+     * Отключает CSRF для JSON API архива.
+     *
+     * @param \yii\base\Action $action Запускаемое действие.
+     * @return bool Можно ли продолжать выполнение action.
+     */
     public function beforeAction($action): bool
     {
         $this->enableCsrfValidation = false;
         return parent::beforeAction($action);
     }
 
-    /** GET /archive — отдельная страница архива */
+    /**
+     * Рендерит отдельную страницу архива.
+     *
+     * @return string HTML страницы `views/archive/page.php`.
+     */
     public function actionPage()
     {
         $this->view->title = 'Архив';
         return $this->render('page');
     }
 
+    /**
+     * Возвращает ID компании текущего пользователя.
+     *
+     * @return int|null ID компании или `null`.
+     */
     private function cid(): ?int
     {
         $u = Yii::$app->user->identity;
         return ($u && $u->company_id) ? (int)$u->company_id : null;
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // GET /archive/list
-    // ─────────────────────────────────────────────────────────────
+    /**
+     * Возвращает постраничный список архивных записей.
+     *
+     * GET `/archive/list`. Поддерживает фильтры по ностро-банку, счёту,
+     * L/S, D/C, валюте, датам, сумме и поиску по ID-полям.
+     *
+     * @return array JSON с архивными строками и параметрами пагинации.
+     */
     public function actionList(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -188,10 +204,14 @@ class ArchiveController extends BaseController
         ];
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // POST /archive/count
-    // Сколько записей ожидает архивирования. Быстрый COUNT.
-    // ─────────────────────────────────────────────────────────────
+    /**
+     * Возвращает количество записей, ожидающих архивирования.
+     *
+     * POST `/archive/count`. Считает сквитованные записи старше
+     * `archive_after_days` по `matched_at`; `updated_at` намеренно не используется.
+     *
+     * @return array JSON с полем `total`.
+     */
     public function actionCount(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -211,15 +231,15 @@ class ArchiveController extends BaseController
         return ['success' => true, 'total' => $total];
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // POST /archive/run-batch
-    // Архивирует ОДНУ порцию (batchSize записей).
-    // JS вызывает многократно пока is_finished = true.
-    //
-    // POST params:
-    //   total_done — счётчик из предыдущего ответа (передаётся обратно)
-    //   total_all  — исходное общее кол-во (для прогресс-бара)
-    // ─────────────────────────────────────────────────────────────
+    /**
+     * Архивирует одну порцию подходящих записей.
+     *
+     * POST `/archive/run-batch`. Клиент вызывает метод повторно, пока
+     * `is_finished` не станет `true`. Для производительности используется
+     * `batchInsert`, явная запись audit-событий и `DELETE WHERE id = ANY(...)`.
+     *
+     * @return array JSON-прогресс batch-архивирования.
+     */
     public function actionRunBatch(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -348,10 +368,14 @@ class ArchiveController extends BaseController
         ];
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // GET /archive/restore-preview
-    // Показать все архивные строки, которые будут восстановлены по match_id.
-    // ─────────────────────────────────────────────────────────────
+    /**
+     * Показывает архивные строки, которые будут восстановлены группой.
+     *
+     * GET `/archive/restore-preview?id=`. Группа определяется по `match_id`
+     * выбранной архивной строки.
+     *
+     * @return array JSON с количеством и строками предпросмотра.
+     */
     public function actionRestorePreview(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -372,10 +396,15 @@ class ArchiveController extends BaseController
         ];
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // POST /archive/restore
-    // Восстановить все архивные строки с тем же match_id в nostro_entries
-    // ─────────────────────────────────────────────────────────────
+    /**
+     * Восстанавливает группу архивных записей в активную таблицу.
+     *
+     * POST `/archive/restore`. Все архивные строки с тем же `match_id`
+     * переносятся обратно в `nostro_entries` в одной транзакции, затем
+     * удаляются из архива. Для новых физических строк пишется restore-аудит.
+     *
+     * @return array JSON-результат восстановления.
+     */
     public function actionRestore(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -429,6 +458,12 @@ class ArchiveController extends BaseController
         }
     }
 
+    /**
+     * Возвращает запрос архивной группы для восстановления.
+     *
+     * @param NostroEntryArchive $archived Выбранная архивная запись.
+     * @return \yii\db\ActiveQuery Запрос всех архивных строк той же компании и `match_id`.
+     */
     private function findArchiveRestoreGroup(NostroEntryArchive $archived): \yii\db\ActiveQuery
     {
         return NostroEntryArchive::find()
@@ -439,6 +474,16 @@ class ArchiveController extends BaseController
             ->orderBy(['original_id' => SORT_ASC, 'id' => SORT_ASC]);
     }
 
+    /**
+     * Создаёт активную запись из архивной строки.
+     *
+     * `matched_at` и `match_id` сохраняются, чтобы восстановленная группа
+     * оставалась сквитованной. Автоматический create-аудит отключается,
+     * потому что контроллер пишет специальное событие restore.
+     *
+     * @param NostroEntryArchive $archived Архивная строка.
+     * @return NostroEntry Несохранённая активная модель.
+     */
     private function createEntryFromArchive(NostroEntryArchive $archived): NostroEntry
     {
         $entry                   = new NostroEntry();
@@ -465,6 +510,13 @@ class ArchiveController extends BaseController
         return $entry;
     }
 
+    /**
+     * Форматирует строку предпросмотра или результата восстановления.
+     *
+     * @param array $row Архивная строка в виде массива.
+     * @param int|null $newId Новый ID активной записи после восстановления.
+     * @return array JSON-совместимая строка для UI.
+     */
     private function formatRestorePreviewRow(array $row, ?int $newId = null): array
     {
         return [
@@ -481,10 +533,13 @@ class ArchiveController extends BaseController
         ];
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // POST /archive/purge-expired
-    // Удалить просроченные архивные записи (retention истёк)
-    // ─────────────────────────────────────────────────────────────
+    /**
+     * Удаляет архивные записи с истёкшим сроком хранения.
+     *
+     * POST `/archive/purge-expired`. Удаление ограничено текущей компанией.
+     *
+     * @return array JSON с количеством удалённых строк.
+     */
     public function actionPurgeExpired(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -501,9 +556,13 @@ class ArchiveController extends BaseController
         return ['success' => true, 'message' => "Удалено просроченных записей: {$deleted}", 'deleted' => $deleted];
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // GET /archive/settings
-    // ─────────────────────────────────────────────────────────────
+    /**
+     * Возвращает настройки архивирования текущей компании.
+     *
+     * GET `/archive/settings`.
+     *
+     * @return array JSON с настройками или ошибкой.
+     */
     public function actionSettings(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -514,9 +573,14 @@ class ArchiveController extends BaseController
         return ['success' => true, 'data' => $s->toApiArray()];
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // POST /archive/settings
-    // ─────────────────────────────────────────────────────────────
+    /**
+     * Сохраняет настройки архивирования текущей компании.
+     *
+     * POST `/archive/settings`. Если записи настроек ещё нет, используется
+     * дефолтная модель `ArchiveSettings::getForCompany()`.
+     *
+     * @return array JSON с сохранёнными настройками или ошибками валидации.
+     */
     public function actionSaveSettings(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -539,9 +603,14 @@ class ArchiveController extends BaseController
         return ['success' => true, 'message' => 'Настройки сохранены', 'data' => $s->toApiArray()];
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // GET /archive/stats
-    // ─────────────────────────────────────────────────────────────
+    /**
+     * Возвращает статистику архива текущей компании.
+     *
+     * GET `/archive/stats`: всего в архиве, ожидают архивирования,
+     * просрочены по retention и текущие настройки.
+     *
+     * @return array JSON со статистикой.
+     */
     public function actionStats(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -579,9 +648,11 @@ class ArchiveController extends BaseController
         ];
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // GET /archive/accounts — список счетов (для фильтра)
-    // ─────────────────────────────────────────────────────────────
+    /**
+     * Возвращает счета текущей компании для фильтров архива.
+     *
+     * @return array JSON со списком счетов.
+     */
     public function actionAccounts(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -604,8 +675,12 @@ class ArchiveController extends BaseController
     }
 
     /**
-     * GET /archive/history?id=
-     * Получить историю изменений архивной записи (по original_id).
+     * Возвращает историю изменений архивной записи.
+     *
+     * GET `/archive/history?id=`. История ищется по `original_id` и следует
+     * через цепочки restore/archive, чтобы показать изменения до архивации.
+     *
+     * @return array JSON со снапшотами записи после событий аудита.
      */
     public function actionHistory(): array
     {
@@ -641,7 +716,12 @@ class ArchiveController extends BaseController
     }
 
     /**
-     * Собирает историю записи в том же формате, который ожидает общая Vue-модалка.
+     * Собирает историю записи в формате общей Vue-модалки.
+     *
+     * @param int $entryId Исходный ID активной записи.
+     * @param int $cid ID компании.
+     * @param array $baseState Состояние архивной строки как база для реконструкции.
+     * @return array Строки истории от новых к старым.
      */
     private function buildEntryHistoryRows(int $entryId, int $cid, array $baseState): array
     {
@@ -809,6 +889,16 @@ class ArchiveController extends BaseController
         return $rows;
     }
 
+    /**
+     * Находит ID архивных строк по исходным ID и времени архивации.
+     *
+     * Используется сразу после batchInsert, чтобы связать audit-события
+     * с созданными архивными строками.
+     *
+     * @param int[] $originalIds Исходные ID активных записей.
+     * @param string $archivedAt Timestamp batch-архивирования.
+     * @return array Карта `original_id => archive_id`.
+     */
     private function findArchiveIdsByOriginalIds(array $originalIds, string $archivedAt): array
     {
         if (empty($originalIds)) {
@@ -829,6 +919,18 @@ class ArchiveController extends BaseController
         return $map;
     }
 
+    /**
+     * Пишет batch-события аудита архивации.
+     *
+     * Метод нужен, потому что архивирование использует raw SQL и не вызывает
+     * хуки `NostroEntry::beforeDelete()` для каждой строки.
+     *
+     * @param array $rows Активные строки, перенесённые в архив.
+     * @param array $archiveIdByOriginalId Карта `original_id => archive_id`.
+     * @param string $archivedAt Timestamp архивации.
+     * @param int $userId ID пользователя.
+     * @return void
+     */
     private function writeArchiveAuditRows(array $rows, array $archiveIdByOriginalId, string $archivedAt, int $userId): void
     {
         if (empty($rows)) {
@@ -859,6 +961,13 @@ class ArchiveController extends BaseController
             ->execute();
     }
 
+    /**
+     * Пишет событие аудита восстановления архивной строки.
+     *
+     * @param NostroEntryArchive $archiveRow Исходная архивная строка.
+     * @param NostroEntry $entry Новая активная запись.
+     * @return void
+     */
     private function writeRestoreAuditRow(NostroEntryArchive $archiveRow, NostroEntry $entry): void
     {
         NostroEntryAudit::log(
@@ -872,6 +981,15 @@ class ArchiveController extends BaseController
         );
     }
 
+    /**
+     * Находит все события аудита, относящиеся к архивной записи.
+     *
+     * Метод обходит цепочки восстановлений через `restore.old_values.original_id`
+     * и убирает технические create-события новых физических строк.
+     *
+     * @param int $entryId Исходный ID записи.
+     * @return array События аудита от старых к новым.
+     */
     private function findEntryAuditsForArchive(int $entryId): array
     {
         $auditsById = [];
@@ -922,6 +1040,15 @@ class ArchiveController extends BaseController
         return $audits;
     }
 
+    /**
+     * Загружает события аудита для одного ID записи.
+     *
+     * Учитывает события с прямым `entry_id` и технические события, где ID
+     * находится внутри JSON `old_values/new_values`.
+     *
+     * @param int $entryId ID записи.
+     * @return array События аудита от старых к новым.
+     */
     private function findAuditsByEntryId(int $entryId): array
     {
         return Yii::$app->db->createCommand(

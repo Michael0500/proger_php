@@ -1,20 +1,37 @@
 /**
  * Глобальные Vue-хелперы, доступные во всех Vue-инстансах проекта.
- * Регистрируется через Vue.mixin() — подмешивается автоматически.
+ *
+ * Модуль регистрирует `Vue.mixin()` с общими справочниками и форматтерами,
+ * которые используются на страницах выверки, балансов и архива. Справочники
+ * приходят из серверного контекста страницы и уже ограничены доступами текущей
+ * компании пользователя.
  */
 (function () {
     if (!window.Vue) return;
 
     Vue.mixin({
         computed: {
-            // Глобальные справочники, доступны во всех инстансах как this.dictCurrencies / this.dictCountries
+            /**
+             * Возвращает валюты из глобального серверного словаря.
+             *
+             * @returns {Array<Object>} Список валют для форм и фильтров.
+             */
             dictCurrencies: function () {
                 return (window.AppDictionaries && window.AppDictionaries.currencies) || [];
             },
+            /**
+             * Возвращает страны из глобального серверного словаря.
+             *
+             * @returns {Array<Object>} Список стран для форм и фильтров.
+             */
             dictCountries: function () {
                 return (window.AppDictionaries && window.AppDictionaries.countries) || [];
             },
-            // Просто список кодов для select-ов
+            /**
+             * Формирует список кодов валют для простых выпадающих списков.
+             *
+             * @returns {string[]} Коды валют, например `USD` или `EUR`.
+             */
             dictCurrencyCodes: function () {
                 return ((window.AppDictionaries && window.AppDictionaries.currencies) || []).map(function (c) {
                     return c.code;
@@ -22,6 +39,12 @@
             },
         },
         methods: {
+            /**
+             * Подбирает русскую форму слова "запись" для счётчиков таблиц.
+             *
+             * @param {number} count Количество записей.
+             * @returns {string} Подходящая форма: `запись`, `записи` или `записей`.
+             */
             recordText: function (count) {
                 var n  = Math.abs(count) % 100;
                 var n1 = n % 10;
@@ -31,6 +54,16 @@
                 return 'записей';
             },
 
+            /**
+             * Форматирует денежное значение без изменения исходной точности.
+             *
+             * Используется для сумм NostroEntry и архивных строк. Пустые или
+             * некорректные значения отображаются как прочерк, чтобы UI не
+             * интерпретировал их как нулевую сумму.
+             *
+             * @param {string|number|null|undefined} val Значение суммы из API или формы.
+             * @returns {string} Сумма в формате `1,234.00` либо `—`.
+             */
             formatAmount: function (val) {
                 if (val === null || val === undefined || val === '') return '—';
                 var s = String(val).trim();

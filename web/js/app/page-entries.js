@@ -1,6 +1,10 @@
 /**
- * SmartMatch — Vue-инстанс страницы "Выверка" (#entries-app).
- * Подключает mixins: Modals, Categories, Pools, Entries, Matching, StatePersistence.
+ * Стартер Vue-страницы "Выверка" (`#entries-app`).
+ *
+ * Подключает mixins модалок, категорий, ностро-банков, таблицы записей,
+ * ручного/автоматического квитования и сохранения состояния. Инстанс
+ * запускается только если корневой элемент есть в DOM, поэтому файл может
+ * безопасно грузиться на всех страницах через общий asset bundle.
  */
 (function () {
     'use strict';
@@ -18,11 +22,30 @@
 
         StateStorage.init((window.AppConfig && window.AppConfig.userId) || 'guest');
 
+        /**
+         * Vue-инстанс рабочей страницы выверки.
+         *
+         * Управляет сайдбаром категорий и ностро-банков, таблицей активных
+         * NostroEntry, фильтрами, настройками колонок, ручным квитованием и
+         * пошаговым автоквитованием. Данные всегда загружаются через API,
+         * где применяются ограничения текущей компании.
+         */
         new Vue({
             el: '#entries-app',
 
             mixins: [ModalsMixin, CategoriesMixin, PoolsMixin, EntriesMixin, MatchingMixin, StatePersistenceMixin],
 
+            /**
+             * Начальное состояние страницы выверки.
+             *
+             * @type {Object}
+             * @property {boolean} isSidebarCollapsed Признак свёрнутого сайдбара.
+             * @property {number} sidebarWidth Ширина сайдбара, сохраняемая в StateStorage.
+             * @property {Array<Object>} categories Категории и связанные ностро-банки.
+             * @property {?Object} selectedCategory Выбранная категория.
+             * @property {?Object} selectedPool Выбранный ностро-банк для загрузки записей.
+             * @property {string} activeSection Текущий раздел UI.
+             */
             data: {
                 // Сайдбар
                 isSidebarCollapsed: false,
@@ -54,6 +77,11 @@
             },
 
             computed: {
+                /**
+                 * Возвращает inline-стили ширины сайдбара.
+                 *
+                 * @returns {Object} CSS-свойства для раскрытого сайдбара или пустой объект.
+                 */
                 sidebarStyle: function () {
                     if (this.isSidebarCollapsed) return {};
                     return {
@@ -63,6 +91,14 @@
                 }
             },
 
+            /**
+             * Загружает стартовые данные страницы и подключает глобальные UI-обработчики.
+             *
+             * Побочные эффекты: подписка на клик документа для закрытия меню,
+             * загрузка категорий, списка ностро-банков и настроек колонок.
+             *
+             * @returns {void}
+             */
             mounted: function () {
                 var self = this;
                 document.addEventListener('click', function () { self.openRowMenu = null; });
@@ -74,10 +110,25 @@
             },
 
             methods: {
+                /**
+                 * Переключает состояние сайдбара категорий.
+                 *
+                 * Значение сохраняется watcher'ом из `StatePersistenceMixin`.
+                 *
+                 * @returns {void}
+                 */
                 toggleSidebar: function () {
                     this.isSidebarCollapsed = !this.isSidebarCollapsed;
                 },
 
+                /**
+                 * Открывает или закрывает контекстное меню строки.
+                 *
+                 * @param {string} type Тип сущности меню.
+                 * @param {number|string} id Идентификатор строки.
+                 * @param {MouseEvent} event Событие клика по кнопке меню.
+                 * @returns {void}
+                 */
                 toggleRowMenu: function (type, id, event) {
                     var key = type + '-' + id;
                     if (this.openRowMenu === key) {
@@ -92,6 +143,15 @@
                     this.openRowMenu = key;
                 },
 
+                /**
+                 * Запускает интерактивное изменение ширины сайдбара.
+                 *
+                 * Читает начальную позицию мыши, меняет `sidebarWidth` в пределах
+                 * 180-500px и сбрасывает временные стили body после mouseup.
+                 *
+                 * @param {MouseEvent} e Событие начала перетаскивания разделителя.
+                 * @returns {void}
+                 */
                 startSidebarResize: function (e) {
                     this.isResizingSidebar = true;
                     var self = this;
@@ -117,6 +177,13 @@
                     document.addEventListener('mouseup', onUp);
                 },
 
+                /**
+                 * Показывает flyout категории при наведении на свёрнутый сайдбар.
+                 *
+                 * @param {Object} category Категория с дочерними ностро-банками.
+                 * @param {MouseEvent} event Событие hover на элементе категории.
+                 * @returns {void}
+                 */
                 onCategoryHover: function (category, event) {
                     if (!this.isSidebarCollapsed) return;
                     clearTimeout(this.flyoutTimer);
@@ -128,6 +195,11 @@
                     };
                     this.flyoutCategory = category;
                 },
+                /**
+                 * Запускает отложенное закрытие flyout категории.
+                 *
+                 * @returns {void}
+                 */
                 onCategoryLeave: function () {
                     if (!this.isSidebarCollapsed) return;
                     var self = this;
@@ -135,13 +207,28 @@
                         self.flyoutCategory = null;
                     }, 120);
                 },
+                /**
+                 * Отменяет таймер закрытия flyout при наведении на сам flyout.
+                 *
+                 * @returns {void}
+                 */
                 onFlyoutEnter: function () { clearTimeout(this.flyoutTimer); },
+                /**
+                 * Закрывает flyout после короткой задержки при уходе курсора.
+                 *
+                 * @returns {void}
+                 */
                 onFlyoutLeave: function () {
                     var self = this;
                     this.flyoutTimer = setTimeout(function () {
                         self.flyoutCategory = null;
                     }, 80);
                 },
+                /**
+                 * Немедленно закрывает flyout категории.
+                 *
+                 * @returns {void}
+                 */
                 closeFlyout: function () {
                     clearTimeout(this.flyoutTimer);
                     this.flyoutCategory = null;

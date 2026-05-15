@@ -24,11 +24,24 @@ use yii\db\ActiveRecord;
  */
 class AccountPool extends ActiveRecord
 {
+    /**
+     * Возвращает имя таблицы ностро-банков.
+     *
+     * @return string Имя таблицы `account_pools` с учётом префикса Yii.
+     */
     public static function tableName(): string
     {
         return '{{%account_pools}}';
     }
 
+    /**
+     * Описывает правила валидации ностро-банка.
+     *
+     * Ностро-банк всегда принадлежит компании и может быть привязан к категории
+     * для навигации и отчётности.
+     *
+     * @return array Правила Yii Validator.
+     */
     public function rules(): array
     {
         return [
@@ -41,6 +54,11 @@ class AccountPool extends ActiveRecord
         ];
     }
 
+    /**
+     * Возвращает подписи атрибутов ностро-банка.
+     *
+     * @return array Массив `attribute => label`.
+     */
     public function attributeLabels(): array
     {
         return [
@@ -54,21 +72,42 @@ class AccountPool extends ActiveRecord
         ];
     }
 
+    /**
+     * Возвращает связь с компанией-владельцем ностро-банка.
+     *
+     * @return \yii\db\ActiveQuery Запрос связи с `Company`.
+     */
     public function getCompany()
     {
         return $this->hasOne(Company::class, ['id' => 'company_id']);
     }
 
+    /**
+     * Возвращает связанную категорию навигации.
+     *
+     * @return \yii\db\ActiveQuery Запрос связи с `Category`.
+     */
     public function getCategory()
     {
         return $this->hasOne(Category::class, ['id' => 'category_id']);
     }
 
+    /**
+     * Возвращает счета, входящие в ностро-банк.
+     *
+     * @return \yii\db\ActiveQuery Запрос связи с `Account`.
+     */
     public function getAccounts()
     {
         return $this->hasMany(Account::class, ['pool_id' => 'id']);
     }
 
+    /**
+     * Заполняет даты создания и изменения ностро-банка.
+     *
+     * @param bool $insert Признак создания новой строки.
+     * @return bool Можно ли продолжать сохранение.
+     */
     public function beforeSave($insert): bool
     {
         if (parent::beforeSave($insert)) {

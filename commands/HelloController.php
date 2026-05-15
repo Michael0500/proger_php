@@ -12,19 +12,17 @@ use yii\console\Controller;
 use yii\console\ExitCode;
 
 /**
- * This command echoes the first argument that you have entered.
+ * Пример консольной команды Yii.
  *
- * This command is provided as an example for you to learn how to create console commands.
- *
- * @author Qiang Xue <qiang.xue@gmail.com>
- * @since 2.0
+ * Команда оставлена как стандартный пример и выводит переданное сообщение.
  */
 class HelloController extends Controller
 {
     /**
-     * This command echoes what you have entered as the message.
-     * @param string $message the message to be echoed.
-     * @return int Exit code
+     * Выводит сообщение в консоль.
+     *
+     * @param string $message Сообщение для вывода.
+     * @return int Код завершения команды.
      */
     public function actionIndex($message = 'hello world')
     {

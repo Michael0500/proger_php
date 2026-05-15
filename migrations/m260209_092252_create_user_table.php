@@ -25,6 +25,13 @@ class m260209_092252_create_user_table extends Migration
         ]);
     }
 
+    /**
+     * Откатывает миграцию `m260209_092252_create_user_table`.
+     *
+     * Возвращает структуру БД к состоянию до применения этой миграции, если откат поддерживается.
+     *
+     * @return void
+     */
     public function safeDown()
     {
         $this->dropTable('{{%user}}');

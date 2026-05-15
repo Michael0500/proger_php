@@ -8,17 +8,31 @@ use app\models\Account;
 use app\models\Category;
 
 /**
- * CRUD для ностро-банков (AccountPool) + управление привязанными счетами.
- * Standalone страница /nostro-banks.
+ * Контроллер ностро-банков (`AccountPool`).
+ *
+ * Управляет standalone-страницей `/nostro-banks`, CRUD ностро-банков,
+ * привязкой/отвязкой счетов и перемещением ностро-банков по категориям.
+ * Все операции выполняются в компании текущего пользователя.
  */
 class AccountPoolController extends BaseController
 {
+    /**
+     * Отключает CSRF для JSON API ностро-банков.
+     *
+     * @param \yii\base\Action $action Запускаемое действие.
+     * @return bool Можно ли продолжать выполнение action.
+     */
     public function beforeAction($action): bool
     {
         $this->enableCsrfValidation = false;
         return parent::beforeAction($action);
     }
 
+    /**
+     * Возвращает ID компании текущего пользователя.
+     *
+     * @return int|null ID компании или `null`.
+     */
     private function cid(): ?int
     {
         $u = Yii::$app->user->identity;
@@ -26,8 +40,12 @@ class AccountPoolController extends BaseController
     }
 
     /**
-     * GET /nostro-banks
-     * Standalone страница управления ностро-банками
+     * Рендерит standalone-страницу управления ностро-банками.
+     *
+     * GET `/nostro-banks`. Передаёт во Vue категории и текущие ностро-банки
+     * с привязанными счетами.
+     *
+     * @return string|\yii\web\Response HTML-страница или redirect на выбор компании.
      */
     public function actionIndex()
     {
@@ -59,6 +77,12 @@ class AccountPoolController extends BaseController
         return $this->render('index', ['initData' => $initData]);
     }
 
+    /**
+     * Сериализует ностро-банк для JSON API и начального состояния Vue.
+     *
+     * @param AccountPool $p Ностро-банк.
+     * @return array Данные ностро-банка и привязанных счетов.
+     */
     private function serializePool(AccountPool $p): array
     {
         return [
@@ -83,7 +107,11 @@ class AccountPoolController extends BaseController
     // ── JSON API ─────────────────────────────────────────────────
 
     /**
-     * GET /account-pool/list
+     * Возвращает список ностро-банков текущей компании.
+     *
+     * GET `/account-pool/list`.
+     *
+     * @return array JSON со списком ностро-банков.
      */
     public function actionList(): array
     {
@@ -103,11 +131,13 @@ class AccountPoolController extends BaseController
     }
 
     /**
-     * POST /account-pool/create
-     * Дополнительно принимает:
-     *   ledger_accounts[]    — ID счетов типа L для привязки
-     *   statement_accounts[] — ID счетов типа S для привязки
-     *   category_id          — (необязательно) ID категории для прямой привязки
+     * Создаёт ностро-банк и привязывает выбранные счета.
+     *
+     * POST `/account-pool/create`. Принимает `ledger_accounts[]`,
+     * `statement_accounts[]` и опциональный `category_id`. Операция выполняется
+     * в транзакции; привязываются только свободные счета текущей компании.
+     *
+     * @return array JSON-результат создания.
      */
     public function actionCreate(): array
     {
@@ -161,11 +191,13 @@ class AccountPoolController extends BaseController
     }
 
     /**
-     * POST /account-pool/update
-     * Дополнительно принимает:
-     *   ledger_accounts[]    — ID новых счетов типа L для привязки
-     *   statement_accounts[] — ID новых счетов типа S для привязки
-     *   category_id          — ID категории (пусто/null = без категории)
+     * Обновляет ностро-банк и синхронизирует привязки счетов.
+     *
+     * POST `/account-pool/update`. Операция в транзакции отвязывает удалённые
+     * из формы счета и привязывает новые свободные или уже принадлежащие этому
+     * ностро-банку счета.
+     *
+     * @return array JSON-результат обновления.
      */
     public function actionUpdate(): array
     {
@@ -237,7 +269,12 @@ class AccountPoolController extends BaseController
     }
 
     /**
-     * POST /account-pool/delete
+     * Удаляет ностро-банк текущей компании.
+     *
+     * POST `/account-pool/delete`. Перед удалением отвязывает все счета
+     * этого ностро-банка.
+     *
+     * @return array JSON-результат удаления.
      */
     public function actionDelete(): array
     {
@@ -260,8 +297,12 @@ class AccountPoolController extends BaseController
     }
 
     /**
-     * GET /account-pool/get-accounts?id=X
-     * Счета конкретного ностро-банка
+     * Возвращает счета конкретного ностро-банка.
+     *
+     * GET `/account-pool/get-accounts?id=`.
+     *
+     * @param int|string $id ID ностро-банка.
+     * @return array JSON со счетами или ошибкой доступа.
      */
     public function actionGetAccounts($id): array
     {
@@ -291,9 +332,12 @@ class AccountPoolController extends BaseController
     }
 
     /**
-     * GET /account-pool/available-accounts
-     * Счета компании, не привязанные ни к одному ностро-банку.
-     * Если передан pool_id — включает также счета этого пула (для формы редактирования).
+     * Возвращает счета, доступные для привязки к ностро-банку.
+     *
+     * GET `/account-pool/available-accounts`. Без `pool_id` возвращает
+     * свободные счета; с `pool_id` включает счета этого пула для формы редактирования.
+     *
+     * @return array JSON со счетами и признаком `assigned`.
      */
     public function actionAvailableAccounts(): array
     {
@@ -327,9 +371,11 @@ class AccountPoolController extends BaseController
     }
 
     /**
-     * POST /account-pool/assign-account
-     * Привязать счёт к ностро-банку
-     * Body: { pool_id, account_id }
+     * Привязывает счёт к ностро-банку.
+     *
+     * POST `/account-pool/assign-account`, body: `pool_id`, `account_id`.
+     *
+     * @return array JSON-результат привязки.
      */
     public function actionAssignAccount(): array
     {
@@ -354,9 +400,11 @@ class AccountPoolController extends BaseController
     }
 
     /**
-     * POST /account-pool/unassign-account
-     * Отвязать счёт от ностро-банка
-     * Body: { account_id }
+     * Отвязывает счёт от ностро-банка.
+     *
+     * POST `/account-pool/unassign-account`, body: `account_id`.
+     *
+     * @return array JSON-результат отвязки.
      */
     public function actionUnassignAccount(): array
     {
@@ -377,9 +425,12 @@ class AccountPoolController extends BaseController
     }
 
     /**
-     * POST /account-pool/quick-create
-     * Быстрое создание ностро-банка из сайдбара выверки.
-     * Body: { name, description?, category_id?, ledger_accounts[]?, statement_accounts[]? }
+     * Быстро создаёт ностро-банк из сайдбара выверки.
+     *
+     * POST `/account-pool/quick-create`. Операция в транзакции создаёт
+     * `AccountPool`, опционально привязывает категорию и свободные счета.
+     *
+     * @return array JSON с минимальными данными созданного ностро-банка.
      */
     public function actionQuickCreate(): array
     {
@@ -447,9 +498,11 @@ class AccountPoolController extends BaseController
     }
 
     /**
-     * POST /account-pool/move-to-category
-     * Переместить ностро-банк в другую категорию (или открепить).
-     * Body: { id, category_id (число или пусто/null для открепления) }
+     * Перемещает ностро-банк в категорию или открепляет от неё.
+     *
+     * POST `/account-pool/move-to-category`, body: `id`, `category_id`.
+     *
+     * @return array JSON с новым `category_id`.
      */
     public function actionMoveToCategory(): array
     {

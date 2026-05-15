@@ -5,8 +5,10 @@ namespace app\widgets;
 use Yii;
 
 /**
- * Alert widget renders a message from session flash. All flash messages are displayed
- * in the sequence they were assigned using setFlash. You can set message as following:
+ * Виджет Bootstrap-alert для flash-сообщений Yii.
+ *
+ * Рендерит все flash-сообщения с поддерживаемыми типами и удаляет их из
+ * сессии после вывода. Используется в layout для системных уведомлений.
  *
  * ```php
  * Yii::$app->session->setFlash('error', 'This is the message');
@@ -46,7 +48,9 @@ class Alert extends \yii\bootstrap5\Widget
 
 
     /**
-     * {@inheritdoc}
+     * Рендерит flash-сообщения текущей сессии.
+     *
+     * @return void
      */
     public function run()
     {

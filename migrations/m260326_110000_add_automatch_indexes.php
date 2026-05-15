@@ -21,6 +21,13 @@ class m260326_110000_add_automatch_indexes extends Migration
 {
     // up/down вместо safeUp/safeDown — CONCURRENTLY не работает внутри транзакции
 
+    /**
+     * Применяет миграцию `m260326_110000_add_automatch_indexes`.
+     *
+     * Создаёт или изменяет структуру БД согласно назначению файла миграции.
+     *
+     * @return void
+     */
     public function up()
     {
         // Удаляем возможные невалидные индексы от предыдущей попытки
@@ -35,6 +42,13 @@ class m260326_110000_add_automatch_indexes extends Migration
         ")->execute();
     }
 
+    /**
+     * Откатывает миграцию `m260326_110000_add_automatch_indexes`.
+     *
+     * Возвращает структуру БД к состоянию до применения этой миграции, если откат поддерживается.
+     *
+     * @return void
+     */
     public function down()
     {
         $this->db->createCommand('DROP INDEX CONCURRENTLY IF EXISTS idx_ne_automatch')->execute();

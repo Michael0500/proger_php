@@ -26,11 +26,22 @@ return [
         'assetManager' => [
             'basePath' => __DIR__ . '/../web/assets',
         ],
+        'cache' => [
+            'class' => 'yii\caching\FileCache',
+        ],
         'urlManager' => [
             'showScriptName' => true,
         ],
         'user' => [
             'identityClass' => 'app\models\User',
+        ],
+        'authManager' => [
+            'class' => 'yii\rbac\DbManager',
+            'itemTable' => '{{%auth_item}}',
+            'itemChildTable' => '{{%auth_item_child}}',
+            'assignmentTable' => '{{%auth_assignment}}',
+            'ruleTable' => '{{%auth_rule}}',
+            'cache' => 'cache',
         ],
         'request' => [
             'cookieValidationKey' => 'test',

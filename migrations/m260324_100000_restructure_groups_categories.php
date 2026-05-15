@@ -15,6 +15,13 @@ use yii\db\Migration;
  */
 class m260324_100000_restructure_groups_categories extends Migration
 {
+    /**
+     * Применяет миграцию `m260324_100000_restructure_groups_categories`.
+     *
+     * Создаёт или изменяет структуру БД согласно назначению файла миграции.
+     *
+     * @return void
+     */
     public function safeUp()
     {
         // ── 1. Удаляем внешние ключи, чтобы можно было переименовать таблицы ──
@@ -133,6 +140,13 @@ class m260324_100000_restructure_groups_categories extends Migration
         );
     }
 
+    /**
+     * Откатывает миграцию `m260324_100000_restructure_groups_categories`.
+     *
+     * Возвращает структуру БД к состоянию до применения этой миграции, если откат поддерживается.
+     *
+     * @return void
+     */
     public function safeDown()
     {
         // ── Удаляем FK ──

@@ -24,12 +24,14 @@ class BndCamtParser
     private array $errors = [];
 
     /**
-     * Парсит XML-файл и возвращает массив данных для создания NostroBalance.
+     * Парсит XML-файл и возвращает строки для создания `NostroBalance`.
      *
-     * @param string $filePath  Путь к загруженному файлу
-     * @param int    $accountId ID счёта (account_id) из справочника
-     * @param string $section   NRE | INV
-     * @return array[]  Массив строк ['account_id'=>..., 'opening_balance'=>..., ...]
+     * Ошибки парсинга накапливаются в `$errors` и доступны через `getErrors()`.
+     *
+     * @param string $filePath Путь к загруженному XML-файлу.
+     * @param int $accountId ID счёта из справочника.
+     * @param string $section Раздел `NRE` или `INV`.
+     * @return array[] Массив строк балансов.
      */
     public function parse(string $filePath, int $accountId, string $section): array
     {
@@ -73,6 +75,11 @@ class BndCamtParser
         return $rows;
     }
 
+    /**
+     * Возвращает ошибки последнего парсинга.
+     *
+     * @return string[] Список ошибок.
+     */
     public function getErrors(): array
     {
         return $this->errors;
@@ -80,6 +87,15 @@ class BndCamtParser
 
     // ─── Приватные методы ─────────────────────────────────────────
 
+    /**
+     * Разбирает один блок `<Stmt>` CAMT.
+     *
+     * @param \SimpleXMLElement $stmt XML-узел выписки.
+     * @param int $accountId ID счёта.
+     * @param string $section Раздел баланса.
+     * @param string|null $ns Default namespace CAMT.
+     * @return array|null Строка баланса или `null`, если данные неполные.
+     */
     private function parseStmt(\SimpleXMLElement $stmt, int $accountId, string $section, ?string $ns): ?array
     {
         // Номер выписки
@@ -134,7 +150,12 @@ class BndCamtParser
     }
 
     /**
-     * Найти баланс по коду (OPBD или CLBD)
+     * Находит баланс по коду OPBD/CLBD внутри выписки.
+     *
+     * @param \SimpleXMLElement $stmt XML-узел выписки.
+     * @param string $code Код баланса `OPBD` или `CLBD`.
+     * @param string|null $ns Default namespace CAMT.
+     * @return array|null Данные суммы, валюты, D/C и даты.
      */
     private function findBalance(\SimpleXMLElement $stmt, string $code, ?string $ns): ?array
     {
@@ -186,8 +207,10 @@ class BndCamtParser
     }
 
     /**
-     * Привести дату к формату YYYY-MM-DD
-     * Принимает: YYYY-MM-DD, DD.MM.YYYY, DD/MM/YYYY
+     * Приводит дату к формату `Y-m-d`.
+     *
+     * @param string $raw Исходная дата `Y-m-d`, `d.m.Y` или `d/m/Y`.
+     * @return string|null Нормализованная дата или `null`.
      */
     private function parseDate(string $raw): ?string
     {
@@ -206,6 +229,13 @@ class BndCamtParser
         return null;
     }
 
+    /**
+     * Выполняет XPath без проброса исключений наружу.
+     *
+     * @param \SimpleXMLElement $xml XML-узел.
+     * @param string $path XPath-выражение.
+     * @return array Найденные узлы или пустой массив.
+     */
     private function xpathSafe(\SimpleXMLElement $xml, string $path): array
     {
         try {

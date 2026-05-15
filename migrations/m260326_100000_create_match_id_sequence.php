@@ -15,6 +15,13 @@ use yii\db\Migration;
  */
 class m260326_100000_create_match_id_sequence extends Migration
 {
+    /**
+     * Применяет миграцию `m260326_100000_create_match_id_sequence`.
+     *
+     * Создаёт или изменяет структуру БД согласно назначению файла миграции.
+     *
+     * @return void
+     */
     public function safeUp()
     {
         // Создаём sequence
@@ -34,6 +41,13 @@ class m260326_100000_create_match_id_sequence extends Migration
         $this->execute("SELECT setval('match_id_seq', {$startVal}, false)");
     }
 
+    /**
+     * Откатывает миграцию `m260326_100000_create_match_id_sequence`.
+     *
+     * Возвращает структуру БД к состоянию до применения этой миграции, если откат поддерживается.
+     *
+     * @return void
+     */
     public function safeDown()
     {
         $this->execute('DROP SEQUENCE IF EXISTS match_id_seq');

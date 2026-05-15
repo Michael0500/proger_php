@@ -13,6 +13,7 @@ SmartMatch is a **Nostro account reconciliation** (квитование) system 
 - `docs/USER_GUIDE.md` — подробное пользовательское руководство по рабочему процессу в системе.
 - `docs/FAQ.md` — пользовательский FAQ по выверке, автоквитованию, балансам, раккорду и архиву.
 - `docs/DEVELOPER_GUIDE.md` — руководство разработчика: архитектура, соглашения, команды, тесты и сопровождение.
+- `docs/TESTING.md` — документация по тестам: тестовая БД, команды запуска, назначение suites и карта проверок.
 
 ## Обязательное правило: обновление CLAUDE.md
 При любых значимых изменениях в проекте (новый модуль, новый контроллер, новая подсистема, изменение архитектуры, новые команды, изменение стека) — **всегда обновляй этот файл**, чтобы он отражал актуальное состояние проекта.
@@ -48,14 +49,17 @@ php yii <command>/<action>
 
 ### Tests (Codeception)
 ```bash
+php tests/bin/yii migrate --interactive=0      # prepare/update smartmatch_test schema
+vendor/bin/codecept build                      # rebuild actors after suite/module changes
 vendor/bin/codecept run                        # unit + functional
 vendor/bin/codecept run unit                   # unit only
 vendor/bin/codecept run functional             # functional only
-vendor/bin/codecept run unit tests/unit/SomeTest.php  # single test file
+vendor/bin/codecept run unit tests/unit/models/NostroEntryTest.php  # single test file
+vendor/bin/codecept run functional tests/functional/MatchingApiCest.php  # single API test file
 vendor/bin/codecept run --coverage --coverage-html    # with coverage
 ```
 
-Test config: `codeception.yml` (uses `config/test.php` and `config/test_db.php`).
+Test config: `codeception.yml` (uses `config/test.php` and `config/test_db.php`). Default test DB is PostgreSQL `smartmatch_test`; override with `SMARTMATCH_TEST_DSN`, `SMARTMATCH_TEST_DB_USERNAME`, `SMARTMATCH_TEST_DB_PASSWORD`. See `docs/TESTING.md` for what each test file checks.
 
 ### Install dependencies
 ```bash
@@ -199,7 +203,7 @@ Restore preserves `matched_at` from `nostro_entries_archive`, so the original ma
 ## Configuration
 
 - Database: `config/db.php` — PostgreSQL 17, host `PostgreSQL-17`, port `5432`, dbname `smartmatch`
-- Test DB: `config/test_db.php`
+- Test DB: `config/test_db.php` — PostgreSQL `smartmatch_test` by default; never run tests against `smartmatch`
 - App params: `config/params.php`
 - RBAC: `yii\rbac\DbManager` with standard auth tables
 - Dev tools (Gii, Debug) enabled when `YII_ENV_DEV`

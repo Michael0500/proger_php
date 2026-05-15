@@ -2,6 +2,11 @@
 
 use yii\db\Migration;
 
+/**
+ * Миграция `m260209_101034_add_company_id_to_user_table`.
+ *
+ * Фиксирует изменение схемы PostgreSQL для SmartMatch и должна применяться через `php yii migrate`.
+ */
 class m260209_101034_add_company_id_to_user_table extends Migration
 {
     /**
@@ -26,6 +31,13 @@ class m260209_101034_add_company_id_to_user_table extends Migration
         $this->createIndex('idx-user-company_id', '{{%user}}', 'company_id');
     }
 
+    /**
+     * Откатывает миграцию `m260209_101034_add_company_id_to_user_table`.
+     *
+     * Возвращает структуру БД к состоянию до применения этой миграции, если откат поддерживается.
+     *
+     * @return void
+     */
     public function safeDown()
     {
         $this->dropForeignKey('fk-user-company_id', '{{%user}}');
@@ -33,18 +45,4 @@ class m260209_101034_add_company_id_to_user_table extends Migration
         $this->dropColumn('{{%user}}', 'company_id');
     }
 
-    /*
-    // Use up()/down() to run migration code without a transaction.
-    public function up()
-    {
-
-    }
-
-    public function down()
-    {
-        echo "m260209_101034_add_company_id_to_user_table cannot be reverted.\n";
-
-        return false;
-    }
-    */
 }

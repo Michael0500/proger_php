@@ -1,8 +1,18 @@
 /**
- * ArchiveMixin — раздел архива сквитованных записей.
- * Стиль — как BalanceMixin / EntriesMixin в проекте.
+ * Mixin раздела архива сквитованных записей.
+ *
+ * Управляет таблицей `nostro_entries_archive`, фильтрами, ручным batch-архивом,
+ * очисткой просроченных строк, восстановлением группы по `match_id`, историей,
+ * статистикой, настройками хранения и пользовательскими колонками. Сервер
+ * сохраняет `matched_at`, проверяет `company_id` и выполняет операции архива
+ * транзакционно.
  */
 var ArchiveMixin = {
+    /**
+     * Начальное состояние страницы архива.
+     *
+     * @returns {Object} Vue data для таблицы, фильтров, статистики, операций и колонок.
+     */
     data: function () {
         return {
             // ── Таблица архива ────────────────────────────────────
@@ -27,7 +37,11 @@ var ArchiveMixin = {
             archiveStats:        null,
             archiveStatsLoading: false,
 
-            // ── Настройки ─────────────────────────────────────────
+            /**
+             * Настройки архива текущей компании.
+             *
+             * @type {{archive_after_days: number, retention_years: number, auto_archive_enabled: boolean}}
+             */
             archiveSettings: {
                 archive_after_days:   90,
                 retention_years:       5,
@@ -54,7 +68,14 @@ var ArchiveMixin = {
             _archiveAccountSelect2Inited: false,
             _archiveSubmitGuardBound:     false,
 
-            // ── Управление колонками таблицы архива ───────────────
+            /**
+             * Конфигурация колонок таблицы архива.
+             *
+             * `key` соответствует полю archive API/шаблона, пользовательские
+             * `visible` и `width` сохраняются в `user_preferences.archive_table_columns`.
+             *
+             * @type {Array<{key: string, label: string, visible: boolean, width: number}>}
+             */
             archiveTableColumns: [
                 { key: 'id',             label: 'ID',           visible: false, width: 60  },
                 { key: 'account_id',     label: 'Счёт',         visible: true,  width: 140 },
@@ -79,12 +100,22 @@ var ArchiveMixin = {
 
     watch: {
         archiveTableColumns: {
+            /**
+             * Сохраняет пользовательские настройки колонок архива.
+             *
+             * @returns {void}
+             */
             handler: function () { this.saveArchiveTableColumnsPrefs(); },
             deep: true
         }
     },
 
     computed: {
+        /**
+         * Проверяет наличие следующей страницы архива.
+         *
+         * @returns {boolean} `true`, если загружено меньше строк, чем `archiveTotal`.
+         */
         hasMoreArchive: function () {
             return this.archiveRows.length < this.archiveTotal;
         },
@@ -92,10 +123,14 @@ var ArchiveMixin = {
 
     methods: {
 
-        // ══════════════════════════════════════════════════
-        // ЗАГРУЗКА АРХИВА
-        // ══════════════════════════════════════════════════
-
+        /**
+         * Блокирует нативную отправку форм внутри страницы архива.
+         *
+         * Используется как защитный слой для Vue-форм, чтобы Enter или вложенная
+         * форма не отправили страницу целиком и не потеряли состояние фильтров.
+         *
+         * @returns {void}
+         */
         bindArchiveSubmitGuard: function () {
             if (this._archiveSubmitGuardBound) return;
             this._archiveSubmitGuardBound = true;
@@ -110,6 +145,17 @@ var ArchiveMixin = {
             }, true);
         },
 
+        /**
+         * Загружает страницу архивных записей.
+         *
+         * Вызывает GET `archiveList` с пагинацией, сортировкой и JSON-фильтрами.
+         * При `reset` очищает текущие строки; `keepFiltersOpen` удерживает
+         * панель фильтров открытой после обновления.
+         *
+         * @param {boolean} reset Нужно ли начать загрузку с первой страницы.
+         * @param {boolean=} keepFiltersOpen Сохранять открытой панель фильтров.
+         * @returns {void}
+         */
         loadArchive: function (reset, keepFiltersOpen) {
             if (keepFiltersOpen) {
                 this.archiveFiltersOpen = true;
@@ -147,12 +193,23 @@ var ArchiveMixin = {
             });
         },
 
+        /**
+         * Догружает следующую страницу архива для infinite scroll.
+         *
+         * @returns {void}
+         */
         loadMoreArchive: function () {
             if (this.archiveLoadingMore || !this.hasMoreArchive) return;
             this.archivePage++;
             this.loadArchive(false);
         },
 
+        /**
+         * Обрабатывает прокрутку таблицы архива.
+         *
+         * @param {Event} e Событие scroll от контейнера таблицы.
+         * @returns {void}
+         */
         onArchiveScroll: function (e) {
             var el = e.target;
             if (el.scrollTop + el.clientHeight >= el.scrollHeight - 160) {
@@ -160,10 +217,12 @@ var ArchiveMixin = {
             }
         },
 
-        // ══════════════════════════════════════════════════
-        // СОРТИРОВКА
-        // ══════════════════════════════════════════════════
-
+        /**
+         * Меняет сортировку архива и перезагружает данные.
+         *
+         * @param {string} col Ключ колонки сортировки.
+         * @returns {void}
+         */
         sortArchive: function (col) {
             if (this.archiveSortCol === col) {
                 this.archiveSortDir = this.archiveSortDir === 'asc' ? 'desc' : 'asc';
@@ -174,15 +233,27 @@ var ArchiveMixin = {
             this.loadArchive(true);
         },
 
+        /**
+         * Возвращает CSS-класс иконки сортировки архива.
+         *
+         * @param {string} col Ключ колонки.
+         * @returns {string} CSS-класс Font Awesome.
+         */
         archiveSortIcon: function (col) {
             if (this.archiveSortCol !== col) return 'fas fa-sort';
             return this.archiveSortDir === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down';
         },
 
-        // ══════════════════════════════════════════════════
-        // ФИЛЬТРЫ
-        // ══════════════════════════════════════════════════
-
+        /**
+         * Применяет фильтр архива и перезагружает таблицу.
+         *
+         * Пустое значение удаляет фильтр. Состояние фильтров сохраняется в
+         * `StateStorage`, чтобы пользователь вернулся к тому же набору условий.
+         *
+         * @param {string} field Имя фильтра, ожидаемое API.
+         * @param {*} value Значение фильтра.
+         * @returns {void}
+         */
         applyArchiveFilter: function (field, value) {
             this.archiveFiltersOpen = true;
             var v = (value === null || value === undefined) ? '' : String(value).trim();
@@ -195,6 +266,12 @@ var ArchiveMixin = {
             this.loadArchive(true, true);
         },
 
+        /**
+         * Удаляет один фильтр архива.
+         *
+         * @param {string} field Имя фильтра.
+         * @returns {void}
+         */
         clearArchiveFilter: function (field) {
             this.archiveFiltersOpen = true;
             this.$delete(this.archiveFilters, field);
@@ -202,6 +279,11 @@ var ArchiveMixin = {
             this.loadArchive(true, true);
         },
 
+        /**
+         * Очищает все фильтры архива и связанные Select2.
+         *
+         * @returns {void}
+         */
         clearAllArchiveFilters: function () {
             this.archiveFiltersOpen = true;
             this.archiveFilters = {};
@@ -213,6 +295,13 @@ var ArchiveMixin = {
             this.loadArchive(true, true);
         },
 
+        /**
+         * Применяет фильтр архива с задержкой ввода.
+         *
+         * @param {string} field Имя фильтра.
+         * @param {*} value Значение из поля ввода.
+         * @returns {void}
+         */
         debouncedArchiveFilter: function (field, value) {
             var self = this;
             clearTimeout(self._archiveDebounceTimer);
@@ -221,16 +310,34 @@ var ArchiveMixin = {
             }, 400);
         },
 
+        /**
+         * Считает активные фильтры архива.
+         *
+         * @returns {number} Количество непустых фильтров.
+         */
         activeArchiveFilterCount: function () {
             return Object.keys(this.archiveFilters).filter(function (k) {
                 return !!this.archiveFilters[k];
             }, this).length;
         },
 
+        /**
+         * Сохраняет фильтры архива в пользовательское localStorage-хранилище.
+         *
+         * @returns {void}
+         */
         saveArchiveFilterState: function () {
             StateStorage.set('archive_filters', this.archiveFilters || {});
         },
 
+        /**
+         * Переключает панель фильтров архива.
+         *
+         * При открытии инициализирует Select2 банков и счетов, при закрытии
+         * уничтожает виджеты, чтобы избежать повторных обработчиков.
+         *
+         * @returns {void}
+         */
         toggleArchiveFilters: function () {
             if (this.archiveFiltersOpen) {
                 this.destroyArchiveFilterSelect2();
@@ -249,6 +356,11 @@ var ArchiveMixin = {
             });
         },
 
+        /**
+         * Уничтожает Select2 виджеты фильтров архива.
+         *
+         * @returns {void}
+         */
         destroyArchiveFilterSelect2: function () {
             var $pool = $('#archive-pool-select2');
             if ($pool.length && $pool.data('select2')) {
@@ -266,6 +378,14 @@ var ArchiveMixin = {
             this._archiveAccountSelect2Inited = false;
         },
 
+        /**
+         * Инициализирует Select2 фильтра ностро-банка архива.
+         *
+         * Использует `archiveAccountPools`, синхронизирует выбранный
+         * `account_pool_id` и применяет/очищает фильтр при событиях Select2.
+         *
+         * @returns {void}
+         */
         initArchivePoolSelect2: function () {
             var self = this;
             var $el  = $('#archive-pool-select2');
@@ -293,6 +413,11 @@ var ArchiveMixin = {
             });
         },
 
+        /**
+         * Обновляет options уже созданного Select2 ностро-банков архива.
+         *
+         * @returns {void}
+         */
         refreshArchivePoolSelect2: function () {
             var $el = $('#archive-pool-select2');
             if (!$el.length || !$el.data('select2')) return;
@@ -303,6 +428,14 @@ var ArchiveMixin = {
             $el.val(this.archiveFilters.account_pool_id || null).trigger('change.select2');
         },
 
+        /**
+         * Инициализирует Select2 фильтра счёта архива.
+         *
+         * Использует `archiveAccounts`, применяет фильтр `account_id` и
+         * отображает валюту счёта в подписи option.
+         *
+         * @returns {void}
+         */
         initArchiveAccountSelect2: function () {
             var self = this;
             var $el  = $('#archive-account-select2');
@@ -330,6 +463,11 @@ var ArchiveMixin = {
             });
         },
 
+        /**
+         * Обновляет options уже созданного Select2 счетов архива.
+         *
+         * @returns {void}
+         */
         refreshArchiveAccountSelect2: function () {
             var $el = $('#archive-account-select2');
             if (!$el.length || !$el.data('select2')) return;
@@ -341,11 +479,14 @@ var ArchiveMixin = {
             $el.val(this.archiveFilters.account_id || null).trigger('change.select2');
         },
 
-        // ══════════════════════════════════════════════════
-        // ОПЕРАЦИИ
-        // ══════════════════════════════════════════════════
-
-        // Запустить архивирование (прогрессивно, порциями)
+        /**
+         * Запрашивает подтверждение запуска ручного архивирования.
+         *
+         * Показывает пользователю текущий порог `archive_after_days`; после
+         * подтверждения запускает batch-процесс `_startProgressArchive()`.
+         *
+         * @returns {void}
+         */
         runArchive: function () {
             var self = this;
 
@@ -365,7 +506,15 @@ var ArchiveMixin = {
             });
         },
 
-        // Внутренний метод — запускает цикл AJAX-порций
+        /**
+         * Запускает batch-архивирование сквитованных записей.
+         *
+         * Сначала вызывает POST `archiveCount` для прогресс-бара, затем
+         * запускает порционную обработку через `_runNextBatch()`. Сервер
+         * переносит подходящие matched строки в архив и пишет аудит.
+         *
+         * @returns {void}
+         */
         _startProgressArchive: function () {
             var self = this;
             self.archiveRunning      = true;
@@ -395,6 +544,17 @@ var ArchiveMixin = {
             });
         },
 
+        /**
+         * Выполняет следующую порцию архивирования.
+         *
+         * Вызывает POST `archiveRunBatch` с прогрессом, обновляет UI и повторяет
+         * запросы до `is_finished`. После завершения обновляет таблицу и
+         * статистику архива.
+         *
+         * @param {number} totalDone Количество уже обработанных записей.
+         * @param {number} totalAll Общее количество записей для обработки.
+         * @returns {void}
+         */
         _runNextBatch: function (totalDone, totalAll) {
             var self = this;
             SmartMatchApi.post(AppRoutes.archiveRunBatch, {
@@ -432,12 +592,25 @@ var ArchiveMixin = {
             });
         },
 
+        /**
+         * Закрывает окно прогресса архивирования и сбрасывает флаг запуска.
+         *
+         * @returns {void}
+         */
         _closeProgressArchive: function () {
             this.archiveRunning      = false;
             this.archiveProgressOpen = false;
         },
 
-        // Удалить просроченные записи
+        /**
+         * Удаляет просроченные архивные записи после подтверждения.
+         *
+         * Вызывает POST `archivePurgeExpired`; операция необратимо удаляет
+         * записи, у которых истёк `expires_at`, затем обновляет таблицу и
+         * статистику.
+         *
+         * @returns {void}
+         */
         purgeExpired: function () {
             var self = this;
             Swal.fire({
@@ -465,6 +638,13 @@ var ArchiveMixin = {
             });
         },
 
+        /**
+         * Формирует текст одной строки для preview восстановления.
+         *
+         * @param {Object} row Архивная запись или строка preview.
+         * @param {number} index Индекс строки в списке preview.
+         * @returns {string} Краткое описание строки восстановления.
+         */
         archiveRestoreRowText: function (row, index) {
             var parts = [
                 (index + 1) + '. ID=' + (row.original_id || row.id || '—'),
@@ -476,6 +656,15 @@ var ArchiveMixin = {
             return parts.join(' | ');
         },
 
+        /**
+         * Формирует HTML-блок списка строк восстановления.
+         *
+         * Значения экранируются через `escapeArchiveHtml`, потому что строки
+         * могут содержать данные из комментариев или внешних ID.
+         *
+         * @param {Array<Object>} rows Строки preview восстановления.
+         * @returns {string} HTML для SweetAlert.
+         */
         archiveRestoreRowsHtml: function (rows) {
             var self = this;
             return '<div style="max-height:220px;overflow:auto;text-align:left;margin-top:10px;' +
@@ -488,6 +677,12 @@ var ArchiveMixin = {
                 '</div>';
         },
 
+        /**
+         * Экранирует значение для безопасной вставки в HTML SweetAlert.
+         *
+         * @param {*} value Исходное значение.
+         * @returns {string} HTML-экранированная строка.
+         */
         escapeArchiveHtml: function (value) {
             return String(value === null || value === undefined ? '' : value)
                 .replace(/&/g, '&amp;')
@@ -497,7 +692,17 @@ var ArchiveMixin = {
                 .replace(/'/g, '&#039;');
         },
 
-        // Восстановить группу записей из архива по match_id
+        /**
+         * Восстанавливает архивную группу записей по `match_id`.
+         *
+         * Сначала получает preview через GET `archiveRestorePreview`, затем
+         * после подтверждения вызывает POST `archiveRestore`. Сервер возвращает
+         * все связанные строки в активную таблицу в одной транзакции и сохраняет
+         * исходный `matched_at`.
+         *
+         * @param {Object} row Архивная запись, с которой начато восстановление.
+         * @returns {void}
+         */
         restoreFromArchive: function (row) {
             var self = this;
             SmartMatchApi.get(AppRoutes.archiveRestorePreview, { id: row.id }).then(function (r) {
@@ -546,10 +751,14 @@ var ArchiveMixin = {
             });
         },
 
-        // ══════════════════════════════════════════════════
-        // СТАТИСТИКА
-        // ══════════════════════════════════════════════════
-
+        /**
+         * Загружает статистику и текущие настройки архива.
+         *
+         * Вызывает GET `archiveStats`, заполняет `archiveStats` и синхронизирует
+         * `archiveSettings` из ответа.
+         *
+         * @returns {void}
+         */
         loadArchiveStats: function () {
             var self = this;
             self.archiveStatsLoading = true;
@@ -563,10 +772,11 @@ var ArchiveMixin = {
             });
         },
 
-        // ══════════════════════════════════════════════════
-        // НАСТРОЙКИ
-        // ══════════════════════════════════════════════════
-
+        /**
+         * Загружает настройки архива текущей компании.
+         *
+         * @returns {void}
+         */
         loadArchiveSettings: function () {
             var self = this;
             SmartMatchApi.get(AppRoutes.archiveSettings, {}).then(function (r) {
@@ -576,6 +786,15 @@ var ArchiveMixin = {
             });
         },
 
+        /**
+         * Сохраняет настройки архива.
+         *
+         * Вызывает POST `archiveSaveSettings` с `archive_after_days`,
+         * `retention_years` и `auto_archive_enabled`, закрывает панель настроек
+         * и обновляет статистику.
+         *
+         * @returns {void}
+         */
         saveArchiveSettings: function () {
             var self = this;
             self.archiveSettingsSaving = true;
@@ -592,10 +811,14 @@ var ArchiveMixin = {
             });
         },
 
-        // ══════════════════════════════════════════════════
-        // СЧЕТА ДЛЯ ФИЛЬТРА
-        // ══════════════════════════════════════════════════
-
+        /**
+         * Загружает счета для фильтра архива.
+         *
+         * Вызывает GET `archiveAccounts`; если панель фильтров открыта,
+         * обновляет или инициализирует Select2 счетов.
+         *
+         * @returns {void}
+         */
         loadArchiveAccounts: function () {
             var self = this;
             SmartMatchApi.get(AppRoutes.archiveAccounts, {}).then(function (r) {
@@ -614,6 +837,14 @@ var ArchiveMixin = {
             });
         },
 
+        /**
+         * Загружает ностро-банки для фильтра архива.
+         *
+         * Вызывает GET `accountPoolList`; при открытых фильтрах обновляет или
+         * инициализирует Select2 банков.
+         *
+         * @returns {void}
+         */
         loadArchiveAccountPools: function () {
             var self = this;
             SmartMatchApi.get(AppRoutes.accountPoolList, {}).then(function (r) {
@@ -632,7 +863,14 @@ var ArchiveMixin = {
             });
         },
 
-        // Переключиться на раздел архива
+        /**
+         * Переключает общий интерфейс на раздел архива.
+         *
+         * Используется в старых/общих шаблонах: выставляет `activeSection` и
+         * лениво загружает строки и статистику, если они ещё не были получены.
+         *
+         * @returns {void}
+         */
         switchToArchive: function () {
             this.activeSection = 'archive';
             if (!this.archiveRows.length && !this.archiveLoading) {
@@ -643,12 +881,15 @@ var ArchiveMixin = {
             }
         },
 
-        // ══════════════════════════════════════════════════
-        // ИСТОРИЯ ИЗМЕНЕНИЙ
-        // ══════════════════════════════════════════════════
-
         /**
-         * Открыть модальное окно истории для архивной записи
+         * Открывает модалку истории архивной записи.
+         *
+         * Вызывает GET `archiveHistory`, где сервер ищет аудит по
+         * `nostro_entries_archive.original_id` и учитывает restore/archive
+         * переходы между физическими строками.
+         *
+         * @param {Object} row Архивная запись из таблицы.
+         * @returns {void}
          */
         showArchiveHistory: function (row) {
             var self = this;
@@ -681,19 +922,40 @@ var ArchiveMixin = {
                 });
         },
 
-        // ══════════════════════════════════════════════════
-        // УПРАВЛЕНИЕ КОЛОНКАМИ
-        // ══════════════════════════════════════════════════
+        /**
+         * Проверяет видимость колонки архива.
+         *
+         * @param {string} key Ключ колонки.
+         * @returns {boolean} `true`, если колонка видима.
+         */
         archiveColVisible: function (key) {
             var col = this.archiveTableColumns.find(function (c) { return c.key === key; });
             return col ? col.visible : true;
         },
+        /**
+         * Возвращает описание колонки архива по ключу.
+         *
+         * @param {string} key Ключ колонки.
+         * @returns {Object|undefined} Объект колонки или `undefined`.
+         */
         archiveColByKey: function (key) {
             return this.archiveTableColumns.find(function (c) { return c.key === key; });
         },
+        /**
+         * Переключает dropdown управления колонками архива.
+         *
+         * @returns {void}
+         */
         toggleArchiveColsDropdown: function () {
             this.showArchiveColsDropdown = !this.showArchiveColsDropdown;
         },
+        /**
+         * Запускает изменение ширины колонки архива.
+         *
+         * @param {MouseEvent} e Событие mousedown на ресайзере.
+         * @param {Object} col Колонка из `archiveTableColumns`.
+         * @returns {void}
+         */
         startArchiveColResize: function (e, col) {
             e.preventDefault();
             e.stopPropagation();
@@ -717,6 +979,14 @@ var ArchiveMixin = {
             document.addEventListener('mousemove', onMove);
             document.addEventListener('mouseup', onUp);
         },
+        /**
+         * Загружает персональные настройки колонок архива.
+         *
+         * Вызывает GET `userPreferenceGet` с ключом `archive_table_columns` и
+         * применяет сохранённые `visible`/`width` к известным колонкам.
+         *
+         * @returns {void}
+         */
         loadArchiveTableColumnsPrefs: function () {
             var self = this;
             SmartMatchApi.get(AppRoutes.userPreferenceGet, { key: 'archive_table_columns' })
@@ -740,6 +1010,14 @@ var ArchiveMixin = {
                     self.$nextTick(function () { self._archiveTableColumnsLoaded = true; });
                 });
         },
+        /**
+         * Сохраняет персональные настройки колонок архива.
+         *
+         * После debounce вызывает POST `userPreferenceSave` с ключом
+         * `archive_table_columns`.
+         *
+         * @returns {void}
+         */
         saveArchiveTableColumnsPrefs: function () {
             if (!this._archiveTableColumnsLoaded) return;
             var self = this;
@@ -754,6 +1032,11 @@ var ArchiveMixin = {
                 });
             }, 600);
         },
+        /**
+         * Подключает глобальные обработчики закрытия dropdown колонок архива.
+         *
+         * @returns {void}
+         */
         _initArchiveColManagement: function () {
             var self = this;
             document.addEventListener('click', function (e) {

@@ -19,11 +19,25 @@ use yii\db\Migration;
  */
 class m260327_120000_add_crossid_and_pool_indexes extends Migration
 {
+    /**
+     * Выполняет вспомогательную операцию миграции.
+     *
+     * Используется только внутри данного класса миграции.
+     *
+     * @return void
+     */
     public function transaction(): ?string
     {
         return null; // CONCURRENTLY нельзя внутри транзакции
     }
 
+    /**
+     * Применяет миграцию `m260327_120000_add_crossid_and_pool_indexes`.
+     *
+     * Создаёт или изменяет структуру БД согласно назначению файла миграции.
+     *
+     * @return void
+     */
     public function up(): void
     {
         // ── 1. Индексы на ID-поля (для перекрёстного поиска) ─────────────────
@@ -91,6 +105,13 @@ class m260327_120000_add_crossid_and_pool_indexes extends Migration
         $this->execute('ANALYZE accounts');
     }
 
+    /**
+     * Откатывает миграцию `m260327_120000_add_crossid_and_pool_indexes`.
+     *
+     * Возвращает структуру БД к состоянию до применения этой миграции, если откат поддерживается.
+     *
+     * @return void
+     */
     public function down(): void
     {
         $this->execute('DROP INDEX CONCURRENTLY IF EXISTS idx_ne_uid_instruction_id');

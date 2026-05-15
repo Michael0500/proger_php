@@ -6,7 +6,10 @@ use Yii;
 use yii\base\Model;
 
 /**
- * ContactForm is the model behind the contact form.
+ * Форма обратной связи базового Yii-приложения.
+ *
+ * Используется для отправки сообщения на заданный email через настроенный
+ * mailer. Не участвует в бизнес-процессе выверки.
  */
 class ContactForm extends Model
 {
@@ -18,7 +21,9 @@ class ContactForm extends Model
 
 
     /**
-     * @return array the validation rules.
+     * Возвращает правила валидации формы обратной связи.
+     *
+     * @return array Правила Yii Validator.
      */
     public function rules()
     {
@@ -33,7 +38,9 @@ class ContactForm extends Model
     }
 
     /**
-     * @return array customized attribute labels
+     * Возвращает подписи атрибутов формы.
+     *
+     * @return array Массив `attribute => label`.
      */
     public function attributeLabels()
     {
@@ -43,9 +50,13 @@ class ContactForm extends Model
     }
 
     /**
-     * Sends an email to the specified email address using the information collected by this model.
-     * @param string $email the target email address
-     * @return bool whether the model passes validation
+     * Отправляет сообщение формы на указанный адрес.
+     *
+     * Побочный эффект: при успешной валидации вызывает mailer и отправляет
+     * письмо от имени системного отправителя с reply-to пользователя.
+     *
+     * @param string $email Email получателя сообщения.
+     * @return bool `true`, если форма валидна и отправка была инициирована.
      */
     public function contact($email)
     {

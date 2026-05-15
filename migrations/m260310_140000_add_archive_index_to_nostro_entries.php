@@ -52,6 +52,13 @@ class m260310_140000_add_archive_index_to_nostro_entries extends Migration
         return null;
     }
 
+    /**
+     * Применяет миграцию `m260310_140000_add_archive_index_to_nostro_entries`.
+     *
+     * Создаёт или изменяет структуру БД согласно назначению файла миграции.
+     *
+     * @return bool Результат выполнения миграции.
+     */
     public function up(): bool
     {
         // ── 1. Частичный индекс для COUNT-запросов ──────────────────────────────
@@ -90,6 +97,13 @@ class m260310_140000_add_archive_index_to_nostro_entries extends Migration
         return true;
     }
 
+    /**
+     * Откатывает миграцию `m260310_140000_add_archive_index_to_nostro_entries`.
+     *
+     * Возвращает структуру БД к состоянию до применения этой миграции, если откат поддерживается.
+     *
+     * @return bool Результат выполнения миграции.
+     */
     public function down(): bool
     {
         $this->execute('DROP INDEX CONCURRENTLY IF EXISTS "' . self::IDX_ARCHIVE_CANDIDATES . '"');

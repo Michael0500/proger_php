@@ -11,17 +11,13 @@ use app\models\AccountPool;
 /**
  * Сервис квитования записей Ностро.
  *
- * Автоматическое квитование:
- *   - по всем счетам пула или по конкретному счёту
- *   - по правилам из таблицы matching_rules
+ * Сервис инкапсулирует ручное квитование, расквитование, пакетное
+ * автоквитование и пошаговое автоквитование для UI. Все операции должны
+ * выполняться в рамках `company_id`, чтобы не смешивать данные разных компаний.
  *
- * Ручное квитование:
- *   - принимает массив ID записей
- *   - проверяет сумму (Ledger vs Statement должна совпадать)
- *   - присваивает единый match_id и статус M
- *
- * Расквитование:
- *   - снимает match_id и возвращает статус U
+ * Автоквитование строит SQL по активным правилам из `matching_rules`, ищет
+ * уникальные пары в пределах ностро-банка и присваивает общий `match_id`.
+ * Ручное квитование проверяет баланс набора записей перед сменой статуса.
  */
 class MatchingService
 {
@@ -38,20 +34,31 @@ class MatchingService
      *   - балансировка по Debit/Credit (сумма D = сумма C)
      *   - если разница D/C = 0 — разрешена даже 1 запись (например, сумма = 0)
      *
-     * @param int[]       $ids      Массив ID записей NostroEntry
-     * @param string|null $section  'NRE' | 'INV' (null → NRE-логика)
-     * @return array ['success'=>bool, 'match_id'=>string|null, 'warning'=>string|null, 'message'=>string]
+     * Побочный эффект: в одной транзакции присваивает общий `match_id`,
+     * переводит записи в статус `M`, заполняет `matched_at/updated_at/updated_by`.
+     *
+     * @param int[] $ids Массив ID незаквитованных `NostroEntry`.
+     * @param string|null $section Раздел `NRE` или `INV`; `null` использует NRE-логику.
+     * @param int|null $companyId Если задан, ограничивает квитование одной компанией.
+     * @return array Результат операции: `success`, `match_id`, `count`, `message` и возможное `warning/diff`.
      */
-    public function matchManual(array $ids, ?string $section = null): array
+    public function matchManual(array $ids, ?string $section = null, ?int $companyId = null): array
     {
         $isInv = ($section === 'INV');
+        $ids = array_values(array_unique(array_map('intval', $ids)));
 
-        $entries = NostroEntry::find()
-            ->where(['id' => $ids, 'match_status' => NostroEntry::STATUS_UNMATCHED])
-            ->all();
+        $query = NostroEntry::find()
+            ->where(['id' => $ids, 'match_status' => NostroEntry::STATUS_UNMATCHED]);
+        if ($companyId !== null) {
+            $query->andWhere(['company_id' => $companyId]);
+        }
+        $entries = $query->all();
 
         if (empty($entries)) {
             return ['success' => false, 'message' => 'Незаквитованные записи не найдены'];
+        }
+        if (count($entries) !== count($ids)) {
+            return ['success' => false, 'message' => 'Часть записей недоступна или уже сквитована'];
         }
 
         // Для 1 записи: разрешаем только если сумма = 0
@@ -140,11 +147,23 @@ class MatchingService
     }
 
     /**
-     * Расквитовать записи по match_id.
-     * Все записи с этим match_id возвращаются в статус U.
+     * Расквитовывает все активные записи с указанным `match_id`.
+     *
+     * Побочный эффект: массовым SQL-обновлением очищает `match_id/matched_at`,
+     * возвращает статус `U` и обновляет служебные поля изменения. Если передан
+     * `companyId`, операция ограничена одной компанией.
+     *
+     * @param string $matchId Идентификатор группы квитования.
+     * @param int|null $companyId ID компании для tenant-ограничения.
+     * @return array Результат операции с количеством изменённых записей.
      */
-    public function unmatch(string $matchId): array
+    public function unmatch(string $matchId, ?int $companyId = null): array
     {
+        $condition = ['match_id' => $matchId];
+        if ($companyId !== null) {
+            $condition['company_id'] = $companyId;
+        }
+
         $count = NostroEntry::updateAll(
             [
                 'match_id'     => null,
@@ -153,7 +172,7 @@ class MatchingService
                 'updated_at'   => date('Y-m-d H:i:s'),
                 'updated_by'   => Yii::$app->user->id,
             ],
-            ['match_id' => $matchId]
+            $condition
         );
 
         if ($count === 0) {
@@ -166,12 +185,17 @@ class MatchingService
     // ── Автоматическое квитование ─────────────────────────────────────
 
     /**
-     * Запустить автоквитование целиком (для консольной команды).
+     * Запускает автоквитование по всем активным правилам.
      *
-     * @param int      $companyId
-     * @param int|null $accountId  null = по всем счетам
-     * @param callable|null $onProgress  callback(int $ruleIndex, string $ruleName, int $matchedInRule, int $totalMatched)
-     * @return array ['success'=>bool, 'matched'=>int, 'rules_count'=>int, 'message'=>string]
+     * Используется консольной командой и синхронными API-вызовами. Правила
+     * выполняются по приоритету; ошибка отдельного правила логируется и не
+     * останавливает обработку следующих правил.
+     *
+     * @param int $companyId ID компании.
+     * @param int|null $accountId ID конкретного счёта или `null` для всех счетов.
+     * @param callable|null $onProgress Callback `(int $ruleIndex, string $ruleName, int $matchedInRule, int $totalMatched)`.
+     * @param string|null $section Фильтр раздела `NRE` или `INV`.
+     * @return array Итог автоквитования: `success`, `matched`, `rules_count`, `message`.
      */
     public function autoMatch(int $companyId, ?int $accountId = null, ?callable $onProgress = null, ?string $section = null): array
     {
@@ -221,10 +245,16 @@ class MatchingService
     // ── Пошаговое автоквитование (для UI с прогрессом) ──────────────
 
     /**
-     * Разрешить scope в список account_id.
-     * scope_type: 'all' | 'pool' | 'category'
-     * scope_id:   id соответствующей сущности (null для 'all')
-     * Возвращает null = без ограничений, [] = нет подходящих счетов.
+     * Разрешает область запуска автоквитования в список `account_id`.
+     *
+     * `scopeType` принимает `all`, `pool` или `category`. `null` означает,
+     * что ограничения по счетам нет, а пустой массив означает выбранную область
+     * без подходящих счетов.
+     *
+     * @param int $companyId ID компании.
+     * @param string $scopeType Тип области: `all`, `pool` или `category`.
+     * @param int|null $scopeId ID ностро-банка или категории для выбранной области.
+     * @return int[]|null Список ID счетов, `null` без ограничения.
      */
     public function resolveScopeAccounts(int $companyId, string $scopeType, ?int $scopeId): ?array
     {
@@ -256,8 +286,19 @@ class MatchingService
     }
 
     /**
-     * Инициализация пошагового автоквитования.
-     * Возвращает job_id и информацию о правилах.
+     * Инициализирует пошаговое автоквитование для UI.
+     *
+     * Метод выбирает активные правила, считает количество незаквитованных
+     * записей в выбранной области и сохраняет состояние задания в `FileCache`
+     * на один час. Следующие шаги выполняются методом `autoMatchStep()`.
+     *
+     * @param int $companyId ID компании.
+     * @param int|null $accountId ID конкретного счёта или `null`.
+     * @param string|null $section Фильтр раздела `NRE` или `INV`.
+     * @param string $scopeType Область запуска: `all`, `pool`, `category`.
+     * @param int|null $scopeId ID области запуска.
+     * @return array Данные задания: `job_id`, список правил, число шагов и незаквитованных записей.
+     * @throws \Exception Если не удалось сгенерировать случайный `job_id`.
      */
     public function autoMatchStart(int $companyId, ?int $accountId = null, ?string $section = null, string $scopeType = 'all', ?int $scopeId = null): array
     {
@@ -325,8 +366,14 @@ class MatchingService
     }
 
     /**
-     * Выполнить следующий шаг автоквитования.
-     * Обрабатывает одно правило за вызов.
+     * Выполняет следующий шаг пошагового автоквитования.
+     *
+     * За один вызов обрабатывается одно правило из состояния задания. После
+     * выполнения результат правила сохраняется обратно в кэш, чтобы фронтенд
+     * мог показывать прогресс и продолжить обработку следующим запросом.
+     *
+     * @param string $jobId ID задания, полученный из `autoMatchStart()`.
+     * @return array Состояние прогресса, результат последнего правила и общий итог.
      */
     public function autoMatchStep(string $jobId): array
     {
@@ -405,7 +452,7 @@ class MatchingService
     }
 
     /**
-     * Выполнить одно правило — найти пары и сквитовать их.
+     * Выполняет одно правило автоквитования.
      *
      * Стратегия:
      *   1. Обрабатываем по одному ностро-банку (pool) за раз — меньший рабочий набор.
@@ -414,7 +461,15 @@ class MatchingService
      *      все пары заранее.
      *   3. Всё обновление — в одном SQL (CTE + UPDATE), PHP не держит данные в памяти.
      *
-     * Возвращает количество сквитованных пар.
+     * Побочный эффект: пакетно обновляет найденные записи в `nostro_entries`,
+     * присваивает новый `match_id`, статус `M`, `matched_at` и служебные поля.
+     *
+     * @param MatchingRule $rule Правило автоквитования.
+     * @param int $companyId ID компании.
+     * @param int|null $accountId Ограничение по конкретному счёту или `null`.
+     * @param int[]|null $limitAccountIds Дополнительный список допустимых счетов из scope UI.
+     * @return int Количество сквитованных пар.
+     * @throws \Exception Если SQL-обновление правила завершилось ошибкой.
      */
     public function runRule(MatchingRule $rule, int $companyId, ?int $accountId, ?array $limitAccountIds = null): int
     {
@@ -556,8 +611,15 @@ class MatchingService
     }
 
     /**
-     * Сгенерировать SQL для отладки — без выполнения.
-     * Возвращает null если buildJoinConditions пуст.
+     * Генерирует диагностический SQL для правила без выполнения.
+     *
+     * Используется консольной командой для анализа условий правила,
+     * заполненности ID-полей и количества незаквитованных записей.
+     *
+     * @param MatchingRule $rule Правило автоквитования.
+     * @param int $companyId ID компании.
+     * @param int|null $accountId Ограничение по счёту или `null`.
+     * @return string|null SQL-текст или `null`, если правило не содержит условий JOIN.
      */
     public function buildDebugSql(MatchingRule $rule, int $companyId, ?int $accountId): ?string
     {
@@ -620,8 +682,14 @@ GROUP BY ls;";
     }
 
     /**
-     * Построить условия JOIN для правила.
-     * Перекрёстный поиск: ID из любого поля A совпадает с любым полем B.
+     * Строит SQL-условия JOIN для правила автоквитования.
+     *
+     * При включённом `cross_id_search` любой выбранный ID-поле стороны A
+     * может совпасть с любым выбранным ID-полем стороны B. При выключенном
+     * режиме сравниваются только одноимённые поля.
+     *
+     * @param MatchingRule $rule Правило автоквитования.
+     * @return string[] Список SQL-условий для соединения записей.
      */
     private function buildJoinConditions(MatchingRule $rule): array
     {
@@ -671,7 +739,10 @@ GROUP BY ls;";
     }
 
     /**
-     * Вернуть [typeA, typeB] по pair_type.
+     * Возвращает типы сторон пары по коду `pair_type`.
+     *
+     * @param string $pairType Код пары из `MatchingRule::PAIR_*`.
+     * @return string[] Массив из двух значений L/S для сторон A и B.
      */
     private function pairTypes(string $pairType): array
     {
@@ -688,9 +759,12 @@ GROUP BY ls;";
     }
 
     /**
-     * Генерация гарантированно уникального Match ID через PostgreSQL sequence.
-     * Формат: MTCH00000001, MTCH00000002, ...
-     * nextval() атомарен — уникальность гарантирована без дополнительных проверок.
+     * Генерирует уникальный `match_id` через PostgreSQL sequence.
+     *
+     * Формат результата: `MTCH00000001`. `nextval()` атомарен, поэтому
+     * дополнительных проверок на коллизии в активной и архивной таблицах не нужно.
+     *
+     * @return string Новый идентификатор группы квитования.
      */
     public function generateMatchId(): string
     {
@@ -699,12 +773,22 @@ GROUP BY ls;";
     }
 
     /**
-     * Предварительный подсчёт сумм по выбранным ID (для UI перед квитованием).
-     * Возвращает суммы по L и S, и разницу.
+     * Считает предварительную сводку по выбранным записям.
+     *
+     * Используется UI перед ручным квитованием, чтобы показать пользователю
+     * суммы Ledger/Statement и разницу в выбранном наборе.
+     *
+     * @param int[] $ids ID записей для расчёта.
+     * @param int|null $companyId ID компании для tenant-ограничения.
+     * @return array Суммы и количества по L/S: `sum_ledger`, `sum_statement`, `diff`, `cnt_*`.
      */
-    public function calcSummary(array $ids): array
+    public function calcSummary(array $ids, ?int $companyId = null): array
     {
-        $entries = NostroEntry::find()->where(['id' => $ids])->all();
+        $query = NostroEntry::find()->where(['id' => array_map('intval', $ids)]);
+        if ($companyId !== null) {
+            $query->andWhere(['company_id' => $companyId]);
+        }
+        $entries = $query->all();
 
         $sumL = 0.0;
         $sumS = 0.0;

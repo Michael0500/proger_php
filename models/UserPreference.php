@@ -22,11 +22,21 @@ class UserPreference extends ActiveRecord
     const KEY_BALANCE_TABLE_COLUMNS = 'balance_table_columns';
     const KEY_ARCHIVE_TABLE_COLUMNS = 'archive_table_columns';
 
+    /**
+     * Возвращает имя таблицы пользовательских настроек.
+     *
+     * @return string Имя таблицы `user_preferences` с учётом префикса Yii.
+     */
     public static function tableName(): string
     {
         return '{{%user_preferences}}';
     }
 
+    /**
+     * Подключает автоматическое заполнение timestamp-полей.
+     *
+     * @return array Конфигурация Yii behaviors.
+     */
     public function behaviors(): array
     {
         return [
@@ -34,6 +44,14 @@ class UserPreference extends ActiveRecord
         ];
     }
 
+    /**
+     * Описывает базовые правила валидации настройки.
+     *
+     * Whitelist допустимых ключей применяется в контроллере, а модель
+     * отвечает за обязательность пользователя и строкового ключа.
+     *
+     * @return array Правила Yii Validator.
+     */
     public function rules(): array
     {
         return [
@@ -44,7 +62,15 @@ class UserPreference extends ActiveRecord
     }
 
     /**
-     * Получить значение настройки пользователя. Возвращает $default, если нет.
+     * Возвращает значение настройки пользователя.
+     *
+     * Значение хранится в JSONB. Метод умеет читать как нормальный JSONB,
+     * так и старый double-encoded формат, постепенно декодируя JSON-строки.
+     *
+     * @param int $userId ID пользователя.
+     * @param string $key Ключ настройки.
+     * @param mixed $default Значение по умолчанию, если настройка отсутствует.
+     * @return mixed Декодированное значение настройки или `$default`.
      */
     public static function getValue(int $userId, string $key, $default = null)
     {
@@ -72,12 +98,17 @@ class UserPreference extends ActiveRecord
     }
 
     /**
-     * Сохранить значение (UPSERT).
+     * Сохраняет значение пользовательской настройки через UPSERT.
      *
      * ВАЖНО: передаём PHP-массив/скаляр как есть. Yii2 при записи в колонку
      * типа `jsonb` автоматически вызывает `json_encode` один раз
      * (см. `yii\db\Schema::getColumnPhpType`). Если вручную передать
      * JSON-строку — получится double-encoded значение.
+     *
+     * @param int $userId ID пользователя.
+     * @param string $key Ключ настройки из whitelist контроллера.
+     * @param mixed $value Значение, совместимое с JSONB.
+     * @return bool Всегда `true`, если SQL-команда выполнена без исключения.
      */
     public static function setValue(int $userId, string $key, $value): bool
     {

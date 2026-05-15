@@ -7,6 +7,13 @@ use yii\db\Migration;
  */
 class m260513_120000_expand_money_precision_to_20_2 extends Migration
 {
+    /**
+     * Применяет миграцию `m260513_120000_expand_money_precision_to_20_2`.
+     *
+     * Создаёт или изменяет структуру БД согласно назначению файла миграции.
+     *
+     * @return void
+     */
     public function safeUp()
     {
         $this->alterColumn('{{%nostro_entries}}', 'amount', $this->decimal(20, 2)->notNull()->comment('Сумма'));
@@ -15,6 +22,13 @@ class m260513_120000_expand_money_precision_to_20_2 extends Migration
         $this->alterColumn('{{%nostro_balance}}', 'closing_balance', $this->decimal(20, 2)->notNull()->defaultValue(0));
     }
 
+    /**
+     * Откатывает миграцию `m260513_120000_expand_money_precision_to_20_2`.
+     *
+     * Возвращает структуру БД к состоянию до применения этой миграции, если откат поддерживается.
+     *
+     * @return void
+     */
     public function safeDown()
     {
         $this->alterColumn('{{%nostro_entries}}', 'amount', $this->decimal(18, 2)->notNull()->comment('Сумма'));

@@ -7,6 +7,13 @@ use yii\db\Migration;
  */
 class m260324_185030_allow_null_pool_id_in_accounts extends Migration
 {
+    /**
+     * Применяет миграцию `m260324_185030_allow_null_pool_id_in_accounts`.
+     *
+     * Создаёт или изменяет структуру БД согласно назначению файла миграции.
+     *
+     * @return void
+     */
     public function safeUp()
     {
         // Убираем NOT NULL
@@ -42,6 +49,13 @@ class m260324_185030_allow_null_pool_id_in_accounts extends Migration
         );
     }
 
+    /**
+     * Откатывает миграцию `m260324_185030_allow_null_pool_id_in_accounts`.
+     *
+     * Возвращает структуру БД к состоянию до применения этой миграции, если откат поддерживается.
+     *
+     * @return void
+     */
     public function safeDown()
     {
         $this->dropForeignKey('fk_accounts_pool_id', 'accounts');

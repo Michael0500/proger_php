@@ -1,9 +1,17 @@
 /**
- * Mixin: Pools
- * Выбор ностро-банка в сайдбаре выверки + быстрый CRUD из сайдбара:
- * добавление в категорию, перемещение между категориями, удаление, открепление.
+ * Mixin управления ностро-банками в сайдбаре выверки.
+ *
+ * Отвечает за выбор `AccountPool`, быстрое создание с привязкой свободных
+ * Ledger/Statement-счетов, перемещение между категориями, открепление и
+ * удаление. Серверные endpoints проверяют `company_id`, связи счетов и
+ * допустимость удаления записей выверки.
  */
 var PoolsMixin = {
+    /**
+     * Начальное состояние форм и списков для операций с ностро-банками.
+     *
+     * @returns {Object} Vue data для модалок создания и перемещения банка.
+     */
     data: function () {
         return {
             // Форма быстрого создания ностро-банка из сайдбара
@@ -34,6 +42,16 @@ var PoolsMixin = {
 
     methods: {
 
+        /**
+         * Выбирает ностро-банк и запускает загрузку записей выверки.
+         *
+         * Изменяет `selectedPool` и `selectedCategory`, сохраняет выбранные ID
+         * в `StateStorage`, затем вызывает `loadEntries(true)` из EntriesMixin.
+         *
+         * @param {Object|null} pool Ностро-банк из выбранной категории.
+         * @param {Object|null} category Категория, к которой привязан банк.
+         * @returns {void}
+         */
         selectPool: function (pool, category) {
             this.selectedPool     = pool;
             this.selectedCategory = category;
@@ -44,7 +62,16 @@ var PoolsMixin = {
             this.loadEntries(true);
         },
 
-        // ── Быстрое создание из сайдбара ─────────────────────────
+        /**
+         * Открывает модалку быстрого создания ностро-банка.
+         *
+         * Сбрасывает форму, подставляет категорию, загружает свободные счета
+         * через GET `accountPoolAvailableAccounts` и инициализирует Select2 для
+         * Ledger/Statement привязок.
+         *
+         * @param {Object|null} category Категория, в которую будет добавлен банк.
+         * @returns {void}
+         */
         showAddPoolModal: function (category) {
             var self = this;
             self.newPool = {
@@ -78,6 +105,14 @@ var PoolsMixin = {
             });
         },
 
+        /**
+         * Инициализирует Select2 для выбора свободных Ledger и Statement счетов.
+         *
+         * Побочные эффекты: пересоздаёт виджеты `#add-pool-ledger-select2` и
+         * `#add-pool-statement-select2`, обновляет массивы выбранных account IDs.
+         *
+         * @returns {void}
+         */
         _initAddPoolAccountSelects: function () {
             var self = this;
             if (typeof $ === 'undefined' || !$.fn || !$.fn.select2) return;
@@ -119,6 +154,15 @@ var PoolsMixin = {
             }
         },
 
+        /**
+         * Создаёт ностро-банк из сайдбара.
+         *
+         * Валидирует имя, отправляет POST `accountPoolQuickCreate` с категорией
+         * и выбранными счетами, закрывает модалку, обновляет дерево категорий и
+         * список банков для фильтров.
+         *
+         * @returns {void}
+         */
         createPoolFromSidebar: function () {
             var self = this;
             var name = (self.newPool.name || '').trim();
@@ -148,7 +192,13 @@ var PoolsMixin = {
             });
         },
 
-        // ── Перемещение между категориями ────────────────────────
+        /**
+         * Открывает модалку перемещения ностро-банка между категориями.
+         *
+         * @param {Object} pool Ностро-банк, который перемещается.
+         * @param {Object|null} fromCategory Текущая категория банка.
+         * @returns {void}
+         */
         showMovePoolModal: function (pool, fromCategory) {
             this.movingPool = {
                 id:                 pool.id,
@@ -160,6 +210,14 @@ var PoolsMixin = {
             this._showModal('movePoolModal');
         },
 
+        /**
+         * Подтверждает перемещение ностро-банка в выбранную категорию.
+         *
+         * Вызывает POST `accountPoolMoveToCategory`, обновляет категории и
+         * список банков. Пустой `category_id` означает снятие привязки.
+         *
+         * @returns {void}
+         */
         confirmMovePool: function () {
             var self     = this;
             var poolId   = self.movingPool.id;
@@ -189,7 +247,16 @@ var PoolsMixin = {
             });
         },
 
-        // ── Открепление от категории (без удаления) ──────────────
+        /**
+         * Открепляет ностро-банк от категории без удаления банка и счетов.
+         *
+         * После подтверждения вызывает POST `accountPoolMoveToCategory` с пустой
+         * категорией. Если банк был выбран в выверке, сбрасывает `selectedPool`.
+         *
+         * @param {Object} pool Ностро-банк для открепления.
+         * @param {Object|null} fromCategory Категория, из которой банк убирается.
+         * @returns {void}
+         */
         detachPoolFromCategory: function (pool, fromCategory) {
             var self = this;
             Swal.fire({
@@ -222,7 +289,16 @@ var PoolsMixin = {
             });
         },
 
-        // ── Удаление ностро-банка ────────────────────────────────
+        /**
+         * Удаляет ностро-банк после явного подтверждения.
+         *
+         * Вызывает POST `accountPoolDelete`. При удалении выбранного банка
+         * очищает таблицу записей и счётчик, затем перезагружает категории и
+         * список банков. Операция может затронуть записи выверки на сервере.
+         *
+         * @param {Object} pool Ностро-банк для удаления.
+         * @returns {void}
+         */
         deletePool: function (pool) {
             var self = this;
             Swal.fire({

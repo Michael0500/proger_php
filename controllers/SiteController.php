@@ -9,8 +9,19 @@ use yii\web\Controller;
 use yii\filters\AccessControl;
 use app\models\LoginForm;
 
+/**
+ * Контроллер базовых страниц, входа и выбора компании.
+ *
+ * Главная страница либо показывает рабочую выверку, если у пользователя уже
+ * выбран `company_id`, либо предлагает выбрать компанию для tenant-контекста.
+ */
 class SiteController extends BaseController
 {
+    /**
+     * Ограничивает действие logout авторизованными пользователями.
+     *
+     * @return array Конфигурация фильтров доступа.
+     */
     public function behaviors()
     {
         return [
@@ -28,6 +39,11 @@ class SiteController extends BaseController
         ];
     }
 
+    /**
+     * Подключает стандартные Yii actions.
+     *
+     * @return array Конфигурация внешних actions, включая обработчик ошибок.
+     */
     public function actions()
     {
         return [
@@ -37,6 +53,14 @@ class SiteController extends BaseController
         ];
     }
 
+    /**
+     * Отображает главную страницу приложения.
+     *
+     * Если у пользователя выбрана компания, рендерит страницу выверки,
+     * иначе показывает выбор компании.
+     *
+     * @return string|\yii\web\Response HTML-страница или redirect.
+     */
     public function actionIndex()
     {
         $user = Yii::$app->user->identity;
@@ -54,6 +78,14 @@ class SiteController extends BaseController
         ]);
     }
 
+    /**
+     * Обрабатывает вход пользователя.
+     *
+     * После успешной авторизации возвращает пользователя на исходный URL или
+     * на выбор компании, если `company_id` ещё не задан.
+     *
+     * @return string|\yii\web\Response HTML формы или redirect.
+     */
     public function actionLogin()
     {
         if (!Yii::$app->user->isGuest) {
@@ -79,12 +111,24 @@ class SiteController extends BaseController
         ]);
     }
 
+    /**
+     * Завершает пользовательскую сессию.
+     *
+     * @return \yii\web\Response Redirect на главную страницу.
+     */
     public function actionLogout()
     {
         Yii::$app->user->logout();
         return $this->goHome();
     }
 
+    /**
+     * Создаёт нового пользователя через простую форму регистрации.
+     *
+     * Побочный эффект: при успешном сохранении генерирует хэш пароля и auth key.
+     *
+     * @return string|\yii\web\Response HTML формы или redirect на login.
+     */
     public function actionSignup()
     {
         $model = new User();

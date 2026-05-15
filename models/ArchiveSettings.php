@@ -23,11 +23,24 @@ class ArchiveSettings extends ActiveRecord
     const DEFAULT_ARCHIVE_AFTER_DAYS = 90;
     const DEFAULT_RETENTION_YEARS    = 5;
 
+    /**
+     * Возвращает имя таблицы настроек архивирования.
+     *
+     * @return string Имя таблицы `archive_settings` с учётом префикса Yii.
+     */
     public static function tableName(): string
     {
         return '{{%archive_settings}}';
     }
 
+    /**
+     * Описывает правила валидации настроек архивирования.
+     *
+     * Сроки ограничены разумными пределами, чтобы batch-архивирование и
+     * purge-процесс не получили некорректные интервалы хранения.
+     *
+     * @return array Правила Yii Validator.
+     */
     public function rules(): array
     {
         return [
@@ -39,6 +52,11 @@ class ArchiveSettings extends ActiveRecord
         ];
     }
 
+    /**
+     * Возвращает подписи настроек архивирования для интерфейса.
+     *
+     * @return array Массив `attribute => label`.
+     */
     public function attributeLabels(): array
     {
         return [
@@ -49,7 +67,14 @@ class ArchiveSettings extends ActiveRecord
     }
 
     /**
-     * Получить настройки для компании (или вернуть дефолтные если ещё нет).
+     * Возвращает настройки архивирования для компании.
+     *
+     * Если запись ещё не создана, возвращается несохранённая модель с
+     * дефолтными значениями. Это позволяет UI показывать настройки до первого
+     * сохранения.
+     *
+     * @param int $companyId ID компании.
+     * @return self Существующая или дефолтная модель настроек.
      */
     public static function getForCompany(int $companyId): self
     {
@@ -64,6 +89,11 @@ class ArchiveSettings extends ActiveRecord
         return $s;
     }
 
+    /**
+     * Преобразует настройки архивирования в структуру JSON API.
+     *
+     * @return array Данные настроек с приведением типов для фронтенда.
+     */
     public function toApiArray(): array
     {
         return [

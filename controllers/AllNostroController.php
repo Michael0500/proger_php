@@ -8,18 +8,31 @@ use app\models\Account;
 use app\models\AccountPool;
 
 /**
- * Страница "Выверка по всем ностро-банкам".
- * Показывает записи NostroEntry со всех банков компании с фильтрами,
- * включая мультивыбор ностро-банков.
+ * Контроллер страницы "Выверка по всем ностро-банкам".
+ *
+ * Страница показывает активные `NostroEntry` текущей компании сразу по всем
+ * ностро-банкам и добавляет фильтры по множеству `pool_ids` и конкретному
+ * счёту, которых нет на основной странице выверки.
  */
 class AllNostroController extends BaseController
 {
+    /**
+     * Отключает CSRF для JSON API страницы.
+     *
+     * @param \yii\base\Action $action Запускаемое действие.
+     * @return bool Можно ли продолжать выполнение action.
+     */
     public function beforeAction($action): bool
     {
         $this->enableCsrfValidation = false;
         return parent::beforeAction($action);
     }
 
+    /**
+     * Возвращает ID компании текущего пользователя.
+     *
+     * @return int|null ID компании или `null`.
+     */
     private function cid(): ?int
     {
         $u = Yii::$app->user->identity;
@@ -27,8 +40,12 @@ class AllNostroController extends BaseController
     }
 
     /**
-     * GET /all-nostro
-     * Standalone страница выверки по всем ностро-банкам.
+     * Рендерит standalone-страницу выверки по всем ностро-банкам.
+     *
+     * GET `/all-nostro`. Передаёт во Vue начальный список ностро-банков
+     * текущей компании.
+     *
+     * @return string|\yii\web\Response HTML-страница или redirect на выбор компании.
      */
     public function actionIndex()
     {
@@ -53,11 +70,12 @@ class AllNostroController extends BaseController
     }
 
     /**
-     * GET /all-nostro/list
-     * Params: page, limit, sort, dir, filters(JSON)
-     * filters.pool_ids — массив ID ностро-банков (опционально)
-     * filters.account_id — ID счёта (опционально)
-     * + все остальные фильтры как в NostroEntryController::actionList
+     * Возвращает постраничный список операций по всем ностро-банкам.
+     *
+     * GET `/all-nostro/list`. Параметр `filters` содержит JSON с
+     * `pool_ids[]`, `account_id` и стандартными фильтрами таблицы выверки.
+     *
+     * @return array JSON с данными, total, page, limit и pages.
      */
     public function actionList(): array
     {
@@ -135,8 +153,11 @@ class AllNostroController extends BaseController
     }
 
     /**
-     * GET /all-nostro/search-accounts?q=&pool_ids[]=
-     * Select2 autocomplete счетов. Если заданы pool_ids — фильтрует по ним.
+     * Ищет счета для Select2 с учётом выбранных ностро-банков.
+     *
+     * GET `/all-nostro/search-accounts?q=&pool_ids[]=`.
+     *
+     * @return array JSON в формате Select2 `results`.
      */
     public function actionSearchAccounts(): array
     {

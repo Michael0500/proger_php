@@ -27,14 +27,25 @@ class ArchiveController extends Controller
     /** @var int|null ID компании (опционально) */
     public $company;
 
+    /**
+     * Регистрирует CLI-опции команды архивирования.
+     *
+     * @param string $actionID ID action.
+     * @return array Список поддерживаемых опций.
+     */
     public function options($actionID): array
     {
         return array_merge(parent::options($actionID), ['company']);
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // archive/run
-    // ─────────────────────────────────────────────────────────────
+    /**
+     * Запускает автоматическое архивирование сквитованных записей.
+     *
+     * Обрабатывает все компании или одну компанию из `--company`, переносит
+     * записи старше `archive_after_days` в архив batch-ами и пишет audit-события.
+     *
+     * @return int Код завершения консольной команды.
+     */
     public function actionRun(): int
     {
         $this->stdout("=== SmartMatch Archive Run: " . date('Y-m-d H:i:s') . " ===\n");
@@ -161,9 +172,13 @@ class ArchiveController extends Controller
         return ExitCode::OK;
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // archive/purge-expired
-    // ─────────────────────────────────────────────────────────────
+    /**
+     * Удаляет архивные записи с истёкшим сроком хранения.
+     *
+     * Учитывает опциональный фильтр `--company`.
+     *
+     * @return int Код завершения консольной команды.
+     */
     public function actionPurgeExpired(): int
     {
         $this->stdout("=== Purge Expired Archives: " . date('Y-m-d H:i:s') . " ===\n");

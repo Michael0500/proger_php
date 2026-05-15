@@ -25,16 +25,35 @@ class SyncAccountTypeController extends Controller
     /** @var bool Не сохранять изменения, только вывести */
     public $dryRun = false;
 
+    /**
+     * Регистрирует CLI-опции синхронизации.
+     *
+     * @param string $actionID ID action.
+     * @return array Список поддерживаемых опций.
+     */
     public function options($actionID)
     {
         return array_merge(parent::options($actionID), ['force', 'dryRun']);
     }
 
+    /**
+     * Возвращает короткие aliases для CLI-опций.
+     *
+     * @return array Карта alias => option.
+     */
     public function optionAliases()
     {
         return array_merge(parent::optionAliases(), ['f' => 'force', 'd' => 'dryRun']);
     }
 
+    /**
+     * Синхронизирует `accounts.account_type` по данным `nostro_entries.ls`.
+     *
+     * Для каждого счёта выбирает наиболее частое значение L/S в операциях и
+     * обновляет счёт, если значение пустое, отличается или включён `--force`.
+     *
+     * @return int Код завершения консольной команды.
+     */
     public function actionRun(): int
     {
         $db = Yii::$app->db;

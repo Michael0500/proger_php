@@ -3,6 +3,9 @@ namespace app\assets;
 
 use yii\web\AssetBundle;
 
+/**
+ * Asset bundle локальной сборки Font Awesome.
+ */
 class FontAwesomeAsset extends AssetBundle
 {
     public $basePath = '@webroot';

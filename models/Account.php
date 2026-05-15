@@ -6,7 +6,11 @@ use Yii;
 use yii\db\ActiveRecord;
 
 /**
- * Модель ностробанка
+ * Ностро-счёт компании.
+ *
+ * Модель описывает конкретный счёт внутри ностро-банка (`AccountPool`).
+ * Счёт используется операциями выверки и балансовыми записями; флаг
+ * `is_suspense` переводит начальный баланс в раздел INV.
  *
  * @property int $id
  * @property int $company_id
@@ -27,11 +31,24 @@ class Account extends ActiveRecord
     const SECTION_NRE = 'nre';
     const SECTION_INV = 'inv';
 
+    /**
+     * Возвращает имя таблицы ностро-счетов.
+     *
+     * @return string Имя таблицы `accounts`.
+     */
     public static function tableName()
     {
         return 'accounts';
     }
 
+    /**
+     * Описывает правила валидации счёта.
+     *
+     * Валидируются принадлежность компании, опциональная привязка к
+     * ностро-банку, тип счёта L/S, валюта, страна и признаки загрузки.
+     *
+     * @return array Правила Yii Validator.
+     */
     public function rules()
     {
         return [
@@ -54,6 +71,11 @@ class Account extends ActiveRecord
         ];
     }
 
+    /**
+     * Возвращает подписи атрибутов счёта для форм и таблиц.
+     *
+     * @return array Массив `attribute => label`.
+     */
     public function attributeLabels()
     {
         return [
@@ -74,7 +96,9 @@ class Account extends ActiveRecord
     }
 
     /**
-     * Связь с пулом (ностробанком)
+     * Возвращает связь со справочником ностро-банков.
+     *
+     * @return \yii\db\ActiveQuery Запрос связи `accounts.pool_id -> account_pools.id`.
      */
     public function getPool()
     {
@@ -82,7 +106,9 @@ class Account extends ActiveRecord
     }
 
     /**
-     * Связь с компанией
+     * Возвращает связь с компанией-владельцем счёта.
+     *
+     * @return \yii\db\ActiveQuery Запрос связи `accounts.company_id -> company.id`.
      */
     public function getCompany()
     {
@@ -90,7 +116,12 @@ class Account extends ActiveRecord
     }
 
     /**
-     * Получает счета для текущей компании пользователя
+     * Возвращает запрос счетов, доступных текущему пользователю.
+     *
+     * Если у пользователя не выбрана компания, возвращается пустой запрос.
+     * Метод используется для сохранения tenant-изоляции на уровне выборок UI.
+     *
+     * @return \yii\db\ActiveQuery Запрос счетов текущей компании.
      */
     public static function findForCurrentUser()
     {
@@ -105,7 +136,13 @@ class Account extends ActiveRecord
     }
 
     /**
-     * Автоматическое обновление времени и пользователя
+     * Заполняет служебные поля создания и изменения перед сохранением.
+     *
+     * При создании фиксирует автора и дату создания, при любом сохранении
+     * обновляет автора и дату изменения.
+     *
+     * @param bool $insert Признак создания новой строки.
+     * @return bool Можно ли продолжать сохранение.
      */
     public function beforeSave($insert)
     {
@@ -122,7 +159,14 @@ class Account extends ActiveRecord
     }
 
     /**
-     * После создания счёта — автоматически создаём записи баланса с нулевым остатком (L и S).
+     * Создаёт начальный нулевой баланс после добавления счёта.
+     *
+     * Побочный эффект выполняется только при вставке новой строки. Создаётся
+     * один баланс с типом из `account_type`, валютой счёта и разделом NRE/INV.
+     *
+     * @param bool $insert Признак создания новой строки.
+     * @param array $changedAttributes Старые значения изменённых атрибутов.
+     * @return void
      */
     public function afterSave($insert, $changedAttributes)
     {
@@ -135,7 +179,12 @@ class Account extends ActiveRecord
 
     /**
      * Создаёт начальную запись баланса с нулевым остатком.
-     * Тип (L/S) определяется по load_status счёта.
+     *
+     * Баланс нужен, чтобы новый счёт сразу участвовал в отчётах остатков.
+     * Тип L/S берётся из `account_type`, а раздел определяется признаком
+     * `is_suspense`.
+     *
+     * @return void
      */
     private function createInitialBalances(): void
     {

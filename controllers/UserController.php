@@ -11,8 +11,19 @@ use app\models\Company;
 use yii\data\ActiveDataProvider;
 use yii\web\NotFoundHttpException;
 
+/**
+ * Контроллер пользователей и выбора компании в профиле.
+ *
+ * Отвечает за список пользователей, страницу профиля и JSON API установки
+ * `company_id` для текущего пользователя.
+ */
 class UserController extends Controller
 {
+    /**
+     * Разрешает доступ только авторизованным пользователям.
+     *
+     * @return array Конфигурация фильтров доступа.
+     */
     public function behaviors()
     {
         return [
@@ -23,6 +34,11 @@ class UserController extends Controller
         ];
     }
 
+    /**
+     * Рендерит список пользователей.
+     *
+     * @return string HTML страницы списка.
+     */
     public function actionIndex()
     {
         $dataProvider = new ActiveDataProvider([
@@ -33,7 +49,15 @@ class UserController extends Controller
     }
 
     /**
-     * Страница профиля — передаём начальные данные в Vue через JSON в <script>
+     * Рендерит страницу профиля пользователя.
+     *
+     * Пользователь может смотреть только свой профиль, кроме пользователей
+     * с правом `admin`.
+     *
+     * @param int|string $id ID пользователя.
+     * @return string HTML страницы профиля.
+     * @throws \yii\web\ForbiddenHttpException Если нет доступа к чужому профилю.
+     * @throws NotFoundHttpException Если пользователь не найден.
      */
     public function actionView($id)
     {
@@ -50,7 +74,13 @@ class UserController extends Controller
 
     // ── JSON API ──────────────────────────────────────────────────────
 
-    /** POST /user/select-company */
+    /**
+     * Устанавливает компанию текущего пользователя из профиля.
+     *
+     * POST `/user/select-company`.
+     *
+     * @return array JSON-результат выбора компании.
+     */
     public function actionSelectCompany()
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -64,7 +94,13 @@ class UserController extends Controller
         return ['success' => true, 'message' => "Компания «{$company->name}» выбрана"];
     }
 
-    /** POST /user/reset-company */
+    /**
+     * Сбрасывает компанию текущего пользователя.
+     *
+     * POST `/user/reset-company`.
+     *
+     * @return array JSON-результат сброса.
+     */
     public function actionResetCompany()
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -75,6 +111,13 @@ class UserController extends Controller
 
     // ─────────────────────────────────────────────────────────────────
 
+    /**
+     * Находит пользователя по ID.
+     *
+     * @param int|string $id ID пользователя.
+     * @return User Найденная модель пользователя.
+     * @throws NotFoundHttpException Если пользователь не найден.
+     */
     protected function findModel($id)
     {
         if (($model = User::findOne($id)) !== null) return $model;

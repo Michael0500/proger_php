@@ -18,11 +18,23 @@ use yii\db\ActiveRecord;
  */
 class Currency extends ActiveRecord
 {
+    /**
+     * Возвращает имя таблицы справочника валют.
+     *
+     * @return string Имя таблицы `currencies` с учётом префикса Yii.
+     */
     public static function tableName(): string
     {
         return '{{%currencies}}';
     }
 
+    /**
+     * Описывает правила валидации валюты.
+     *
+     * Код валюты хранится в формате ISO 4217 и должен быть уникальным.
+     *
+     * @return array Правила Yii Validator.
+     */
     public function rules(): array
     {
         return [
@@ -39,6 +51,11 @@ class Currency extends ActiveRecord
         ];
     }
 
+    /**
+     * Возвращает подписи атрибутов валюты.
+     *
+     * @return array Массив `attribute => label`.
+     */
     public function attributeLabels(): array
     {
         return [
@@ -53,6 +70,12 @@ class Currency extends ActiveRecord
         ];
     }
 
+    /**
+     * Нормализует код валюты и обновляет служебные даты.
+     *
+     * @param bool $insert Признак создания новой валюты.
+     * @return bool Можно ли продолжать сохранение.
+     */
     public function beforeSave($insert): bool
     {
         if (!parent::beforeSave($insert)) {
@@ -67,7 +90,7 @@ class Currency extends ActiveRecord
     }
 
     /**
-     * Возвращает список активных валют, отсортированный по sort_order, name.
+     * Возвращает список активных валют для справочников и форм.
      *
      * @return self[]
      */
@@ -80,7 +103,7 @@ class Currency extends ActiveRecord
     }
 
     /**
-     * Простой массив кодов активных валют для select-ов и select2.
+     * Возвращает коды активных валют для выпадающих списков.
      *
      * @return string[]
      */

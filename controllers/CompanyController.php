@@ -8,8 +8,19 @@ use yii\filters\AccessControl;
 use app\models\Company;
 use yii\web\NotFoundHttpException;
 
+/**
+ * Контроллер выбора компании пользователя.
+ *
+ * Выбранная компания записывается в профиль пользователя и далее определяет
+ * tenant-контекст всех бизнес-страниц.
+ */
 class CompanyController extends Controller
 {
+    /**
+     * Разрешает действия только авторизованным пользователям.
+     *
+     * @return array Конфигурация фильтров доступа.
+     */
     public function behaviors()
     {
         return [
@@ -26,7 +37,11 @@ class CompanyController extends Controller
     }
 
     /**
-     * Выбор компании
+     * Устанавливает текущую компанию пользователя.
+     *
+     * @param int|string $id ID выбираемой компании.
+     * @return \yii\web\Response Redirect на сохранённый URL или главную.
+     * @throws NotFoundHttpException Если компания не найдена.
      */
     public function actionSelect($id)
     {
@@ -49,7 +64,9 @@ class CompanyController extends Controller
     }
 
     /**
-     * Сброс выбора компании
+     * Сбрасывает текущую компанию пользователя.
+     *
+     * @return \yii\web\Response Redirect на главную страницу.
      */
     public function actionReset()
     {

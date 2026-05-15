@@ -7,15 +7,32 @@ use app\models\NostroEntry;
 use app\models\NostroEntryAudit;
 use app\models\Account;
 
+/**
+ * JSON-контроллер активных записей выверки.
+ *
+ * Управляет списком, ручным созданием/редактированием/удалением операций,
+ * комментариями и историей аудита. Все запросы ограничиваются `company_id`
+ * текущего пользователя.
+ */
 class NostroEntryController extends BaseController
 {
+    /**
+     * Отключает CSRF для API страницы выверки.
+     *
+     * @param \yii\base\Action $action Запускаемое действие.
+     * @return bool Можно ли продолжать выполнение action.
+     */
     public function beforeAction($action): bool
     {
         $this->enableCsrfValidation = false;
         return parent::beforeAction($action);
     }
 
-    /** company_id текущего пользователя */
+    /**
+     * Возвращает ID компании текущего пользователя.
+     *
+     * @return int|null ID компании или `null`, если компания не выбрана.
+     */
     private function cid(): ?int
     {
         $u = Yii::$app->user->identity;
@@ -23,8 +40,12 @@ class NostroEntryController extends BaseController
     }
 
     /**
-     * GET /nostro-entry/list
-     * Params: pool_id (AccountPool.id), page, limit, sort, dir, filters(JSON)
+     * Возвращает постраничный список активных операций выверки.
+     *
+     * GET `/nostro-entry/list`. Поддерживает фильтры по ностро-банку, счёту,
+     * сумме, датам, ID-полям, статусу квитования и безопасную сортировку.
+     *
+     * @return array JSON с данными, total, page, limit и pages.
      */
     public function actionList(): array
     {
@@ -105,8 +126,11 @@ class NostroEntryController extends BaseController
     }
 
     /**
-     * GET /nostro-entry/search-accounts?pool_id=&q=
-     * Для Select2 autocomplete. Если задан pool_id — фильтрует счета по ностро-банку.
+     * Ищет счета для Select2/autocomplete на странице выверки.
+     *
+     * GET `/nostro-entry/search-accounts?pool_id=&q=`.
+     *
+     * @return array JSON в формате Select2 `results`.
      */
     public function actionSearchAccounts(): array
     {
@@ -136,7 +160,14 @@ class NostroEntryController extends BaseController
         return ['results' => $items];
     }
 
-    /** POST /nostro-entry/create */
+    /**
+     * Создаёт активную запись выверки вручную.
+     *
+     * POST `/nostro-entry/create`. Счёт проверяется внутри текущей компании,
+     * сумма нормализуется как decimal-строка, а аудит создания пишет модель.
+     *
+     * @return array JSON с созданной строкой или ошибками валидации.
+     */
     public function actionCreate(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -144,9 +175,15 @@ class NostroEntryController extends BaseController
         if (!$cid) return ['success' => false, 'message' => 'Компания не выбрана'];
 
         $p = Yii::$app->request->post();
+        $accountId = (int)($p['account_id'] ?? 0);
+        $account = Account::findOne(['id' => $accountId, 'company_id' => $cid]);
+        if (!$account) {
+            return ['success' => false, 'message' => 'Счёт не найден'];
+        }
+
         $m = new NostroEntry();
         $m->company_id     = $cid;
-        $m->account_id     = (int)($p['account_id'] ?? 0);
+        $m->account_id     = $accountId;
         $m->ls             = $p['ls']       ?? 'L';
         $m->dc             = $p['dc']       ?? 'Debit';
         $m->amount         = $this->normalizeDecimalInput($p['amount'] ?? '0');
@@ -166,13 +203,19 @@ class NostroEntryController extends BaseController
         }
 
         $row = $m->toArray();
-        $acc = Account::findOne($m->account_id);
-        $row['account_name']        = $acc ? $acc->name : '—';
-        $row['account_is_suspense'] = $acc ? (bool)$acc->is_suspense : false;
+        $row['account_name']        = $account->name;
+        $row['account_is_suspense'] = (bool)$account->is_suspense;
         return ['success' => true, 'message' => 'Запись добавлена', 'data' => $row];
     }
 
-    /** POST /nostro-entry/update */
+    /**
+     * Обновляет активную запись выверки.
+     *
+     * POST `/nostro-entry/update`. Нельзя менять сумму у уже сквитованной
+     * записи; остальные поля сохраняются с автоматическим аудитом модели.
+     *
+     * @return array JSON с обновлённой строкой или ошибкой.
+     */
     public function actionUpdate(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -181,7 +224,13 @@ class NostroEntryController extends BaseController
         $m   = NostroEntry::findOne(['id' => (int)($p['id'] ?? 0), 'company_id' => $cid]);
         if (!$m) return ['success' => false, 'message' => 'Запись не найдена'];
 
-        $m->account_id     = (int)($p['account_id']    ?? $m->account_id);
+        $accountId = (int)($p['account_id'] ?? $m->account_id);
+        $account = Account::findOne(['id' => $accountId, 'company_id' => $cid]);
+        if (!$account) {
+            return ['success' => false, 'message' => 'Счёт не найден'];
+        }
+
+        $m->account_id     = $accountId;
         $m->ls             = $p['ls']                  ?? $m->ls;
         $m->dc             = $p['dc']                  ?? $m->dc;
         if ($m->match_status !== NostroEntry::STATUS_MATCHED) {
@@ -202,13 +251,19 @@ class NostroEntryController extends BaseController
         }
 
         $row = $m->toArray();
-        $acc = Account::findOne($m->account_id);
-        $row['account_name']        = $acc ? $acc->name : '—';
-        $row['account_is_suspense'] = $acc ? (bool)$acc->is_suspense : false;
+        $row['account_name']        = $account->name;
+        $row['account_is_suspense'] = (bool)$account->is_suspense;
         return ['success' => true, 'message' => 'Запись обновлена', 'data' => $row];
     }
 
-    /** POST /nostro-entry/delete */
+    /**
+     * Удаляет несквитованную запись выверки.
+     *
+     * POST `/nostro-entry/delete`. Сквитованные записи не удаляются из
+     * активной таблицы напрямую; для них используется архивирование.
+     *
+     * @return array JSON-результат удаления.
+     */
     public function actionDelete(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -221,6 +276,15 @@ class NostroEntryController extends BaseController
         return ['success' => true, 'message' => 'Запись удалена'];
     }
 
+    /**
+     * Нормализует пользовательский ввод суммы в decimal-строку.
+     *
+     * Поддерживает пробелы, запятую как десятичный разделитель и разделители
+     * тысяч, не приводя значение к `float` перед валидацией модели.
+     *
+     * @param mixed $value Исходное значение из request.
+     * @return string Нормализованная decimal-строка.
+     */
     private function normalizeDecimalInput($value): string
     {
         $s = trim((string)$value);
@@ -259,6 +323,12 @@ class NostroEntryController extends BaseController
         return $s;
     }
 
+    /**
+     * Возвращает первую ошибку валидации модели.
+     *
+     * @param array $errors Массив ошибок Yii `Model::$errors`.
+     * @return string|null Текст первой ошибки или `null`.
+     */
     private function firstModelError(array $errors): ?string
     {
         foreach ($errors as $messages) {
@@ -269,7 +339,14 @@ class NostroEntryController extends BaseController
         return null;
     }
 
-    /** POST /nostro-entry/update-comment */
+    /**
+     * Обновляет только комментарий активной записи.
+     *
+     * POST `/nostro-entry/update-comment`. Используется быстрым редактированием
+     * комментариев; сохраняет модель без валидации остальных полей.
+     *
+     * @return array JSON-результат обновления.
+     */
     public function actionUpdateComment(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -282,8 +359,9 @@ class NostroEntryController extends BaseController
     }
 
     /**
-     * GET /nostro-entry/history?id=
-     * Получить историю изменений записи.
+     * Возвращает историю изменений активной записи.
+     *
+     * GET `/nostro-entry/history?id=`.
      *
      * Логика:
      *  1. Загружаем все аудит-записи (ASC — от старых к новым).
@@ -292,6 +370,8 @@ class NostroEntryController extends BaseController
      *  3. Реконструируем полный снапшот записи на момент каждого изменения:
      *     идём снизу вверх, накапливая текущее состояние.
      *  4. Возвращаем результат в DESC-порядке (новые сверху).
+     *
+     * @return array JSON со снапшотами записи после каждого события аудита.
      */
     public function actionHistory(): array
     {
@@ -500,6 +580,16 @@ class NostroEntryController extends BaseController
         return ['success' => true, 'data' => $rows];
     }
 
+    /**
+     * Находит аудит активной записи с учётом восстановлений из архива.
+     *
+     * Если текущая запись была восстановлена, метод подтягивает предыдущую
+     * цепочку аудита по `restore.old_values.original_id` и убирает техническое
+     * create-событие новой физической строки.
+     *
+     * @param int $entryId ID активной записи.
+     * @return array События аудита в порядке от старых к новым.
+     */
     private function findEntryHistoryAudits(int $entryId): array
     {
         $currentAudits = NostroEntryAudit::find()
@@ -546,6 +636,15 @@ class NostroEntryController extends BaseController
         return $audits;
     }
 
+    /**
+     * Загружает предыдущие события аудита для исходных ID архивных записей.
+     *
+     * Учитывает обычные события по `entry_id` и события с `entry_id IS NULL`,
+     * где исходный ID сохранён внутри JSON-снимков.
+     *
+     * @param int[] $originalIds ID исходных записей до восстановления.
+     * @return array События аудита, отсортированные от старых к новым.
+     */
     private function findPreviousAuditsForOriginalIds(array $originalIds): array
     {
         $ids = array_values(array_unique(array_map('intval', $originalIds)));

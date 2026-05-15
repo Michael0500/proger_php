@@ -1,9 +1,19 @@
 /**
- * Mixin: Modal utilities
- * Методы открытия/закрытия Bootstrap 5 модальных окон
+ * Общие модальные окна и форматтеры истории.
+ *
+ * Mixin инкапсулирует открытие/закрытие Bootstrap 5 modal, подтверждение
+ * отмены форм и отображение audit trail для активных и архивных записей.
+ * Методы не обращаются к API напрямую, но меняют Vue state модалок и зависят
+ * от формата истории, который возвращают `entryHistory` и `archiveHistory`.
  */
 var ModalsMixin = {
     methods: {
+        /**
+         * Показывает Bootstrap modal по DOM id.
+         *
+         * @param {string} id DOM id модального окна.
+         * @returns {void}
+         */
         _showModal: function (id) {
             var el = document.getElementById(id);
             if (el) {
@@ -15,6 +25,12 @@ var ModalsMixin = {
                 }
             }
         },
+        /**
+         * Скрывает существующий экземпляр Bootstrap modal по DOM id.
+         *
+         * @param {string} id DOM id модального окна.
+         * @returns {void}
+         */
         _hideModal: function (id) {
             var el = document.getElementById(id);
             if (el) {
@@ -23,11 +39,30 @@ var ModalsMixin = {
             }
         },
 
-        // Категории — внутренние (без подтверждения, вызываются после сохранения)
+        /**
+         * Закрывает модалку создания категории без подтверждения.
+         *
+         * Используется после успешного сохранения, когда потеря введённых
+         * данных уже неактуальна.
+         *
+         * @returns {void}
+         */
         _forceCloseAddCategoryModal:  function () { this._hideModal('addCategoryModal'); },
+        /**
+         * Закрывает модалку редактирования категории без подтверждения.
+         *
+         * @returns {void}
+         */
         _forceCloseEditCategoryModal: function () { this._hideModal('editCategoryModal'); },
 
-        // Категории — публичные (с подтверждением, вызываются кнопкой Отмена / X)
+        /**
+         * Запрашивает подтверждение отмены создания категории.
+         *
+         * Побочный эффект: показывает SweetAlert и при подтверждении закрывает
+         * `addCategoryModal`.
+         *
+         * @returns {void}
+         */
         closeAddCategoryModal: function () {
             var self = this;
             Swal.fire({
@@ -44,6 +79,11 @@ var ModalsMixin = {
                 if (result.isConfirmed) self._forceCloseAddCategoryModal();
             });
         },
+        /**
+         * Запрашивает подтверждение отмены редактирования категории.
+         *
+         * @returns {void}
+         */
         closeEditCategoryModal: function () {
             var self = this;
             Swal.fire({
@@ -61,9 +101,12 @@ var ModalsMixin = {
             });
         },
 
-        // Записи — closeEntryModal переопределён в EntriesMixin с подтверждением
-
-        // История
+        /**
+         * Закрывает модалку истории записи и очищает её состояние.
+         *
+         * @param {Event=} e Событие клика, если закрытие инициировано из DOM.
+         * @returns {void}
+         */
         closeEntryHistoryModal: function (e) {
             if (e && e.stopPropagation) e.stopPropagation();
             this._hideModal('entryHistoryModal');
@@ -71,10 +114,11 @@ var ModalsMixin = {
             this.historyItems = [];
         },
 
-        // ── Методы для отображения истории ───────────────────
-
         /**
-         * Иконка для действия истории
+         * Возвращает CSS-класс иконки для audit action.
+         *
+         * @param {string} action Код действия аудита: create, update, delete, archive, restore.
+         * @returns {string} CSS-класс Font Awesome.
          */
         getHistoryIcon: function (action) {
             var icons = {
@@ -88,7 +132,10 @@ var ModalsMixin = {
         },
 
         /**
-         * Текстовая метка действия
+         * Возвращает русскую метку действия истории.
+         *
+         * @param {string} action Код действия аудита.
+         * @returns {string} Человекочитаемая метка действия.
          */
         getHistoryActionLabel: function (action) {
             var labels = {
@@ -102,7 +149,10 @@ var ModalsMixin = {
         },
 
         /**
-         * Форматирование даты
+         * Форматирует дату/время события аудита.
+         *
+         * @param {string|null|undefined} dateStr Дата из API.
+         * @returns {string} Дата в формате `DD.MM.YYYY HH:mm` либо `—`.
          */
         formatDate: function (dateStr) {
             if (!dateStr) return '—';
@@ -116,7 +166,10 @@ var ModalsMixin = {
         },
 
         /**
-         * Человекочитаемое имя поля
+         * Возвращает русское название поля NostroEntry для истории.
+         *
+         * @param {string} field Имя поля из snapshot/changes.
+         * @returns {string} Метка поля для таблицы истории.
          */
         getFieldLabel: function (field) {
             var labels = {
@@ -141,7 +194,11 @@ var ModalsMixin = {
         },
 
         /**
-         * Форматирование значения для отображения
+         * Форматирует snapshot или набор changed values для отображения в истории.
+         *
+         * @param {Object|null|undefined} valuesObj Объект значений записи аудита.
+         * @param {string=} changedField Поле изменения, зарезервировано для совместимости шаблона.
+         * @returns {string} Многострочное описание значений записи.
          */
         formatValue: function (valuesObj, changedField) {
             if (!valuesObj) return '—';
@@ -171,7 +228,11 @@ var ModalsMixin = {
             return lines.join('\n');
         },
         /**
-         * Получить значение поля из снапшота записи аудита
+         * Возвращает значение поля из snapshot записи аудита.
+         *
+         * @param {Object} item Элемент audit trail.
+         * @param {string} field Имя поля.
+         * @returns {*} Значение поля или `null`.
          */
         getSnapVal: function (item, field) {
             if (!item || !item.snapshot) return null;
@@ -180,7 +241,11 @@ var ModalsMixin = {
         },
 
         /**
-         * Получить старое значение поля (до изменения)
+         * Возвращает старое значение поля из блока changes.
+         *
+         * @param {Object} item Элемент audit trail.
+         * @param {string} field Имя поля.
+         * @returns {*} Старое значение или `null`.
          */
         getOldVal: function (item, field) {
             if (!item || !item.changes || !item.changes[field]) return null;
@@ -189,7 +254,11 @@ var ModalsMixin = {
         },
 
         /**
-         * Проверить, было ли данное поле изменено в этой записи аудита
+         * Проверяет, изменялось ли поле в конкретном событии аудита.
+         *
+         * @param {Object} item Элемент audit trail.
+         * @param {string} field Имя поля.
+         * @returns {boolean} `true`, если поле входит в `changed_fields`.
          */
         isChanged: function (item, field) {
             if (!item) return false;
@@ -198,7 +267,11 @@ var ModalsMixin = {
         },
 
         /**
-         * CSS-класс ячейки: подсветка изменённых и созданных полей
+         * Возвращает CSS-класс ячейки истории с подсветкой изменений.
+         *
+         * @param {Object} item Элемент audit trail.
+         * @param {string} field Имя поля.
+         * @returns {string} CSS-класс для ячейки истории.
          */
         histCellClass: function (item, field) {
             var base = 'hist-td';
@@ -215,7 +288,10 @@ var ModalsMixin = {
         },
 
         /**
-         * Читаемый статус квитования
+         * Возвращает короткую русскую метку статуса квитования.
+         *
+         * @param {string|null|undefined} code Код статуса `U`, `M`, `I` или `A`.
+         * @returns {string} Метка статуса для истории.
          */
         histStatusLabel: function (code) {
             if (!code) return '—';

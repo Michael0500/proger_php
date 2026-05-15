@@ -1,9 +1,17 @@
 /**
- * balance.js — Mixin для раздела баланса Ностро счетов
- * Уведомления через Swal.fire (SweetAlert2) — как во всём проекте
- * Секция (NRE/INV) автоматически берётся из компании пользователя (AppConfig.companySection)
+ * Mixin раздела балансов ностро-счетов.
+ *
+ * Управляет таблицей `nostro_balance`, CRUD формой, подтверждением ошибок,
+ * историей, импортом BND/ASB, фильтрами и пользовательскими настройками
+ * колонок. Раздел компании (`NRE`/`INV`) берётся из `AppConfig.companySection`,
+ * а сервер ограничивает данные по `company_id` и проверяет денежную точность.
  */
 var BalanceMixin = {
+    /**
+     * Начальное состояние страницы балансов.
+     *
+     * @returns {Object} Vue data для таблицы, форм, импорта, истории и настроек колонок.
+     */
     data: function () {
         // Секция текущего пользователя — NRE или INV
         var section = (window.AppConfig && window.AppConfig.companySection) || 'NRE';
@@ -27,6 +35,18 @@ var BalanceMixin = {
             balancePools:    [],
             balancePoolId:   '',  // фильтр по ностро-банку (Select2)
 
+            /**
+             * Форма создания/редактирования записи `nostro_balance`.
+             *
+             * @type {Object}
+             * @property {?number} id ID записи; `null` означает создание.
+             * @property {?number} account_id ID счёта текущей компании.
+             * @property {string} ls_type Тип баланса: `L` или `S`.
+             * @property {string} value_date Дата валютирования в формате `YYYY-MM-DD`.
+             * @property {string} opening_balance Opening balance в decimal-формате.
+             * @property {string} closing_balance Closing balance в decimal-формате.
+             * @property {string} section Раздел компании, например `NRE` или `INV`.
+             */
             editingBalance: {
                 id: null, account_id: null, account_name: '',
                 ls_type: '', statement_number: '', currency: '',
@@ -59,7 +79,14 @@ var BalanceMixin = {
 
             _balanceDebounceTimer: null,
 
-            // ── Управление колонками таблицы баланса ──────────────
+            /**
+             * Конфигурация колонок таблицы баланса.
+             *
+             * `key` соответствует полю API/шаблона, а пользовательские `visible`
+             * и `width` сохраняются в `user_preferences.balance_table_columns`.
+             *
+             * @type {Array<{key: string, label: string, visible: boolean, width: number}>}
+             */
             balanceTableColumns: [
                 { key: 'id',               label: 'ID',           visible: false, width: 60  },
                 { key: 'ls_type',          label: 'L/S',          visible: true,  width: 55  },
@@ -84,17 +111,31 @@ var BalanceMixin = {
 
     watch: {
         balanceTableColumns: {
+            /**
+             * Сохраняет настройки колонок баланса после изменения.
+             *
+             * @returns {void}
+             */
             handler: function () { this.saveBalanceTableColumnsPrefs(); },
             deep: true
         }
     },
 
     computed: {
+        /**
+         * Проверяет наличие следующей страницы балансов.
+         *
+         * @returns {boolean} `true`, если загружено меньше строк, чем `balancesTotal`.
+         */
         hasMoreBalances: function () {
             return this.balances.length < this.balancesTotal;
         },
 
-        // Секция пользователя для удобного доступа из шаблона
+        /**
+         * Возвращает раздел компании пользователя для шаблона и фильтров.
+         *
+         * @returns {string} Раздел компании, например `NRE` или `INV`.
+         */
         userSection: function () {
             return (window.AppConfig && window.AppConfig.companySection) || '';
         },
@@ -102,7 +143,13 @@ var BalanceMixin = {
 
     methods: {
 
-        // ── Уведомление ───────────────────────────────────────────
+        /**
+         * Показывает единое toast-уведомление раздела балансов.
+         *
+         * @param {string} message Текст уведомления.
+         * @param {string=} type Тип SweetAlert icon.
+         * @returns {void}
+         */
         _balanceNotify: function (message, type) {
             Swal.fire({
                 toast:             true,
@@ -115,7 +162,16 @@ var BalanceMixin = {
             });
         },
 
-        // ── Загрузка ──────────────────────────────────────────────
+        /**
+         * Загружает страницу балансов с учётом фильтров, сортировки и раздела.
+         *
+         * Вызывает GET `balanceList`; при `reset` очищает текущий список и
+         * начинает с первой страницы. Фильтр ностро-банка добавляется отдельно
+         * из Select2 `balancePoolId`.
+         *
+         * @param {boolean} reset Нужно ли начать загрузку с первой страницы.
+         * @returns {void}
+         */
         loadBalances: function (reset) {
             if (reset) {
                 this.balancesPage = 1;
@@ -156,12 +212,25 @@ var BalanceMixin = {
             });
         },
 
+        /**
+         * Догружает следующую страницу балансов для infinite scroll.
+         *
+         * @returns {void}
+         */
         loadMoreBalances: function () {
             if (!this.hasMoreBalances) return;
             this.balancesPage++;
             this.loadBalances(false);
         },
 
+        /**
+         * Загружает счета и ностро-банки, доступные форме баланса.
+         *
+         * Вызывает GET `balanceAccounts`, заполняет `balanceAccounts` и
+         * `balancePools`, затем инициализирует Select2 фильтра банка.
+         *
+         * @returns {void}
+         */
         loadBalanceAccounts: function () {
             var self = this;
             SmartMatchApi.get(AppRoutes.balanceAccounts).then(function (r) {
@@ -175,6 +244,11 @@ var BalanceMixin = {
             });
         },
 
+        /**
+         * Обрабатывает изменение текстовых фильтров баланса с debounce.
+         *
+         * @returns {void}
+         */
         onBalanceFilterChange: function () {
             clearTimeout(this._balanceDebounceTimer);
             var self = this;
@@ -183,11 +257,21 @@ var BalanceMixin = {
             }, 350);
         },
 
+        /**
+         * Перезагружает балансы после смены фильтра ностро-банка.
+         *
+         * @returns {void}
+         */
         onBalancePoolChange: function () {
             this.loadBalances(true);
         },
 
-        // ── Сортировка ────────────────────────────────────────────
+        /**
+         * Меняет сортировку таблицы балансов и перезагружает данные.
+         *
+         * @param {string} col Ключ колонки сортировки.
+         * @returns {void}
+         */
         sortBalance: function (col) {
             if (this.balanceSortCol === col) {
                 this.balanceSortDir = (this.balanceSortDir === 'asc') ? 'desc' : 'asc';
@@ -198,7 +282,14 @@ var BalanceMixin = {
             this.loadBalances(true);
         },
 
-        // ── CRUD форма ────────────────────────────────────────────
+        /**
+         * Открывает форму создания записи баланса.
+         *
+         * Сбрасывает `editingBalance`, подставляет раздел компании и источник
+         * `MANUAL`, затем инициализирует Select2 банка и счёта.
+         *
+         * @returns {void}
+         */
         openCreateBalanceModal: function () {
             var section = (window.AppConfig && window.AppConfig.companySection) || 'NRE';
             this.editingBalance = {
@@ -214,6 +305,16 @@ var BalanceMixin = {
             this.$nextTick(function () { this.initBalanceFormSelects(); }.bind(this));
         },
 
+        /**
+         * Открывает форму редактирования записи баланса.
+         *
+         * Копирует строку в `editingBalance`, нормализует дату для input и
+         * определяет ностро-банк по `account_id`, чтобы отфильтровать список
+         * счетов формы.
+         *
+         * @param {Object} row Строка `nostro_balance` из таблицы.
+         * @returns {void}
+         */
         openEditBalanceModal: function (row) {
             this.editingBalance = Object.assign({}, row, {
                 value_date:      row.value_date ? row.value_date.substring(0, 10) : '',
@@ -229,6 +330,11 @@ var BalanceMixin = {
             this.$nextTick(function () { this.initBalanceFormSelects(); }.bind(this));
         },
 
+        /**
+         * Запрашивает подтверждение закрытия формы баланса без сохранения.
+         *
+         * @returns {void}
+         */
         closeBalanceModal: function () {
             var self = this;
             Swal.fire({
@@ -246,12 +352,24 @@ var BalanceMixin = {
             });
         },
 
-        /** Инициализирует оба Select2 в форме баланса */
+        /**
+         * Инициализирует Select2 банка и счёта в форме баланса.
+         *
+         * @returns {void}
+         */
         initBalanceFormSelects: function () {
             this.initBalanceFormPoolSelect2();
             this.initBalanceFormAccountSelect2(this.editingBalancePoolId);
         },
 
+        /**
+         * Инициализирует Select2 выбора ностро-банка в форме баланса.
+         *
+         * Выбор банка меняет `editingBalancePoolId`, сбрасывает выбранный счёт
+         * и пересоздаёт Select2 счетов с фильтром по выбранному банку.
+         *
+         * @returns {void}
+         */
         initBalanceFormPoolSelect2: function () {
             var self = this;
             var $el  = $('#balance-form-pool-select2');
@@ -296,6 +414,15 @@ var BalanceMixin = {
             });
         },
 
+        /**
+         * Инициализирует Select2 выбора счёта в форме баланса.
+         *
+         * Фильтрует `balanceAccounts` по `poolId`, записывает выбранные
+         * `account_id` и `account_name` в `editingBalance`.
+         *
+         * @param {number|string|null} poolId ID ностро-банка для фильтра счетов.
+         * @returns {void}
+         */
         initBalanceFormAccountSelect2: function (poolId) {
             var self = this;
             var $el  = $('#balance-form-account-select2');
@@ -344,6 +471,15 @@ var BalanceMixin = {
             });
         },
 
+        /**
+         * Создаёт или обновляет запись баланса.
+         *
+         * Валидирует обязательные поля, нормализует opening/closing balance с
+         * разрешением отрицательных значений, отправляет POST `balanceCreate`
+         * или `balanceUpdate`, закрывает форму и перезагружает таблицу.
+         *
+         * @returns {void}
+         */
         saveBalance: function () {
             var self = this;
             if (self.balanceSaving) return;
@@ -392,6 +528,15 @@ var BalanceMixin = {
             });
         },
 
+        /**
+         * Удаляет запись баланса после подтверждения.
+         *
+         * Вызывает POST `balanceDelete` и при успехе перезагружает первую
+         * страницу балансов.
+         *
+         * @param {Object} row Строка баланса из таблицы.
+         * @returns {void}
+         */
         deleteBalance: function (row) {
             var self = this;
             Swal.fire({
@@ -416,18 +561,39 @@ var BalanceMixin = {
             });
         },
 
-        // ── Подтверждение ошибки ──────────────────────────────────
+        /**
+         * Открывает модалку подтверждения ошибочной записи баланса.
+         *
+         * Используется для фиксации причины корректировки/подтверждения строки
+         * со статусом error.
+         *
+         * @param {Object} row Строка баланса.
+         * @returns {void}
+         */
         openConfirmModal: function (row) {
             this.confirmingBalance = row;
             this.confirmReason     = '';
             this.confirmModalOpen  = true;
         },
 
+        /**
+         * Закрывает модалку подтверждения баланса и очищает выбранную строку.
+         *
+         * @returns {void}
+         */
         closeConfirmModal: function () {
             this.confirmModalOpen  = false;
             this.confirmingBalance = null;
         },
 
+        /**
+         * Отправляет подтверждение записи баланса с причиной.
+         *
+         * Вызывает POST `balanceConfirm`, меняет статус на сервере, пишет аудит
+         * и перезагружает таблицу. Пустая причина не допускается.
+         *
+         * @returns {void}
+         */
         submitConfirm: function () {
             var self = this;
             if (!self.confirmReason.trim()) {
@@ -454,7 +620,12 @@ var BalanceMixin = {
             });
         },
 
-        // ── История изменений ─────────────────────────────────────
+        /**
+         * Открывает модалку истории баланса.
+         *
+         * @param {Object} row Строка баланса.
+         * @returns {void}
+         */
         openHistoryModal: function (row) {
             this.historyBalance   = row;
             this.historyLogs      = [];
@@ -462,10 +633,23 @@ var BalanceMixin = {
             this.loadHistory(row.id);
         },
 
+        /**
+         * Закрывает модалку истории баланса.
+         *
+         * @returns {void}
+         */
         closeHistoryModal: function () {
             this.historyModalOpen = false;
         },
 
+        /**
+         * Загружает историю изменений записи баланса.
+         *
+         * Вызывает GET `balanceHistory` и заполняет `historyLogs`.
+         *
+         * @param {number|string} id Идентификатор записи `nostro_balance`.
+         * @returns {void}
+         */
         loadHistory: function (id) {
             var self = this;
             self.historyLoading = true;
@@ -476,7 +660,15 @@ var BalanceMixin = {
             });
         },
 
-        // ── Импорт ────────────────────────────────────────────────
+        /**
+         * Открывает модалку импорта файла балансов.
+         *
+         * Сбрасывает выбранный счёт, файл и результат импорта; раздел берётся
+         * из компании пользователя.
+         *
+         * @param {string=} type Тип импорта: `bnd` или `asb`.
+         * @returns {void}
+         */
         openImportModal: function (type) {
             var section = (window.AppConfig && window.AppConfig.companySection) || 'NRE';
             this.importType      = type || 'bnd';
@@ -487,14 +679,34 @@ var BalanceMixin = {
             this.importModalOpen = true;
         },
 
+        /**
+         * Закрывает модалку импорта балансов.
+         *
+         * @returns {void}
+         */
         closeImportModal: function () {
             this.importModalOpen = false;
         },
 
+        /**
+         * Сохраняет выбранный файл импорта из input[type=file].
+         *
+         * @param {Event} e DOM-событие change.
+         * @returns {void}
+         */
         onImportFileChange: function (e) {
             this.importFile = e.target.files[0] || null;
         },
 
+        /**
+         * Отправляет файл импорта балансов на сервер.
+         *
+         * Формирует `FormData` с файлом, account_id и section, затем вызывает
+         * `balanceImportAsb` или `balanceImportBnd`. При успехе обновляет
+         * таблицу и сохраняет результат импорта для UI.
+         *
+         * @returns {void}
+         */
         submitImport: function () {
             var self = this;
 
@@ -540,13 +752,24 @@ var BalanceMixin = {
             });
         },
 
-        // ── Хелперы ───────────────────────────────────────────────
+        /**
+         * Возвращает визуальную метку статуса баланса.
+         *
+         * @param {string} status Код статуса строки.
+         * @returns {string} Символ статуса для таблицы.
+         */
         balanceStatusIcon: function (status) {
             if (status === 'error')     return '🔴';
             if (status === 'confirmed') return '⚫';
             return '⚪';
         },
 
+        /**
+         * Форматирует сумму баланса для отображения в таблице.
+         *
+         * @param {string|number|null|undefined} amount Значение opening/closing balance.
+         * @returns {string} Сумма в формате `1 234,00` или `—`.
+         */
         formatBalanceAmount: function (amount) {
             if (amount === null || amount === undefined || amount === '') return '—';
             var s = String(amount).trim();
@@ -563,6 +786,17 @@ var BalanceMixin = {
             return sign + intPart + ',' + decPart;
         },
 
+        /**
+         * Нормализует денежный ввод баланса с поддержкой разных разделителей.
+         *
+         * Балансы могут быть отрицательными, поэтому флаг `allowNegative`
+         * используется формой и валидацией. Возвращает строку с точкой как
+         * десятичным разделителем для API.
+         *
+         * @param {string|number|null|undefined} val Пользовательский ввод.
+         * @param {boolean} allowNegative Разрешать отрицательные суммы.
+         * @returns {string} Нормализованное значение или пустая строка.
+         */
         normalizeMoneyInput: function (val, allowNegative) {
             if (val === null || val === undefined || val === '') return '';
             var s = String(val).trim();
@@ -599,6 +833,13 @@ var BalanceMixin = {
             return sign + s;
         },
 
+        /**
+         * Валидирует сумму баланса по контракту decimal(20,2).
+         *
+         * @param {string|number|null|undefined} val Значение суммы.
+         * @param {boolean} allowNegative Разрешать отрицательные суммы.
+         * @returns {string} Текст ошибки или пустая строка.
+         */
         validateMoneyAmount: function (val, allowNegative) {
             var s = this.normalizeMoneyInput(val, allowNegative);
             var re = allowNegative ? /^-?\d+(\.\d{1,2})?$/ : /^\d+(\.\d{1,2})?$/;
@@ -611,6 +852,14 @@ var BalanceMixin = {
             return '';
         },
 
+        /**
+         * Инициализирует Select2 фильтра ностро-банка на странице балансов.
+         *
+         * Перезаполняет options из `balancePools`, синхронизирует текущее
+         * `balancePoolId` и перезагружает таблицу при изменении значения.
+         *
+         * @returns {void}
+         */
         initBalancePoolSelect: function () {
             var self = this;
             var $el = jQuery('#balancePoolSelect');
@@ -640,17 +889,40 @@ var BalanceMixin = {
             });
         },
 
-        // ── Управление колонками таблицы баланса ──────────────────
+        /**
+         * Проверяет видимость колонки таблицы балансов.
+         *
+         * @param {string} key Ключ колонки.
+         * @returns {boolean} `true`, если колонка видима.
+         */
         balanceColVisible: function (key) {
             var col = this.balanceTableColumns.find(function (c) { return c.key === key; });
             return col ? col.visible : true;
         },
+        /**
+         * Возвращает описание колонки баланса по ключу.
+         *
+         * @param {string} key Ключ колонки.
+         * @returns {Object|undefined} Объект колонки или `undefined`.
+         */
         balanceColByKey: function (key) {
             return this.balanceTableColumns.find(function (c) { return c.key === key; });
         },
+        /**
+         * Переключает dropdown управления колонками баланса.
+         *
+         * @returns {void}
+         */
         toggleBalanceColsDropdown: function () {
             this.showBalanceColsDropdown = !this.showBalanceColsDropdown;
         },
+        /**
+         * Запускает изменение ширины колонки баланса.
+         *
+         * @param {MouseEvent} e Событие mousedown на ресайзере.
+         * @param {Object} col Колонка из `balanceTableColumns`.
+         * @returns {void}
+         */
         startBalanceColResize: function (e, col) {
             e.preventDefault();
             e.stopPropagation();
@@ -674,6 +946,14 @@ var BalanceMixin = {
             document.addEventListener('mousemove', onMove);
             document.addEventListener('mouseup', onUp);
         },
+        /**
+         * Загружает персональные настройки колонок баланса.
+         *
+         * Вызывает GET `userPreferenceGet` с ключом `balance_table_columns` и
+         * применяет сохранённые ширины/видимость к известным колонкам.
+         *
+         * @returns {void}
+         */
         loadBalanceTableColumnsPrefs: function () {
             var self = this;
             SmartMatchApi.get(window.AppRoutes.userPreferenceGet, { key: 'balance_table_columns' })
@@ -697,6 +977,14 @@ var BalanceMixin = {
                     self.$nextTick(function () { self._balanceTableColumnsLoaded = true; });
                 });
         },
+        /**
+         * Сохраняет персональные настройки колонок баланса.
+         *
+         * После debounce вызывает POST `userPreferenceSave` с ключом
+         * `balance_table_columns`.
+         *
+         * @returns {void}
+         */
         saveBalanceTableColumnsPrefs: function () {
             if (!this._balanceTableColumnsLoaded) return;
             var self = this;
@@ -711,6 +999,11 @@ var BalanceMixin = {
                 });
             }, 600);
         },
+        /**
+         * Подключает глобальные обработчики закрытия dropdown колонок баланса.
+         *
+         * @returns {void}
+         */
         _initBalanceColManagement: function () {
             var self = this;
             document.addEventListener('click', function (e) {
@@ -723,6 +1016,14 @@ var BalanceMixin = {
             });
         },
 
+        /**
+         * Подключает infinite scroll к контейнеру таблицы балансов.
+         *
+         * Используется страницей, где scroll-обработчик не привязан напрямую в
+         * шаблоне.
+         *
+         * @returns {void}
+         */
         initBalanceInfiniteScroll: function () {
             var self  = this;
             var table = document.querySelector('.balance-table-wrap');

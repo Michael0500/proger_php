@@ -13,6 +13,13 @@ use yii\db\Migration;
  */
 class m260506_120000_create_currencies_and_countries extends Migration
 {
+    /**
+     * Применяет миграцию `m260506_120000_create_currencies_and_countries`.
+     *
+     * Создаёт или изменяет структуру БД согласно назначению файла миграции.
+     *
+     * @return void
+     */
     public function safeUp()
     {
         // ── Валюты ────────────────────────────────────────────────
@@ -121,6 +128,13 @@ class m260506_120000_create_currencies_and_countries extends Migration
         }
     }
 
+    /**
+     * Откатывает миграцию `m260506_120000_create_currencies_and_countries`.
+     *
+     * Возвращает структуру БД к состоянию до применения этой миграции, если откат поддерживается.
+     *
+     * @return void
+     */
     public function safeDown()
     {
         $this->dropTable('{{%countries}}');

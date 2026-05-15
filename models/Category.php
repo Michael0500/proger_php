@@ -6,7 +6,11 @@ use Yii;
 use yii\db\ActiveRecord;
 
 /**
- * Категория группировки счетов (ранее AccountGroup)
+ * Категория навигации и группировки ностро-банков.
+ *
+ * Категория является верхним уровнем сайдбара выверки и может содержать
+ * несколько `AccountPool`. Все записи категории должны быть ограничены
+ * `company_id` текущего пользователя.
  *
  * @property int $id
  * @property int $company_id
@@ -20,11 +24,21 @@ use yii\db\ActiveRecord;
  */
 class Category extends ActiveRecord
 {
+    /**
+     * Возвращает имя таблицы категорий.
+     *
+     * @return string Имя таблицы `categories` с учётом префикса Yii.
+     */
     public static function tableName()
     {
         return '{{%categories}}';
     }
 
+    /**
+     * Описывает правила валидации категории.
+     *
+     * @return array Правила Yii Validator.
+     */
     public function rules()
     {
         return [
@@ -36,6 +50,11 @@ class Category extends ActiveRecord
         ];
     }
 
+    /**
+     * Возвращает подписи атрибутов категории.
+     *
+     * @return array Массив `attribute => label`.
+     */
     public function attributeLabels()
     {
         return [
@@ -48,17 +67,35 @@ class Category extends ActiveRecord
         ];
     }
 
+    /**
+     * Возвращает связь с компанией-владельцем категории.
+     *
+     * @return \yii\db\ActiveQuery Запрос связи с `Company`.
+     */
     public function getCompany()
     {
         return $this->hasOne(Company::class, ['id' => 'company_id']);
     }
 
+    /**
+     * Возвращает ностро-банки категории в алфавитном порядке.
+     *
+     * @return \yii\db\ActiveQuery Запрос связи с `AccountPool`.
+     */
     public function getPools()
     {
         return $this->hasMany(AccountPool::class, ['category_id' => 'id'])
             ->orderBy(['name' => SORT_ASC]);
     }
 
+    /**
+     * Возвращает запрос категорий текущей компании пользователя.
+     *
+     * Если пользователь не авторизован или компания не выбрана, возвращается
+     * пустой запрос, чтобы не раскрывать данные других компаний.
+     *
+     * @return \yii\db\ActiveQuery Запрос категорий текущей компании.
+     */
     public static function findForCurrentUser()
     {
         $userId = Yii::$app->user->id;

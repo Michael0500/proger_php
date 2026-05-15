@@ -40,6 +40,15 @@ class FccMergeController extends Controller
     /** --keep-source: не удалять строки из gitb_nostro_extract_custom после обработки */
     public bool $keepSource = false;
 
+    /**
+     * Запускает перенос всех необработанных пакетов FCC12.
+     *
+     * Для каждой строки `tds_status` с `type='FCC12'` и `is_merged=false`
+     * открывает транзакцию, переносит строки источника, пишет аудит, удаляет
+     * успешно обработанный источник и помечает пакет как merged.
+     *
+     * @return int Код завершения консольной команды.
+     */
     public function actionRun(): int
     {
         $this->stdout("=== FCC12 merge: " . date('Y-m-d H:i:s') . ($this->keepSource ? " [keep-source]" : "") . " ===\n", Console::BOLD);
@@ -129,9 +138,14 @@ class FccMergeController extends Controller
     }
 
     /**
-     * Перенести строки одного extract_no в nostro_balance/nostro_entries.
+     * Переносит строки одного `extract_no` в балансы и операции.
      *
-     * @return array [$balancesInserted, $entriesInserted]
+     * Читает источник потоково по `line_no`, использует batchInsert для
+     * `nostro_entries` и `nostro_balance`, а строки с ненайденным счётом
+     * возвращает как skipped, чтобы пакет можно было повторить.
+     *
+     * @param int $extractNo Номер FCC12-выгрузки.
+     * @return array `[balancesInserted, entriesInserted, skippedLineNos]`.
      */
     private function mergeExtract(int $extractNo): array
     {
@@ -303,7 +317,11 @@ class FccMergeController extends Controller
     }
 
     /**
-     * Пишет аудит создания FCC12-записей после пакетной вставки в nostro_entries.
+     * Пишет аудит создания FCC12-записей после batchInsert.
+     *
+     * @param int $lastId Максимальный ID до вставки batch.
+     * @param array $insertedRows Буфер строк, переданный в batchInsert.
+     * @return void
      */
     private function writeEntryAuditAfterFlush(int $lastId, array $insertedRows): void
     {
@@ -360,7 +378,11 @@ class FccMergeController extends Controller
     }
 
     /**
-     * Пишет аудит импорта FCC12-балансов после пакетной вставки в nostro_balance.
+     * Пишет аудит импорта FCC12-балансов после batchInsert.
+     *
+     * @param int $lastId Максимальный ID до вставки batch.
+     * @param array $insertedRows Буфер строк, переданный в batchInsert.
+     * @return void
      */
     private function writeBalanceAuditAfterFlush(int $lastId, array $insertedRows): void
     {
@@ -414,7 +436,11 @@ class FccMergeController extends Controller
     }
 
     /**
-     * Забирает line_no из буфера batchInsert и готовит PostgreSQL array literal.
+     * Извлекает уникальные `line_no` из буфера batchInsert.
+     *
+     * @param array $rows Строки batchInsert.
+     * @param int $lineNoIndex Индекс колонки `line_no` в строке batch.
+     * @return int[] Уникальные номера строк источника.
      */
     private function extractLineNos(array $rows, int $lineNoIndex): array
     {
@@ -428,6 +454,13 @@ class FccMergeController extends Controller
         return array_values(array_unique($lineNos));
     }
 
+    /**
+     * Преобразует FCC12 D/C-признак в значение `NostroEntry::dc`.
+     *
+     * @param string|null $drcrInd Значение `D` или `C` из источника.
+     * @return string `Debit` или `Credit`.
+     * @throws \RuntimeException Если признак не распознан.
+     */
     private function mapDc(?string $drcrInd): string
     {
         $v = strtoupper((string)$drcrInd);

@@ -5,6 +5,12 @@ namespace app\models;
 use Yii;
 use yii\base\Model;
 
+/**
+ * Форма входа пользователя.
+ *
+ * Модель валидирует логин и пароль, кэширует найденного пользователя и
+ * выполняет авторизацию через компонент `Yii::$app->user`.
+ */
 class LoginForm extends Model
 {
     public $username;
@@ -13,6 +19,11 @@ class LoginForm extends Model
 
     private $_user = false;
 
+    /**
+     * Возвращает правила валидации формы входа.
+     *
+     * @return array Правила Yii Validator.
+     */
     public function rules()
     {
         return [
@@ -22,6 +33,16 @@ class LoginForm extends Model
         ];
     }
 
+    /**
+     * Проверяет пароль, введённый в форму.
+     *
+     * При неверном логине или пароле добавляет одинаковую ошибку, чтобы не
+     * раскрывать, какая часть учётных данных неверна.
+     *
+     * @param string $attribute Имя атрибута пароля.
+     * @param array $params Параметры валидатора Yii.
+     * @return void
+     */
     public function validatePassword($attribute, $params)
     {
         if (!$this->hasErrors()) {
@@ -32,6 +53,11 @@ class LoginForm extends Model
         }
     }
 
+    /**
+     * Авторизует пользователя при успешной валидации формы.
+     *
+     * @return bool Успешность входа в систему.
+     */
     public function login()
     {
         if ($this->validate()) {
@@ -40,6 +66,14 @@ class LoginForm extends Model
         return false;
     }
 
+    /**
+     * Возвращает пользователя по логину формы.
+     *
+     * Результат кэшируется в модели, чтобы повторные проверки пароля и login
+     * не выполняли одинаковый запрос.
+     *
+     * @return User|null Найденный активный пользователь.
+     */
     public function getUser()
     {
         if ($this->_user === false) {

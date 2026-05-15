@@ -9,6 +9,13 @@ use yii\db\Migration;
  */
 class m260424_100001_create_tds_status_table extends Migration
 {
+    /**
+     * Применяет миграцию `m260424_100001_create_tds_status_table`.
+     *
+     * Создаёт или изменяет структуру БД согласно назначению файла миграции.
+     *
+     * @return void
+     */
     public function safeUp()
     {
         $this->createTable('{{%tds_status}}', [
@@ -24,6 +31,13 @@ class m260424_100001_create_tds_status_table extends Migration
         $this->createIndex('idx_tds_status_fcc_extract_no', '{{%tds_status}}', 'fcc_extract_no');
     }
 
+    /**
+     * Откатывает миграцию `m260424_100001_create_tds_status_table`.
+     *
+     * Возвращает структуру БД к состоянию до применения этой миграции, если откат поддерживается.
+     *
+     * @return void
+     */
     public function safeDown()
     {
         $this->dropTable('{{%tds_status}}');

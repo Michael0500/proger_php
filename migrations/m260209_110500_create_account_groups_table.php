@@ -33,6 +33,13 @@ class m260209_110500_create_account_groups_table extends Migration
         );
     }
 
+    /**
+     * Откатывает миграцию `m260209_110500_create_account_groups_table`.
+     *
+     * Возвращает структуру БД к состоянию до применения этой миграции, если откат поддерживается.
+     *
+     * @return void
+     */
     public function safeDown()
     {
         $this->dropForeignKey('fk_account_groups_company_id', '{{%account_groups}}');

@@ -11,30 +11,57 @@ use app\models\Account;
 use app\components\parsers\BndCamtParser;
 use app\components\parsers\AsbTextParser;
 
+/**
+ * JSON-контроллер страницы балансов Ностро.
+ *
+ * Управляет ручным вводом, импортом BND/ASB, подтверждением ошибок,
+ * историей аудита и списком остатков. Все действия с данными выполняются
+ * только в компании текущего пользователя.
+ */
 class NostroBalanceController extends BaseController
 {
+    /**
+     * Отключает CSRF для API балансов.
+     *
+     * @param \yii\base\Action $action Запускаемое действие.
+     * @return bool Можно ли продолжать выполнение action.
+     */
     public function beforeAction($action): bool
     {
         $this->enableCsrfValidation = false;
         return parent::beforeAction($action);
     }
 
-    /** GET /balance — отдельная страница баланса */
+    /**
+     * Рендерит отдельную страницу балансов.
+     *
+     * @return string HTML страницы `views/nostro-balance/page.php`.
+     */
     public function actionPage()
     {
         $this->view->title = 'Баланс';
         return $this->render('page');
     }
 
+    /**
+     * Возвращает ID компании текущего пользователя.
+     *
+     * @return int|null ID компании или `null`.
+     */
     private function cid(): ?int
     {
         $u = Yii::$app->user->identity;
         return ($u && $u->company_id) ? (int)$u->company_id : null;
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // GET /nostro-balance/list
-    // ─────────────────────────────────────────────────────────────
+    /**
+     * Возвращает постраничный список балансовых записей.
+     *
+     * GET `/nostro-balance/list`. Поддерживает фильтры по L/S, валюте,
+     * разделу, источнику, статусу, ностро-банку, счёту, номеру выписки и датам.
+     *
+     * @return array JSON с данными, total, page, limit и pages.
+     */
     public function actionList(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -113,9 +140,14 @@ class NostroBalanceController extends BaseController
         ];
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // POST /nostro-balance/create  — ручной ввод
-    // ─────────────────────────────────────────────────────────────
+    /**
+     * Создаёт балансовую запись вручную.
+     *
+     * POST `/nostro-balance/create`. Перед сохранением запускает проверки
+     * качества баланса и пишет аудит с причиной "Ручной ввод".
+     *
+     * @return array JSON с созданной записью или ошибками валидации.
+     */
     public function actionCreate(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -140,9 +172,14 @@ class NostroBalanceController extends BaseController
         return ['success' => true, 'message' => 'Запись создана', 'data' => $m->toApiArray()];
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // POST /nostro-balance/update
-    // ─────────────────────────────────────────────────────────────
+    /**
+     * Обновляет балансовую запись.
+     *
+     * POST `/nostro-balance/update`. Сохраняет старый снимок, запускает
+     * проверки качества и пишет событие аудита `edit`.
+     *
+     * @return array JSON с обновлённой записью или ошибкой.
+     */
     public function actionUpdate(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -168,9 +205,14 @@ class NostroBalanceController extends BaseController
         return ['success' => true, 'message' => 'Запись обновлена', 'data' => $m->toApiArray()];
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // POST /nostro-balance/confirm  — подтвердить ошибочную запись
-    // ─────────────────────────────────────────────────────────────
+    /**
+     * Подтверждает ошибочную балансовую запись вручную.
+     *
+     * POST `/nostro-balance/confirm`. Требует причину подтверждения,
+     * переводит статус в `confirmed` и пишет аудит `confirm`.
+     *
+     * @return array JSON-результат подтверждения.
+     */
     public function actionConfirm(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -196,9 +238,11 @@ class NostroBalanceController extends BaseController
         return ['success' => true, 'message' => 'Запись подтверждена', 'data' => $m->toApiArray()];
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // POST /nostro-balance/delete
-    // ─────────────────────────────────────────────────────────────
+    /**
+     * Удаляет балансовую запись текущей компании.
+     *
+     * @return array JSON-результат удаления.
+     */
     public function actionDelete(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -212,9 +256,13 @@ class NostroBalanceController extends BaseController
         return ['success' => true, 'message' => 'Запись удалена'];
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // GET /nostro-balance/history?id=
-    // ─────────────────────────────────────────────────────────────
+    /**
+     * Возвращает историю аудита балансовой записи.
+     *
+     * GET `/nostro-balance/history?id=`.
+     *
+     * @return array JSON со списком событий аудита и пользователями.
+     */
     public function actionHistory(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -261,9 +309,14 @@ class NostroBalanceController extends BaseController
         return ['success' => true, 'data' => $rows];
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // POST /nostro-balance/import-bnd  — загрузка XML (БНД)
-    // ─────────────────────────────────────────────────────────────
+    /**
+     * Импортирует балансы из XML-файла БНД/camt.
+     *
+     * POST `/nostro-balance/import-bnd`. Сохраняет upload во временный файл
+     * `runtime/uploads`, парсит его и удаляет после обработки.
+     *
+     * @return array JSON-итог импорта.
+     */
     public function actionImportBnd(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -292,9 +345,14 @@ class NostroBalanceController extends BaseController
         return $this->saveImportRows($rows, $parser->getErrors(), $cid);
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // POST /nostro-balance/import-asb  — загрузка текст (АСБ)
-    // ─────────────────────────────────────────────────────────────
+    /**
+     * Импортирует балансы из текстового файла АСБ.
+     *
+     * POST `/nostro-balance/import-asb`. Сохраняет upload во временный файл,
+     * парсит его и удаляет после обработки.
+     *
+     * @return array JSON-итог импорта.
+     */
     public function actionImportAsb(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -323,9 +381,11 @@ class NostroBalanceController extends BaseController
         return $this->saveImportRows($rows, $parser->getErrors(), $cid);
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // GET /nostro-balance/accounts  — список счетов для dropdown
-    // ─────────────────────────────────────────────────────────────
+    /**
+     * Возвращает счета и ностро-банки для выпадающих списков баланса.
+     *
+     * @return array JSON со списком счетов и пулов текущей компании.
+     */
     public function actionAccounts(): array
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
@@ -353,6 +413,16 @@ class NostroBalanceController extends BaseController
     // Приватные хелперы
     // ─────────────────────────────────────────────────────────────
 
+    /**
+     * Заполняет модель баланса данными запроса.
+     *
+     * Метод нормализует денежные значения как строки и не сохраняет модель.
+     *
+     * @param NostroBalance $m Заполняемая модель.
+     * @param array $p Данные POST.
+     * @param int $cid ID компании.
+     * @return void
+     */
     private function fillModel(NostroBalance $m, array $p, int $cid): void
     {
         $m->company_id        = $cid;
@@ -369,6 +439,15 @@ class NostroBalanceController extends BaseController
         $m->comment           = ($p['comment']           ?? '') ?: null;
     }
 
+    /**
+     * Нормализует пользовательский ввод балансовой суммы.
+     *
+     * Поддерживает знак минуса, пробелы, запятую как десятичный разделитель
+     * и разделители тысяч без приведения к `float`.
+     *
+     * @param mixed $value Исходное значение из request или парсера.
+     * @return string Нормализованная decimal-строка.
+     */
     private function normalizeDecimalInput($value): string
     {
         $s = trim((string)$value);
@@ -413,6 +492,12 @@ class NostroBalanceController extends BaseController
         return $sign . $s;
     }
 
+    /**
+     * Возвращает первую ошибку валидации модели.
+     *
+     * @param array $errors Массив ошибок Yii `Model::$errors`.
+     * @return string|null Текст первой ошибки или `null`.
+     */
     private function firstModelError(array $errors): ?string
     {
         foreach ($errors as $messages) {
@@ -423,6 +508,17 @@ class NostroBalanceController extends BaseController
         return null;
     }
 
+    /**
+     * Сохраняет строки, полученные из файлового импорта.
+     *
+     * Для каждой строки создаётся `NostroBalance`, запускаются проверки
+     * качества, сохраняется запись и пишется аудит `import`.
+     *
+     * @param array $rows Нормализованные строки парсера.
+     * @param array $parseErrors Ошибки парсинга, которые нужно вернуть в UI.
+     * @param int $cid ID компании.
+     * @return array JSON-совместимый итог импорта.
+     */
     private function saveImportRows(array $rows, array $parseErrors, int $cid): array
     {
         $settings = $this->getValidationSettings();
@@ -467,7 +563,12 @@ class NostroBalanceController extends BaseController
     }
 
     /**
-     * Настройки валидации из params или defaults
+     * Возвращает настройки проверок баланса.
+     *
+     * Читает `Yii::$app->params['validation']`, а при отсутствии параметров
+     * использует дефолтные значения.
+     *
+     * @return array Настройки `enable_sequence_check`, `enable_balance_check`, `balance_tolerance`.
      */
     private function getValidationSettings(): array
     {

@@ -7,14 +7,20 @@ use yii\web\Response;
 use app\models\UserPreference;
 
 /**
- * JSON API для хранения пользовательских настроек UI (таблица user_preferences).
+ * JSON API пользовательских настроек UI.
  *
- * Actions:
- *   GET  /user-preference/get?key=...          → { success, value }
- *   POST /user-preference/save  { key, value } → { success }
+ * Настройки хранятся в `user_preferences` как JSONB и доступны только для
+ * текущего пользователя. Ключи проходят whitelist, чтобы API не превратился
+ * в произвольное хранилище.
  */
 class UserPreferenceController extends BaseController
 {
+    /**
+     * Отключает CSRF и сразу выставляет JSON-формат ответа.
+     *
+     * @param \yii\base\Action $action Запускаемое действие.
+     * @return bool Можно ли продолжать выполнение action.
+     */
     public function beforeAction($action)
     {
         $this->enableCsrfValidation = false;
@@ -29,12 +35,24 @@ class UserPreferenceController extends BaseController
         UserPreference::KEY_ARCHIVE_TABLE_COLUMNS,
     ];
 
+    /**
+     * Возвращает ID текущего пользователя.
+     *
+     * @return int|null ID пользователя или `null`, если пользователь не авторизован.
+     */
     private function userId(): ?int
     {
         $u = Yii::$app->user->identity;
         return $u ? (int)$u->id : null;
     }
 
+    /**
+     * Возвращает значение пользовательской настройки.
+     *
+     * GET `/user-preference/get?key=...`.
+     *
+     * @return array JSON с `value` или ошибкой whitelist/авторизации.
+     */
     public function actionGet()
     {
         $uid = $this->userId();
@@ -49,6 +67,15 @@ class UserPreferenceController extends BaseController
         return ['success' => true, 'value' => $value];
     }
 
+    /**
+     * Сохраняет значение пользовательской настройки.
+     *
+     * POST `/user-preference/save`, body: `key`, `value`. Значение передаётся
+     * в модель как PHP-структура, чтобы PostgreSQL JSONB не получил
+     * double-encoded строку.
+     *
+     * @return array JSON-результат сохранения.
+     */
     public function actionSave()
     {
         $uid = $this->userId();

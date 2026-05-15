@@ -10,6 +10,13 @@ use yii\db\Migration;
  */
 class m260424_100000_create_git_no_stro_extract_custom_table extends Migration
 {
+    /**
+     * Применяет миграцию `m260424_100000_create_git_no_stro_extract_custom_table`.
+     *
+     * Создаёт или изменяет структуру БД согласно назначению файла миграции.
+     *
+     * @return void
+     */
     public function safeUp()
     {
         $this->createTable('{{%gitb_nostro_extract_custom}}', [
@@ -42,6 +49,13 @@ class m260424_100000_create_git_no_stro_extract_custom_table extends Migration
         );
     }
 
+    /**
+     * Откатывает миграцию `m260424_100000_create_git_no_stro_extract_custom_table`.
+     *
+     * Возвращает структуру БД к состоянию до применения этой миграции, если откат поддерживается.
+     *
+     * @return void
+     */
     public function safeDown()
     {
         $this->dropTable('{{%gitb_nostro_extract_custom}}');
