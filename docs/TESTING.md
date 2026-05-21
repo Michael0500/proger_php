@@ -90,6 +90,8 @@ vendor/bin/codecept run --coverage --coverage-html
 - `createEntry()`, `createRule()`, `createBalance()`, `createArchiveSettings()`, `createArchivedEntry()` создают доменные записи для сценариев;
 - helper подключается в `tests/unit/_bootstrap.php` и `tests/functional/_bootstrap.php`.
 
+`createUser()` не создаёт известный пользовательский пароль. Для тестов авторизация выполняется через cookie/session helpers Yii и Codeception: `Yii::$app->user->login(...)` или `$I->amLoggedInAs(...)`. Тесты не должны проверять парольный вход или bearer/API tokens.
+
 Каждый тест сам создаёт нужную компанию, пользователя, ностро-банк, счёт и записи. Это делает проверки изолированными и не зависящими от сидов рабочей базы.
 
 ## 4. Unit-тесты
@@ -97,13 +99,13 @@ vendor/bin/codecept run --coverage --coverage-html
 | Файл | Что проверяет |
 |---|---|
 | `tests/unit/models/ArchiveSettingsTest.php` | Настройки архива по умолчанию и валидацию границ `archive_after_days` / `retention_years`. |
-| `tests/unit/models/LoginFormTest.php` | Успешный и неуспешный вход через модель `LoginForm`. |
+| `tests/unit/models/CookieAuthTest.php` | Внутреннюю авторизацию пользователя через Yii user component без пользовательского пароля. |
 | `tests/unit/models/MatchingRuleTest.php` | Текстовое описание включённых критериев правила квитования. |
 | `tests/unit/models/NostroBalanceTest.php` | Денежную точность балансов, continuity statement-балансов, дубли номеров statement. |
 | `tests/unit/models/NostroEntryArchiveTest.php` | Перенос сквитованной записи в архив, сохранение `matched_at`, срок retention и пользователя архивирования. |
 | `tests/unit/models/NostroEntryTest.php` | Валидацию суммы `decimal(20,2)`, автоматическое выставление/очистку `matched_at`, аудит create/update/delete. |
 | `tests/unit/models/UserPreferenceTest.php` | Upsert JSON-настроек UI и чтение старого double-encoded JSON. |
-| `tests/unit/models/UserTest.php` | Поиск активных пользователей, исключение удалённых, auth key и пароль. |
+| `tests/unit/models/UserTest.php` | Поиск активных пользователей, исключение удалённых и внутренний cookie/session login найденного пользователя. |
 | `tests/unit/services/MatchingServiceTest.php` | Ручное квитование NRE и INV, отказ при дисбалансе, одиночную нулевую запись, расквитование группы, summary выбранных строк. |
 | `tests/unit/services/AutoMatchingServiceTest.php` | Автоквитование уникальной пары, cross-id search, отказ правила без условий, пошаговый запуск с category scope. |
 | `tests/unit/widgets/AlertTest.php` | Рендер системных flash-уведомлений Yii. |
@@ -114,7 +116,7 @@ vendor/bin/codecept run --coverage --coverage-html
 |---|---|
 | `tests/functional/AllNostroApiCest.php` | `/all-nostro/list` и `/all-nostro/search-accounts`: фильтр по выбранным ностро-банкам, игнорирование чужих pool ID, поиск счетов только внутри компании. |
 | `tests/functional/ArchiveApiCest.php` | `/archive/run-batch`, `/archive/restore-preview`, `/archive/restore`: batch-архивирование, аудит archive, восстановление всей группы по `match_id`, аудит restore. |
-| `tests/functional/LoginFormCest.php` | Страница логина, внутренний login helper, пустые/неверные credentials, успешный вход. |
+| `tests/functional/CookieAuthCest.php` | Страница логина, редирект гостя с защищённой страницы и внутренний cookie/session login helper. |
 | `tests/functional/MatchingApiCest.php` | `/matching/match-manual`, `/matching/unmatch`, `/matching/calc-summary`: scoped-квитование текущей компании, отказ при чужих ID, защита от расквитования чужих строк с тем же `match_id`, summary без утечки чужих данных. |
 | `tests/functional/NostroEntryApiCest.php` | `/nostro-entry/list`, `/nostro-entry/create`, `/nostro-entry/update`: `company_id` scope, нормализация суммы, upper-case валюты, запрет создания/переноса записи на счёт другой компании. |
 | `tests/functional/ReconReportApiCest.php` | `/recon-report/generate`: сбор отчёта по ностро-банку из Ledger/Statement closing balances и outstanding items, исключение уже сквитованных записей. |

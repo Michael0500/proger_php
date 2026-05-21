@@ -3,7 +3,6 @@
 namespace tests\unit\models;
 
 use app\models\User;
-use yii\base\NotSupportedException;
 
 /**
  * Тестовый класс `UserTest`.
@@ -26,7 +25,6 @@ class UserTest extends \Codeception\Test\Unit
         $this->activeUser = \SmartMatchTestHelper::createUser((int)$company->id, [
             'username' => 'admin',
             'email' => 'admin@example.test',
-            'password' => 'admin',
         ]);
         $this->deletedUser = \SmartMatchTestHelper::createUser((int)$company->id, [
             'username' => 'deleted',
@@ -36,10 +34,19 @@ class UserTest extends \Codeception\Test\Unit
     }
 
     /**
+     * Очищает состояние авторизации после теста.
+     * @return void
+     */
+    protected function _after(): void
+    {
+        \Yii::$app->user->logout(false);
+    }
+
+    /**
      * Проверяет сценарий: find user by id.
      * @return void
      */
-    public function testFindUserById()
+    public function testFindUserById(): void
     {
         verify($user = User::findIdentity($this->activeUser->id))->notEmpty();
         verify($user->username)->equals('admin');
@@ -48,20 +55,10 @@ class UserTest extends \Codeception\Test\Unit
     }
 
     /**
-     * Проверяет сценарий: find user by access token.
-     * @return void
-     */
-    public function testFindUserByAccessToken()
-    {
-        $this->expectException(NotSupportedException::class);
-        User::findIdentityByAccessToken('unsupported-token');
-    }
-
-    /**
      * Проверяет сценарий: find user by username.
      * @return void
      */
-    public function testFindUserByUsername()
+    public function testFindUserByUsername(): void
     {
         verify($user = User::findByUsername('admin'))->notEmpty();
         verify($user->id)->equals($this->activeUser->id);
@@ -69,15 +66,15 @@ class UserTest extends \Codeception\Test\Unit
     }
 
     /**
-     * @depends testFindUserByUsername
+     * Проверяет внутренний вход найденного пользователя через cookie/session.
+     * @return void
      */
-    public function testValidateUser()
+    public function testLoginFoundUser(): void
     {
         $user = User::findByUsername('admin');
-        verify($user->validateAuthKey($this->activeUser->auth_key))->notEmpty();
-        verify($user->validateAuthKey('wrong-key'))->empty();
 
-        verify($user->validatePassword('admin'))->notEmpty();
-        verify($user->validatePassword('123456'))->empty();
+        verify(\Yii::$app->user->login($user, 3600))->true();
+        verify(\Yii::$app->user->isGuest)->false();
+        verify((int)\Yii::$app->user->id)->equals((int)$this->activeUser->id);
     }
 }

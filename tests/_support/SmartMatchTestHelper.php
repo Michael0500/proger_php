@@ -91,7 +91,9 @@ final class SmartMatchTestHelper
     public static function createUser(?int $companyId = null, array $attributes = []): User
     {
         $suffix = self::suffix();
-        $password = $attributes['password'] ?? 'secret';
+
+        // Пользователи в тестах авторизуются через cookie/session helper.
+        // Открытый пароль не является частью тестовых данных.
         unset($attributes['password']);
 
         $user = new User(array_merge([
@@ -99,9 +101,9 @@ final class SmartMatchTestHelper
             'email' => 'user_' . $suffix . '@example.test',
             'status' => User::STATUS_ACTIVE,
             'company_id' => $companyId,
+            'auth_key' => Yii::$app->security->generateRandomString(32),
+            'password_hash' => self::cookieOnlyPasswordHash(),
         ], $attributes));
-        $user->setPassword($password);
-        $user->generateAuthKey();
         $user->save(false);
         return $user;
     }
@@ -333,5 +335,21 @@ final class SmartMatchTestHelper
     private static function suffix(): string
     {
         return strtolower(bin2hex(random_bytes(4)));
+    }
+
+    /**
+     * Возвращает технический hash для legacy NOT NULL поля `password_hash`.
+     *
+     * @return string Hash неизвестного одноразового значения.
+     */
+    private static function cookieOnlyPasswordHash(): string
+    {
+        static $hash = null;
+
+        if ($hash === null) {
+            $hash = Yii::$app->security->generatePasswordHash(Yii::$app->security->generateRandomString(32));
+        }
+
+        return $hash;
     }
 }
