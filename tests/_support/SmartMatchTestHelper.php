@@ -207,7 +207,9 @@ final class SmartMatchTestHelper
             'branch_code' => null,
         ], $attributes));
         $entry->skipAudit = $skipAudit;
-        $entry->save(false);
+        if (!$entry->save(false)) {
+            throw new \RuntimeException('Не удалось сохранить тестовую запись nostro_entries.');
+        }
         return $entry;
     }
 

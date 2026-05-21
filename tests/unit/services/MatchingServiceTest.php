@@ -140,20 +140,23 @@ class MatchingServiceTest extends \Codeception\Test\Unit
     public function testUnmatchClearsWholeMatchGroup(): void
     {
         [$company, , $account] = \SmartMatchTestHelper::createCompanyPoolAccount();
+        $matchId = 'MTCHTEST' . strtoupper(bin2hex(random_bytes(4)));
         $first = \SmartMatchTestHelper::createEntry([
             'company_id' => $company->id,
             'account_id' => $account->id,
-            'match_id' => 'MTCH00000044',
+            'match_id' => $matchId,
             'match_status' => NostroEntry::STATUS_MATCHED,
         ]);
         $second = \SmartMatchTestHelper::createEntry([
             'company_id' => $company->id,
             'account_id' => $account->id,
-            'match_id' => 'MTCH00000044',
+            'match_id' => $matchId,
             'match_status' => NostroEntry::STATUS_MATCHED,
         ]);
 
-        $result = (new MatchingService())->unmatch('MTCH00000044');
+        verify(NostroEntry::find()->where(['match_id' => $matchId, 'company_id' => $company->id])->count())->equals(2);
+
+        $result = (new MatchingService())->unmatch($matchId, (int)$company->id);
 
         verify($result['success'])->true();
         verify($result['count'])->equals(2);
@@ -186,7 +189,9 @@ class MatchingServiceTest extends \Codeception\Test\Unit
             'amount' => '70.00',
         ]);
 
-        $summary = (new MatchingService())->calcSummary([$ledger->id, $statement->id]);
+        verify(NostroEntry::find()->where(['id' => [$ledger->id, $statement->id], 'company_id' => $company->id])->count())->equals(2);
+
+        $summary = (new MatchingService())->calcSummary([$ledger->id, $statement->id], (int)$company->id);
 
         verify($summary['sum_ledger'])->equals(100.0);
         verify($summary['sum_statement'])->equals(70.0);
