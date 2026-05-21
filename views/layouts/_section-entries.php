@@ -167,6 +167,7 @@
                 <i :class="summaryBalanced ? 'fas fa-check-circle' : 'fas fa-exclamation-triangle'"></i>
                 Разница: <span style="font-family:monospace">{{ formatAmount(Math.abs(summaryDiff)) }}</span>
                 <span v-if="summaryBalanced" style="font-weight:500;margin-left:4px">— готово!</span>
+                <span v-else style="font-weight:500;margin-left:4px">— квитование недоступно</span>
             </span>
             </div>
 

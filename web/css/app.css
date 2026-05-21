@@ -999,6 +999,13 @@ body.resizing-col, body.resizing-col * { cursor:col-resize !important; user-sele
 }
 .modal-btn i { font-size: 11px !important; flex-shrink: 0; }
 
+.modal-btn:disabled {
+    opacity: .65 !important;
+    cursor: not-allowed !important;
+    box-shadow: none !important;
+    pointer-events: none !important;
+}
+
 .modal-btn.cancel {
     background: #fff !important;
     border-color: #e5e7eb !important;

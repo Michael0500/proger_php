@@ -421,9 +421,9 @@
                 <button class="modal-btn cancel" @click="closeEntryModal">
                     <i class="fas fa-times"></i>Отмена
                 </button>
-                <button class="modal-btn save-green" @click="saveEntry">
-                    <i class="fas fa-save"></i>
-                    {{ editingEntry.id ? 'Сохранить' : 'Добавить запись' }}
+                <button class="modal-btn save-green" @click="saveEntry" :disabled="entrySaving">
+                    <i :class="entrySaving ? 'fas fa-spinner fa-spin' : 'fas fa-save'"></i>
+                    {{ entrySaving ? 'Сохранение...' : (editingEntry.id ? 'Сохранить' : 'Добавить запись') }}
                 </button>
             </div>
         </div>

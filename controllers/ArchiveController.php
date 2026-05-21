@@ -850,6 +850,13 @@ class ArchiveController extends BaseController
             if (!empty($g['snapshot']['account_id'])) {
                 $accountIds[] = (int)$g['snapshot']['account_id'];
             }
+            if (!empty($g['changes']['account_id'])) {
+                foreach (['old', 'new'] as $side) {
+                    if (!empty($g['changes']['account_id'][$side])) {
+                        $accountIds[] = (int)$g['changes']['account_id'][$side];
+                    }
+                }
+            }
         }
         $accountIds = array_unique($accountIds);
         $accountNames = [];
@@ -868,10 +875,19 @@ class ArchiveController extends BaseController
         foreach (array_reverse($groupOrder) as $key) {
             $g = $groups[$key];
             $snap = $g['snapshot'];
+            $changes = $g['changes'];
             if (!empty($snap['account_id'])) {
                 $snap['account_name'] = $accountNames[$snap['account_id']] ?? ('ID: ' . $snap['account_id']);
             } else {
                 $snap['account_name'] = '—';
+            }
+            if (!empty($changes['account_id'])) {
+                foreach (['old', 'new'] as $side) {
+                    $accountId = $changes['account_id'][$side] ?? null;
+                    $changes['account_id'][$side . '_name'] = $accountId
+                        ? ($accountNames[(int)$accountId] ?? ('ID: ' . $accountId))
+                        : null;
+                }
             }
 
             $rows[] = [
@@ -882,7 +898,7 @@ class ArchiveController extends BaseController
                 'created_at'     => $g['created_at'],
                 'changed_fields' => array_values(array_unique($g['changed_fields'])),
                 'snapshot'       => $snap,
-                'changes'        => $g['changes'],
+                'changes'        => $changes,
             ];
         }
 

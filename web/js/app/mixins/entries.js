@@ -54,6 +54,7 @@ var EntriesMixin = {
                 instruction_id: '', end_to_end_id: '',
                 transaction_id: '', message_id: '', comment: ''
             },
+            entrySaving: false,
 
             // ── Выделение (selectedIds / selectionSummary / summaryBalanced
             //    объявлены в MatchingMixin) ─────────────────
@@ -587,6 +588,7 @@ var EntriesMixin = {
         showAddEntryModal: function () {
             var self = this;
             self._entrySelect2Inited = false;
+            self.entrySaving = false;
             self.editingEntry = {
                 id: null, account_id: null, account_name: '',
                 ls: 'L', dc: 'Debit', amount: '', currency: '',
@@ -613,6 +615,7 @@ var EntriesMixin = {
         editEntry: function (entry) {
             var self = this;
             self._entrySelect2Inited = false;
+            self.entrySaving = false;
             self.editingEntry = JSON.parse(JSON.stringify(entry));
             self._bindEntryModalHidePrevented();
             self._showModal('entryModal');
@@ -677,6 +680,7 @@ var EntriesMixin = {
         _forceCloseEntryModal: function () {
             this._hideModal('entryModal');
             this._entrySelect2Inited = false;
+            this.entrySaving = false;
         },
 
         /**
@@ -690,6 +694,8 @@ var EntriesMixin = {
          */
         saveEntry: function () {
             var self = this;
+            if (self.entrySaving) return;
+
             if (!self.editingEntry.account_id) {
                 Swal.fire({ icon: 'warning', title: 'Выберите счёт', toast: true,
                     position: 'top-end', timer: 2000, showConfirmButton: false });
@@ -715,6 +721,7 @@ var EntriesMixin = {
             var isNew = !self.editingEntry.id;
             var url   = isNew ? window.AppRoutes.entryCreate : window.AppRoutes.entryUpdate;
 
+            self.entrySaving = true;
             SmartMatchApi.post(url, self.editingEntry).then(function (r) {
                 if (r.success) {
                     self._forceCloseEntryModal();
@@ -725,6 +732,10 @@ var EntriesMixin = {
                 } else {
                     Swal.fire({ icon: 'error', title: 'Ошибка', text: r.message || JSON.stringify(r.errors) });
                 }
+            }).catch(function () {
+                Swal.fire({ icon: 'error', title: 'Ошибка сети', text: 'Не удалось сохранить запись' });
+            }).finally(function () {
+                self.entrySaving = false;
             });
         },
 

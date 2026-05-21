@@ -249,6 +249,10 @@ var ModalsMixin = {
          */
         getOldVal: function (item, field) {
             if (!item || !item.changes || !item.changes[field]) return null;
+            if (field === 'account_id') {
+                var accountName = item.changes[field]['old_name'];
+                if (accountName !== undefined && accountName !== null) return accountName;
+            }
             var v = item.changes[field]['old'];
             return (v === undefined || v === null) ? null : v;
         },

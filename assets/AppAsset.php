@@ -22,7 +22,7 @@ class AppAsset extends AssetBundle
         'css/select2-bootstrap-5-theme.min.css',
         'css/sweetalert2.min.css',
         'css/flatpickr.min.css',
-        'css/app.css?v18',
+        'css/app.css?v19',
         'fontawesome/css/all.min.css',
     ];
 
@@ -47,11 +47,11 @@ class AppAsset extends AssetBundle
         'js/app/api.js',
         'js/app/state-storage.js',
         'js/app/datepicker.js',
-        'js/app/mixins/modals.js?v4',
+        'js/app/mixins/modals.js?v5',
         'js/app/mixins/categories.js?v2',
         'js/app/mixins/pools.js?v3',
-        'js/app/mixins/entries.js?v22',
-        'js/app/mixins/matching.js?v11',
+        'js/app/mixins/entries.js?v23',
+        'js/app/mixins/matching.js?v13',
         'js/app/mixins/balance.js?v6',
         'js/app/mixins/archive.js?v7',
         'js/app/mixins/state-persistence.js?v2',

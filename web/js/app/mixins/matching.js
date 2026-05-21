@@ -22,6 +22,7 @@ var MatchingMixin = {
             matchGroupLoading: false,
             matchingRules:    [],
             loadingRules:     false,
+            reopenRulesListAfterRule: false,
             /**
              * Форма создания/редактирования правила автоквитования.
              *
@@ -182,9 +183,8 @@ var MatchingMixin = {
         /**
          * Запускает сценарий ручного квитования выбранных записей.
          *
-         * Проверяет минимальное количество выбранных записей и, если есть
-         * дисбаланс, запрашивает подтверждение пользователя перед вызовом
-         * `_doMatch()`.
+         * Проверяет минимальное количество выбранных записей и запрещает
+         * квитование, если выбранные суммы не сбалансированы.
          *
          * @returns {void}
          */
@@ -192,7 +192,7 @@ var MatchingMixin = {
             var self = this;
             if (!self.hasSelection) {
                 var minMsg = (self.userSection === 'INV')
-                    ? 'Выберите минимум 1 запись (или 2+ для квитования с дисбалансом)'
+                    ? 'Выберите одну запись с нулевой суммой или 2+ сбалансированные записи'
                     : 'Выберите минимум 2 записи';
                 Swal.fire({ icon: 'warning', title: minMsg, toast: true,
                     position: 'top-end', timer: 2500, showConfirmButton: false });
@@ -200,11 +200,14 @@ var MatchingMixin = {
             }
             if (self.summaryDiff !== 0) {
                 Swal.fire({
-                    icon: 'warning', title: 'Дисбаланс сумм',
-                    html: 'Разница: <b>' + self.formatAmount(Math.abs(self.summaryDiff)) + '</b>.<br>Сквитовать всё равно?',
-                    showCancelButton: true, confirmButtonText: 'Да, сквитовать',
-                    cancelButtonText: 'Отмена', confirmButtonColor: '#f59e0b'
-                }).then(function (r) { if (r.isConfirmed) self._doMatch(); });
+                    icon: 'warning',
+                    title: 'Квитование невозможно',
+                    html: 'Выбранные записи имеют дисбаланс сумм.<br>' +
+                        'Разница: <b>' + self.formatAmount(Math.abs(self.summaryDiff)) + '</b>.<br>' +
+                        'Сначала устраните дисбаланс, затем повторите квитование.',
+                    confirmButtonText: 'Понятно',
+                    confirmButtonColor: '#6366f1'
+                });
                 return;
             }
             self._doMatch();
@@ -221,6 +224,17 @@ var MatchingMixin = {
          */
         _doMatch: function () {
             var self = this;
+            if (!self.summaryBalanced) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Квитование невозможно',
+                    text: 'Нельзя сквитовать записи с дисбалансом сумм.',
+                    confirmButtonText: 'Понятно',
+                    confirmButtonColor: '#6366f1'
+                });
+                return;
+            }
+
             var payload = { ids: self.selectedIds };
             if (self.userSection) payload.section = self.userSection;
 
@@ -485,6 +499,50 @@ var MatchingMixin = {
         },
 
         /**
+         * Открывает форму правила из списка правил без наложения Bootstrap modal.
+         *
+         * Список закрывается перед открытием формы, иначе из-за одинакового
+         * z-index форма может оказаться под списком правил.
+         *
+         * @returns {void}
+         */
+        openRuleModal: function () {
+            var self = this;
+            var listEl = document.getElementById('rulesListModal');
+            var listIsOpen = listEl && listEl.classList.contains('show');
+
+            self.reopenRulesListAfterRule = !!listIsOpen;
+
+            var showRuleModal = function () {
+                var ruleEl = document.getElementById('ruleModal');
+                if (ruleEl) {
+                    ruleEl.addEventListener('hidden.bs.modal', function () {
+                        if (!self.reopenRulesListAfterRule) return;
+                        self.reopenRulesListAfterRule = false;
+                        self._showModal('rulesListModal');
+                    }, { once: true });
+                }
+                self._showModal('ruleModal');
+            };
+
+            if (!listIsOpen) {
+                showRuleModal();
+                return;
+            }
+
+            var listModal = bootstrap.Modal.getInstance(listEl);
+            if (!listModal) {
+                showRuleModal();
+                return;
+            }
+
+            listEl.addEventListener('hidden.bs.modal', function () {
+                showRuleModal();
+            }, { once: true });
+            listModal.hide();
+        },
+
+        /**
          * Открывает форму создания правила автоквитования.
          *
          * Сбрасывает `editingRule` к дефолтному LS/NRE правилу и показывает
@@ -500,7 +558,7 @@ var MatchingMixin = {
                 match_transaction_id: false, match_message_id: false,
                 cross_id_search: false, is_active: true, priority: 100, description: ''
             };
-            this._showModal('ruleModal');
+            this.openRuleModal();
         },
 
         /**
@@ -509,7 +567,7 @@ var MatchingMixin = {
          * @param {Object} rule Правило из `matchingRules`.
          * @returns {void}
          */
-        editRule:       function (rule) { this.editingRule = Object.assign({}, rule); this._showModal('ruleModal'); },
+        editRule:       function (rule) { this.editingRule = Object.assign({}, rule); this.openRuleModal(); },
         /**
          * Закрывает модалку правила без сохранения.
          *
