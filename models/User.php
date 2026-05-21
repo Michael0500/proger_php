@@ -3,6 +3,7 @@
 namespace app\models;
 
 use Yii;
+use yii\base\InvalidArgumentException;
 use yii\base\NotSupportedException;
 use yii\behaviors\TimestampBehavior;
 use yii\db\ActiveRecord;
@@ -11,16 +12,18 @@ use yii\web\IdentityInterface;
 /**
  * Пользователь SmartMatch и Yii Identity.
  *
- * Модель хранит учётные данные, статус доступа и выбранную компанию. Через
- * `company_id` определяется tenant-контекст для контроллеров и выборок данных.
+ * Модель хранит статус доступа и выбранную компанию. Через `company_id`
+ * определяется tenant-контекст для контроллеров и выборок данных. Поля
+ * `auth_key`, `password_hash`, `password_reset_token` считаются legacy:
+ * в некоторых схемах их нет, потому что вход выполняется внешней cookie-сессией.
  *
  * @property int $id
  * @property string $username
  * @property string $email
  * @property int $status
- * @property string $password_hash
+ * @property string|null $password_hash
  * @property string|null $password_reset_token
- * @property string $auth_key
+ * @property string|null $auth_key
  * @property int|null $company_id
  * @property int $created_at
  * @property int $updated_at
@@ -64,7 +67,7 @@ class User extends ActiveRecord implements IdentityInterface
      */
     public function rules()
     {
-        return [
+        $rules = [
             ['status', 'default', 'value' => self::STATUS_ACTIVE],
             ['status', 'in', 'range' => [self::STATUS_ACTIVE, self::STATUS_DELETED]],
             ['username', 'required'],
@@ -73,10 +76,15 @@ class User extends ActiveRecord implements IdentityInterface
             ['email', 'required'],
             ['email', 'email'],
             ['email', 'unique'],
-            ['password_hash', 'required'],
             ['company_id', 'integer'],
             ['company_id', 'exist', 'skipOnError' => true, 'targetClass' => Company::className(), 'targetAttribute' => ['company_id' => 'id']],
         ];
+
+        if (static::hasTableColumn('password_hash')) {
+            $rules[] = ['password_hash', 'required'];
+        }
+
+        return $rules;
     }
 
     /**
@@ -175,6 +183,10 @@ class User extends ActiveRecord implements IdentityInterface
      */
     public static function findByPasswordResetToken($token)
     {
+        if (!static::hasTableColumn('password_reset_token')) {
+            return null;
+        }
+
         if (!static::isPasswordResetTokenValid($token)) {
             return null;
         }
@@ -219,7 +231,7 @@ class User extends ActiveRecord implements IdentityInterface
      */
     public function getAuthKey()
     {
-        return $this->auth_key;
+        return $this->hasAttribute('auth_key') ? $this->getAttribute('auth_key') : null;
     }
 
     /**
@@ -230,7 +242,12 @@ class User extends ActiveRecord implements IdentityInterface
      */
     public function validateAuthKey($authKey)
     {
-        return $this->getAuthKey() === $authKey;
+        $storedAuthKey = $this->getAuthKey();
+        if ($storedAuthKey === null) {
+            return false;
+        }
+
+        return hash_equals((string)$storedAuthKey, (string)$authKey);
     }
 
     /**
@@ -241,7 +258,15 @@ class User extends ActiveRecord implements IdentityInterface
      */
     public function validatePassword($password)
     {
-        return Yii::$app->security->validatePassword($password, $this->password_hash);
+        if (!$this->hasAttribute('password_hash') || empty($this->password_hash)) {
+            return false;
+        }
+
+        try {
+            return Yii::$app->security->validatePassword($password, $this->password_hash);
+        } catch (InvalidArgumentException $e) {
+            return false;
+        }
     }
 
     /**
@@ -252,7 +277,9 @@ class User extends ActiveRecord implements IdentityInterface
      */
     public function setPassword($password)
     {
-        $this->password_hash = Yii::$app->security->generatePasswordHash($password);
+        if ($this->hasAttribute('password_hash')) {
+            $this->password_hash = Yii::$app->security->generatePasswordHash($password);
+        }
     }
 
     /**
@@ -262,7 +289,9 @@ class User extends ActiveRecord implements IdentityInterface
      */
     public function generateAuthKey()
     {
-        $this->auth_key = Yii::$app->security->generateRandomString();
+        if ($this->hasAttribute('auth_key')) {
+            $this->auth_key = Yii::$app->security->generateRandomString();
+        }
     }
 
     /**
@@ -272,7 +301,9 @@ class User extends ActiveRecord implements IdentityInterface
      */
     public function generatePasswordResetToken()
     {
-        $this->password_reset_token = Yii::$app->security->generateRandomString() . '_' . time();
+        if ($this->hasAttribute('password_reset_token')) {
+            $this->password_reset_token = Yii::$app->security->generateRandomString() . '_' . time();
+        }
     }
 
     /**
@@ -282,6 +313,20 @@ class User extends ActiveRecord implements IdentityInterface
      */
     public function removePasswordResetToken()
     {
-        $this->password_reset_token = null;
+        if ($this->hasAttribute('password_reset_token')) {
+            $this->password_reset_token = null;
+        }
+    }
+
+    /**
+     * Проверяет наличие колонки в текущей схеме таблицы пользователей.
+     *
+     * @param string $column Имя колонки.
+     * @return bool `true`, если колонка есть в БД.
+     */
+    public static function hasTableColumn(string $column): bool
+    {
+        $schema = static::getTableSchema();
+        return $schema !== null && $schema->getColumn($column) !== null;
     }
 }

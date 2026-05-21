@@ -73,7 +73,7 @@ class UserTest extends \Codeception\Test\Unit
     {
         $user = User::findByUsername('admin');
 
-        verify(\Yii::$app->user->login($user, 3600))->true();
+        verify(\Yii::$app->user->login($user, 0))->true();
         verify(\Yii::$app->user->isGuest)->false();
         verify((int)\Yii::$app->user->id)->equals((int)$this->activeUser->id);
     }

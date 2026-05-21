@@ -51,7 +51,7 @@ class CookieAuthTest extends \Codeception\Test\Unit
      */
     public function testCookieSessionLogin(): void
     {
-        verify(\Yii::$app->user->login($this->user, 3600))->true();
+        verify(\Yii::$app->user->login($this->user, 0))->true();
         verify(\Yii::$app->user->isGuest)->false();
         verify((int)\Yii::$app->user->id)->equals((int)$this->user->id);
     }

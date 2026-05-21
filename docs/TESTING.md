@@ -90,7 +90,7 @@ vendor/bin/codecept run --coverage --coverage-html
 - `createEntry()`, `createRule()`, `createBalance()`, `createArchiveSettings()`, `createArchivedEntry()` создают доменные записи для сценариев;
 - helper подключается в `tests/unit/_bootstrap.php` и `tests/functional/_bootstrap.php`.
 
-`createUser()` не создаёт известный пользовательский пароль. Для тестов авторизация выполняется через cookie/session helpers Yii и Codeception: `Yii::$app->user->login(...)` или `$I->amLoggedInAs(...)`. Тесты не должны проверять парольный вход или bearer/API tokens.
+`createUser()` не создаёт известный пользовательский пароль и не требует наличия legacy-колонок `auth_key` / `password_hash`. Для тестов авторизация выполняется через cookie/session helpers Yii и Codeception: `Yii::$app->user->login($user, 0)` или `$I->amLoggedInAs(...)`. Тесты не должны проверять парольный вход или bearer/API tokens.
 
 Каждый тест сам создаёт нужную компанию, пользователя, ностро-банк, счёт и записи. Это делает проверки изолированными и не зависящими от сидов рабочей базы.
 

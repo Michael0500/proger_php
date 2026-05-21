@@ -96,14 +96,21 @@ final class SmartMatchTestHelper
         // Открытый пароль не является частью тестовых данных.
         unset($attributes['password']);
 
-        $user = new User(array_merge([
+        $defaults = [
             'username' => 'user_' . $suffix,
             'email' => 'user_' . $suffix . '@example.test',
             'status' => User::STATUS_ACTIVE,
             'company_id' => $companyId,
-            'auth_key' => Yii::$app->security->generateRandomString(32),
-            'password_hash' => self::cookieOnlyPasswordHash(),
-        ], $attributes));
+        ];
+
+        if (User::hasTableColumn('auth_key')) {
+            $defaults['auth_key'] = Yii::$app->security->generateRandomString(32);
+        }
+        if (User::hasTableColumn('password_hash')) {
+            $defaults['password_hash'] = self::cookieOnlyPasswordHash();
+        }
+
+        $user = new User(array_merge($defaults, $attributes));
         $user->save(false);
         return $user;
     }
