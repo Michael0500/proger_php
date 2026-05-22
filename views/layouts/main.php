@@ -18,10 +18,17 @@ $this->registerLinkTag(['rel' => 'stylesheet', 'href' => 'https://fonts.googleap
 
 $isGuest     = Yii::$app->user->isGuest;
 $hasCompany  = !$isGuest && Yii::$app->user->identity->hasCompany();
-$showApp     = !$isGuest && $hasCompany;
-$showNoComp  = !$isGuest && !$hasCompany;
 
 $currentRoute = Yii::$app->controller->route;
+
+// Страница профиля — единственное место, где пользователь может выбрать компанию,
+// поэтому её всегда нужно рендерить как обычный контент, даже если компания не выбрана.
+// Иначе вместо профиля показывается заглушка «Компания не выбрана» со ссылкой
+// на тот же профиль — замкнутый круг, кнопки выбора компании не появляются.
+$isProfilePage = ($currentRoute === 'user/view');
+
+$showApp     = !$isGuest && $hasCompany;
+$showNoComp  = !$isGuest && !$hasCompany && !$isProfilePage;
 
 // Страницы с собственным сайдбаром (Выверка и Баланс) сами рендерят сайдбар и
 // <main>; layout не оборачивает их повторно, чтобы не дублировать flex-вёрстку.
