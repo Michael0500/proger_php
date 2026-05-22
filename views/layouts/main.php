@@ -23,16 +23,20 @@ $showNoComp  = !$isGuest && !$hasCompany;
 
 $currentRoute = Yii::$app->controller->route;
 
-// Страница выверки (site/index с компанией) сама рендерит свой sidebar — layout
-// не оборачивает её в <main>, чтобы не дублировать flex-вёрстку.
-$isEntriesPage    = ($currentRoute === 'site/index') && $hasCompany;
-$isReconPage      = (Yii::$app->controller->id === 'recon-report');
-$isNostroBankPage = ($currentRoute === 'account-pool/index');
-$isAccountsPage   = ($currentRoute === 'account/index');
-$isAllNostroPage  = ($currentRoute === 'all-nostro/index');
-$isBalancePage  = ($currentRoute === 'nostro-balance/page');
-$isArchivePage  = ($currentRoute === 'archive/page');
-$isReferencePage = ($currentRoute === 'reference/index');
+// Страницы с собственным сайдбаром (Выверка и Баланс) сами рендерят сайдбар и
+// <main>; layout не оборачивает их повторно, чтобы не дублировать flex-вёрстку.
+$isEntriesPage      = ($currentRoute === 'site/index') && $hasCompany;
+$isBankBalancePage  = ($currentRoute === 'nostro-balance/index') && $hasCompany;
+$isReconPage        = (Yii::$app->controller->id === 'recon-report');
+$isNostroBankPage   = ($currentRoute === 'account-pool/index');
+$isAccountsPage     = ($currentRoute === 'account/index');
+$isAllNostroPage    = ($currentRoute === 'all-nostro/index');
+$isAllBalancePage   = ($currentRoute === 'nostro-balance/page');
+$isBalancePage      = $isBankBalancePage || $isAllBalancePage;
+$isArchivePage      = ($currentRoute === 'archive/page');
+$isReferencePage    = ($currentRoute === 'reference/index');
+
+$hasOwnSidebar = $isEntriesPage || $isBankBalancePage;
 
 $currentUser = $isGuest ? null : Yii::$app->user->identity;
 $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->company : null;
@@ -57,23 +61,31 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
                 'options'    => ['class' => 'navbar-expand-md navbar-dark fixed-top'],
         ]);
 
-        $menuItems = [
-            ['label' => 'Выверка', 'url' => ['/site/index']],
-        ];
-
-        if (!$isGuest && $hasCompany) {
-            $menuItems[] = [
-                'label'  => '<i class="fas fa-globe me-1"></i>Выверка по всем ностро банкам',
-                'encode' => false,
-                'url'    => ['/all-nostro'],
-                'active' => $isAllNostroPage,
-            ];
-        }
-
         if ($isGuest) {
             $menuItems[] = ['label' => 'Вход', 'url' => ['/site/login']];
         } else {
             if ($hasCompany) {
+                $menuItems = [
+                        ['label' => 'Выверка', 'url' => ['/site/index']],
+                ];
+                $menuItems[] = [
+                        'label'  => '<i class="fas fa-balance-scale me-1"></i>Баланс',
+                        'encode' => false,
+                        'url'    => ['/balance'],
+                        'active' => $isBankBalancePage,
+                ];
+                $menuItems[] = [
+                        'label'  => '<i class="fas fa-globe me-1"></i>Выверка по всем НБ',
+                        'encode' => false,
+                        'url'    => ['/all-nostro'],
+                        'active' => $isAllNostroPage,
+                ];
+                $menuItems[] = [
+                        'label'  => '<i class="fas fa-coins me-1"></i>Баланс по всем НБ',
+                        'encode' => false,
+                        'url'    => ['/all-balance'],
+                        'active' => $isAllBalancePage,
+                ];
                 $menuItems[] = [
                         'label'  => '<i class="fas fa-university me-1"></i>Счета',
                         'encode' => false,
@@ -86,23 +98,13 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
                         'url'    => ['/nostro-banks'],
                         'active' => $isNostroBankPage,
                 ];
-                $menuItems[] = [
-                        'label'  => '<i class="fas fa-balance-scale me-1"></i>Баланс',
-                        'encode' => false,
-                        'url'    => ['/balance'],
-                        'active' => $isBalancePage,
-                ];
+
+
                 $menuItems[] = [
                         'label'  => '<i class="fas fa-archive me-1"></i>Архив',
                         'encode' => false,
                         'url'    => ['/archive'],
                         'active' => $isArchivePage,
-                ];
-                $menuItems[] = [
-                        'label'  => '<i class="fas fa-book me-1"></i>Справочники',
-                        'encode' => false,
-                        'url'    => ['/references'],
-                        'active' => $isReferencePage,
                 ];
                 $menuItems[] = [
                         'label'   => '<i class="fas fa-file-alt me-1"></i>Раккорд',
@@ -123,6 +125,16 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
                             'url'    => ['/user/view', 'id' => $currentUser->id],
                     ],
             ];
+
+            if ($hasCompany) {
+                $userMenuItems[] = [
+                        'label'       => '<i class="fas fa-book me-1"></i>Справочники',
+                        'encode'      => false,
+                        'url'         => ['/references'],
+                        'active'      => $isReferencePage,
+                        'linkOptions' => ['class' => 'dropdown-item' . ($isReferencePage ? ' active' : '')],
+                ];
+            }
 
             // Оба блока всегда в DOM — JS переключает display при смене компании
             $userMenuItems[] = '<div class="dropdown-divider"></div>';
@@ -167,14 +179,14 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
         ?>
     </header>
 
-    <?php if ($showApp && $isEntriesPage): ?>
-        <!-- ── Страница выверки: свой sidebar и main внутри view ── -->
+    <?php if ($showApp && $hasOwnSidebar): ?>
+        <!-- ── Страницы с собственным sidebar (выверка, баланс): main внутри view ── -->
         <?= $content ?>
         <?= $this->render('_vue-scripts') ?>
 
     <?php elseif ($showApp): ?>
         <!-- ── Любая другая страница залогиненного пользователя ── -->
-        <?php $isWidePage = $isBalancePage || $isArchivePage || $isAllNostroPage; ?>
+        <?php $isWidePage = $isAllBalancePage || $isArchivePage || $isAllNostroPage; ?>
         <main style="margin-top:52px; padding:24px 28px">
             <div class="container-fluid" style="<?= $isWidePage ? 'max-width:100%' : 'max-width:1400px' ?>">
                 <?= Alert::widget() ?>

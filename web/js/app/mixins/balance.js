@@ -188,8 +188,14 @@ var BalanceMixin = {
             // Собираем итоговые фильтры
             var filters = Object.assign({}, self.balanceFilters);
 
-            // Фильтр по ностро-банку: из Select2 (если задан вручную)
-            if (self.balancePoolId) filters.pool_id = self.balancePoolId;
+            // Фильтр по ностро-банку:
+            //  - Select2 (страница «Баланс по всем ностро-банкам»)
+            //  - либо selectedPool из сайдбара (главная страница «Баланс»)
+            if (self.balancePoolId) {
+                filters.pool_id = self.balancePoolId;
+            } else if (self.selectedPool && self.selectedPool.id) {
+                filters.pool_id = self.selectedPool.id;
+            }
 
             SmartMatchApi.get(AppRoutes.balanceList, {
                 page:    self.balancesPage,

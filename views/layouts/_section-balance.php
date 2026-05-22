@@ -1,4 +1,10 @@
-<?php /** @var yii\web\View $this */ ?>
+<?php
+/** @var yii\web\View $this */
+/** @var bool $showPoolFilter Показывать ли Select2-фильтр ностро-банка (только для страницы "Баланс по всем ностро-банкам") */
+/** @var bool $showSidebarTitle Использовать ли заголовок-имя выбранного ностро-банка из сайдбара */
+$showPoolFilter   = $showPoolFilter   ?? true;
+$showSidebarTitle = $showSidebarTitle ?? false;
+?>
 
     <!-- ══ СЕКЦИЯ: БАЛАНС ════════════════════════════════════════ -->
     <div>
@@ -6,7 +12,12 @@
         <!-- ТУЛБАР -->
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
             <div style="display:flex;align-items:center;gap:8px">
-                <span class="pool-title">Баланс Ностро</span>
+                <?php if ($showSidebarTitle): ?>
+                    <span class="pool-title">{{ selectedPool.name }}</span>
+                    <span class="pool-tag">{{ selectedCategory ? selectedCategory.name : '' }}</span>
+                <?php else: ?>
+                    <span class="pool-title">Баланс Ностро</span>
+                <?php endif; ?>
                 <span v-if="userSection"
                       style="background:#4f46e5;color:#fff;border-radius:6px;padding:1px 10px;font-size:11px;font-weight:700">
                     {{ userSection }}
@@ -49,6 +60,7 @@
             </div>
         </div>
 
+        <?php if ($showPoolFilter): ?>
         <!-- ФИЛЬТР ПО НОСТРО-БАНКУ (Select2) -->
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
             <label style="font-size:12px;font-weight:600;color:#6b7280;white-space:nowrap">
@@ -58,6 +70,7 @@
                 <option value="">— Все ностро-банки —</option>
             </select>
         </div>
+        <?php endif; ?>
 
         <!-- ФИЛЬТРЫ -->
         <div v-show="balanceFiltersOpen" class="filters-panel" style="display:none;margin-bottom:14px">

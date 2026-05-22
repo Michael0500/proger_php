@@ -33,14 +33,34 @@ class NostroBalanceController extends BaseController
     }
 
     /**
-     * Рендерит отдельную страницу балансов.
+     * Рендерит страницу баланса по всем ностро-банкам (без сайдбара, с фильтром Select2).
      *
      * @return string HTML страницы `views/nostro-balance/page.php`.
      */
     public function actionPage()
     {
-        $this->view->title = 'Баланс';
+        $this->view->title = 'Баланс по всем ностро-банкам';
         return $this->render('page');
+    }
+
+    /**
+     * Рендерит главную страницу баланса с сайдбаром категорий и ностро-банков.
+     *
+     * GET `/balance`. Выбор ностро-банка в сайдбаре фильтрует таблицу
+     * `nostro_balance` по `accounts.pool_id`. Без выбранного банка показывает
+     * пустое состояние.
+     *
+     * @return string|\yii\web\Response HTML-страница или redirect на выбор компании.
+     */
+    public function actionIndex()
+    {
+        $cid = $this->cid();
+        if (!$cid) {
+            Yii::$app->session->setFlash('warning', 'Выберите компанию.');
+            return $this->redirect(['/site/index']);
+        }
+        $this->view->title = 'Баланс';
+        return $this->render('index');
     }
 
     /**

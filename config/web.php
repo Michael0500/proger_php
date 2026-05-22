@@ -75,8 +75,8 @@ $config = [
                 'all-nostro'            => 'all-nostro/index',
                 'all-nostro/<action>'   => 'all-nostro/<action>',
 
-                'balance'                           => 'nostro-balance/page',
-                'nostro-balance'                    => 'nostro-balance/index',
+                'balance'                           => 'nostro-balance/index',
+                'all-balance'                       => 'nostro-balance/page',
                 'nostro-balance/<action>'           => 'nostro-balance/<action>',
 
                   // ── Отчёты (Раккорд) ─────────────────────────────────────────
