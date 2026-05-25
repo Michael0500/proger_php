@@ -309,11 +309,19 @@ var EntriesMixin = {
          * @returns {void}
          */
         applyFilter: function (field, value) {
-            var v = (value === null || value === undefined) ? '' : String(value).trim();
-            if (v === '') {
-                this.$delete(this.filters, field);
+            if (Array.isArray(value)) {
+                if (value.length === 0) {
+                    this.$delete(this.filters, field);
+                } else {
+                    this.$set(this.filters, field, value);
+                }
             } else {
-                this.$set(this.filters, field, v);
+                var v = (value === null || value === undefined) ? '' : String(value).trim();
+                if (v === '') {
+                    this.$delete(this.filters, field);
+                } else {
+                    this.$set(this.filters, field, v);
+                }
             }
             this.loadEntries(true);
         },
@@ -358,6 +366,8 @@ var EntriesMixin = {
             if ($fs.length && $fs.data('select2')) $fs.val(null).trigger('change');
             var $fp = $('#filter-pool-select2');
             if ($fp.length && $fp.data('select2')) $fp.val(null).trigger('change');
+            var $fc = $('#' + (this.currencyFilterSelectId || 'filter-currency-select2'));
+            if ($fc.length && $fc.data('select2')) $fc.val(null).trigger('change');
             this.loadEntries(true);
         },
 
@@ -396,8 +406,49 @@ var EntriesMixin = {
                 setTimeout(function () {
                     self.initFilterAccountSelect2();
                     self.initFilterPoolSelect2();
+                    self.initFilterCurrencySelect2();
                 }, 120);
             }
+        },
+
+        /**
+         * Инициализирует Select2 мультивыбора валют для фильтра выверки.
+         *
+         * Берёт значения из глобального `dictCurrencies` и сохраняет выбранные
+         * коды в `filters.currency` как массив. Если выбрано ничего — фильтр
+         * удаляется.
+         *
+         * @returns {void}
+         */
+        initFilterCurrencySelect2: function () {
+            var self  = this;
+            var elId  = self.currencyFilterSelectId || 'filter-currency-select2';
+            var $el   = $('#' + elId);
+            if (!$el.length || self._filterCurrencySelect2Inited) return;
+            self._filterCurrencySelect2Inited = true;
+
+            var data = (self.dictCurrencies || []).map(function (c) {
+                return { id: c.code, text: c.code };
+            });
+
+            $el.select2({
+                theme:       'bootstrap-5',
+                placeholder: 'Все валюты...',
+                allowClear:  true,
+                data:        data,
+                language: { noResults: function () { return 'Нет валют'; } }
+            });
+
+            // Если фильтр уже содержит валюты — отобразить их
+            var current = self.filters.currency;
+            if (current) {
+                $el.val(Array.isArray(current) ? current : [current]).trigger('change.select2');
+            }
+
+            $el.on('change', function () {
+                var vals = $el.val() || [];
+                self.applyFilter('currency', vals);
+            });
         },
 
         /**

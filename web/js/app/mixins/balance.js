@@ -264,6 +264,87 @@ var BalanceMixin = {
         },
 
         /**
+         * Переключает видимость панели фильтров и лениво поднимает Select2 валют.
+         *
+         * Лениво потому, что виджет привязан к скрытому элементу (v-show),
+         * и без отложенного init Select2 может посчитать ширину как 0.
+         *
+         * @returns {void}
+         */
+        toggleBalanceFilters: function () {
+            this.balanceFiltersOpen = !this.balanceFiltersOpen;
+            if (this.balanceFiltersOpen) {
+                var self = this;
+                this.$nextTick(function () { self.initBalanceCurrencySelect2(); });
+            }
+        },
+
+        /**
+         * Сбрасывает все фильтры баланса и связанные Select2-виджеты.
+         *
+         * Сохраняет дефолтный раздел текущей компании (`userSection`), если
+         * он задан, и перезагружает таблицу.
+         *
+         * @returns {void}
+         */
+        resetBalanceFilters: function () {
+            this.balanceFilters = {};
+            if (this.userSection) {
+                this.balanceFilters.section = this.userSection;
+            }
+            var elId = this.balanceCurrencyFilterSelectId || 'balance-filter-currency-select2';
+            var $c = jQuery('#' + elId);
+            if ($c.length && $c.data('select2')) {
+                $c.val(null).trigger('change.select2');
+            }
+            this.onBalanceFilterChange();
+        },
+
+        /**
+         * Инициализирует Select2 мультивыбора валют для фильтра балансов.
+         *
+         * Использует глобальный `dictCurrencies`, записывает выбранные коды в
+         * `balanceFilters.currency` как массив (или удаляет фильтр, если выбор
+         * пуст) и перезагружает таблицу через `onBalanceFilterChange`.
+         *
+         * @returns {void}
+         */
+        initBalanceCurrencySelect2: function () {
+            var self = this;
+            var elId = self.balanceCurrencyFilterSelectId || 'balance-filter-currency-select2';
+            var $el  = jQuery('#' + elId);
+            if (!$el.length || self._balanceCurrencySelect2Inited) return;
+            self._balanceCurrencySelect2Inited = true;
+
+            var data = (self.dictCurrencies || []).map(function (c) {
+                return { id: c.code, text: c.code };
+            });
+
+            $el.select2({
+                theme:       'bootstrap-5',
+                placeholder: 'Все валюты...',
+                allowClear:  true,
+                data:        data,
+                language: { noResults: function () { return 'Нет валют'; } }
+            });
+
+            var current = self.balanceFilters.currency;
+            if (current) {
+                $el.val(Array.isArray(current) ? current : [current]).trigger('change.select2');
+            }
+
+            $el.off('change.balanceCurrency').on('change.balanceCurrency', function () {
+                var vals = $el.val() || [];
+                if (!vals.length) {
+                    self.$delete(self.balanceFilters, 'currency');
+                } else {
+                    self.$set(self.balanceFilters, 'currency', vals);
+                }
+                self.onBalanceFilterChange();
+            });
+        },
+
+        /**
          * Перезагружает балансы после смены фильтра ностро-банка.
          *
          * @returns {void}

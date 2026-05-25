@@ -170,8 +170,7 @@
                     <div class="filter-input-wrap">
                         <input type="number" class="filter-input" placeholder="0"
                                :value="archiveFilters.amount_min||''"
-                               @change="applyArchiveFilter('amount_min',$event.target.value)"
-                               @input="if(!archiveFilters.amount_max&&$event.target.value) applyArchiveFilter('amount_max',$event.target.value)">
+                               @change="applyArchiveFilter('amount_min',$event.target.value)">
                         <button v-if="archiveFilters.amount_min" type="button" class="filter-clear-btn"
                                 @click.prevent="clearArchiveFilter('amount_min')">×</button>
                     </div>

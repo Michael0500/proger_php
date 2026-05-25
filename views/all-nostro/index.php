@@ -103,6 +103,7 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
         "showAccountFilter"   => true,
         "poolSelectId"        => "an-filter-pools",
         "accountSelectId"     => "an-filter-account",
+        "currencySelectId"    => "an-filter-currency",
     ]) ?>
 
     <!-- ПАНЕЛЬ ИТОГОВ -->

@@ -43,8 +43,12 @@
                 openRowMenu:  null,
                 rowMenuStyle: {},
 
-                _poolsFilterSelect2Inited:   false,
-                _accountFilterSelect2Inited: false
+                _poolsFilterSelect2Inited:    false,
+                _accountFilterSelect2Inited:  false,
+                _filterCurrencySelect2Inited: false,
+
+                // ID Select2-фильтра валют (используется EntriesMixin)
+                currencyFilterSelectId: 'an-filter-currency'
             },
 
             mounted: function () {
@@ -151,6 +155,8 @@
                     if ($p.length && $p.data('select2')) $p.val(null).trigger('change');
                     var $a = $('#an-filter-account');
                     if ($a.length && $a.data('select2')) $a.val(null).trigger('change');
+                    var $c = $('#an-filter-currency');
+                    if ($c.length && $c.data('select2')) $c.val(null).trigger('change');
                     this.loadEntries(true);
                 },
 
@@ -161,7 +167,11 @@
                  * @returns {void}
                  */
                 toggleFiltersPanel: function () {
-                    this.filtersOpen = !this.filtersOpen;
+                    var self = this;
+                    self.filtersOpen = !self.filtersOpen;
+                    if (self.filtersOpen) {
+                        self.$nextTick(function () { self.initFilterCurrencySelect2(); });
+                    }
                 },
 
                 /**

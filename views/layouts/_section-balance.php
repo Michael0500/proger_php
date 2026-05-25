@@ -2,8 +2,10 @@
 /** @var yii\web\View $this */
 /** @var bool $showPoolFilter Показывать ли Select2-фильтр ностро-банка (только для страницы "Баланс по всем ностро-банкам") */
 /** @var bool $showSidebarTitle Использовать ли заголовок-имя выбранного ностро-банка из сайдбара */
+/** @var string $currencySelectId id <select multiple> для мультивыбора валют в фильтрах */
 $showPoolFilter   = $showPoolFilter   ?? true;
 $showSidebarTitle = $showSidebarTitle ?? false;
+$currencySelectId = $currencySelectId ?? 'balance-filter-currency-select2';
 ?>
 
     <!-- ══ СЕКЦИЯ: БАЛАНС ════════════════════════════════════════ -->
@@ -33,11 +35,11 @@ $showSidebarTitle = $showSidebarTitle ?? false;
                 <button class="toolbar-btn outline" @click="openImportModal('asb')">
                     <i class="fas fa-file-alt"></i>Импорт АСБ
                 </button>
-                <button class="toolbar-btn outline" @click="balanceFiltersOpen=!balanceFiltersOpen"
+                <button class="toolbar-btn outline" @click="toggleBalanceFilters"
                         :style="balanceFiltersOpen?'border-color:#6366f1;color:#6366f1':''">
                     <i class="fas fa-filter"></i>Фильтры
                 </button>
-                <button class="toolbar-btn outline" @click="balanceFilters={};if(userSection){balanceFilters.section=userSection;}onBalanceFilterChange()">
+                <button class="toolbar-btn outline" @click="resetBalanceFilters()">
                     <i class="fas fa-times"></i>Сбросить
                 </button>
                 <button class="toolbar-btn success" @click="openCreateBalanceModal">
@@ -115,13 +117,9 @@ $showSidebarTitle = $showSidebarTitle ?? false;
                                 @click="balanceFilters.status='confirmed';onBalanceFilterChange()">⚫</button>
                     </div>
                 </div>
-                <div class="filter-field">
-                    <label class="filter-label">Валюта</label>
-                    <select class="filter-input" v-model="balanceFilters.currency"
-                            @change="onBalanceFilterChange()" style="width:90px">
-                        <option value="">—</option>
-                        <option v-for="c in dictCurrencies" :key="c.code" :value="c.code">{{ c.code }}</option>
-                    </select>
+                <div class="filter-field" style="min-width:220px">
+                    <label class="filter-label">Валюта (можно несколько)</label>
+                    <select id="<?= htmlspecialchars($currencySelectId) ?>" multiple="multiple" style="width:100%"></select>
                 </div>
                 <div class="filter-field">
                     <label class="filter-label">Дата с</label>
@@ -145,7 +143,7 @@ $showSidebarTitle = $showSidebarTitle ?? false;
                     </select>
                 </div>
                 <div class="filter-field" style="align-self:end">
-                    <button class="toolbar-btn outline" @click="balanceFilters={};if(userSection){balanceFilters.section=userSection;}onBalanceFilterChange()">
+                    <button class="toolbar-btn outline" @click="resetBalanceFilters()">
                         <i class="fas fa-times"></i>Сброс
                     </button>
                 </div>

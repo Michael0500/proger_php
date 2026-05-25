@@ -9,12 +9,14 @@
  * @var bool $showAccountFilter   — показать Select2 выбора счёта
  * @var string $poolSelectId      — id <select> для пулов (если используется)
  * @var string $accountSelectId   — id <select> для счёта (если используется)
+ * @var string $currencySelectId  — id <select multiple> для мультивыбора валют
  */
 
 $showMultiPoolFilter = $showMultiPoolFilter ?? false;
 $showAccountFilter   = $showAccountFilter   ?? false;
 $poolSelectId        = $poolSelectId        ?? 'filter-pools-select2';
 $accountSelectId     = $accountSelectId     ?? 'filter-account-select2';
+$currencySelectId    = $currencySelectId    ?? 'filter-currency-select2';
 ?>
 <div v-show="filtersOpen" class="filters-panel">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
@@ -73,18 +75,10 @@ $accountSelectId     = $accountSelectId     ?? 'filter-account-select2';
             </div>
         </div>
 
-        <!-- Валюта -->
-        <div class="filter-field">
-            <label class="filter-label">Валюта</label>
-            <div class="filter-input-wrap">
-                <select class="filter-input"
-                        :value="filters.currency||''"
-                        @change="applyFilter('currency',$event.target.value)">
-                    <option value="">Все</option>
-                    <option v-for="c in dictCurrencies" :key="c.code" :value="c.code">{{ c.code }}</option>
-                </select>
-                <button v-if="filters.currency" class="filter-clear-btn" @click="clearFilter('currency')">×</button>
-            </div>
+        <!-- Валюта (мультивыбор) -->
+        <div class="filter-field" style="grid-column:span 2">
+            <label class="filter-label">Валюта (можно несколько)</label>
+            <select id="<?= htmlspecialchars($currencySelectId) ?>" multiple="multiple" style="width:100%"></select>
         </div>
 
         <!-- Сумма от/до -->

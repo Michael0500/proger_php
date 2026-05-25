@@ -79,8 +79,22 @@ class NostroEntryController extends BaseController
         }
 
 
+        // Валюта — поддерживает массив (мультивыбор) или строку
+        if (!empty($filters['currency'])) {
+            if (is_array($filters['currency'])) {
+                $codes = array_values(array_filter(array_map(static function ($v) {
+                    return strtoupper(trim((string)$v));
+                }, $filters['currency']), 'strlen'));
+                if (!empty($codes)) {
+                    $q->andWhere(['ne.currency' => $codes]);
+                }
+            } else {
+                $q->andWhere(['ilike', 'ne.currency', $filters['currency']]);
+            }
+        }
+
         // Текстовые ILIKE-фильтры
-        foreach (['ls','dc','currency','match_status','match_id',
+        foreach (['ls','dc','match_status','match_id',
                      'instruction_id','end_to_end_id','transaction_id','message_id','other_id','comment'] as $f) {
             if (isset($filters[$f]) && $filters[$f] !== '') {
                 $q->andWhere(['ilike', "ne.$f", $filters[$f]]);
