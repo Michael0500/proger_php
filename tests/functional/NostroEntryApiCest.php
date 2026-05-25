@@ -51,6 +51,7 @@ class NostroEntryApiCest
      */
     public function listReturnsOnlyCurrentCompanyEntries(\FunctionalTester $I): void
     {
+        $I->wantTo('Список записей: возвращает только записи текущей компании');
         $I->sendAjaxGetRequest(\yii\helpers\Url::to(['/nostro-entry/list']), ['limit' => 10]);
         $response = $this->grabJson($I);
 
@@ -66,6 +67,7 @@ class NostroEntryApiCest
      */
     public function createNormalizesMoneyAndUppercasesCurrency(\FunctionalTester $I): void
     {
+        $I->wantTo('Создание записи: нормализует сумму и приводит валюту к верхнему регистру');
         $I->sendAjaxPostRequest(\yii\helpers\Url::to(['/nostro-entry/create']), [
             'account_id' => $this->account->id,
             'ls' => NostroEntry::LS_LEDGER,
@@ -88,6 +90,7 @@ class NostroEntryApiCest
      */
     public function createRejectsAccountFromAnotherCompany(\FunctionalTester $I): void
     {
+        $I->wantTo('Создание записи: отклоняет счёт чужой компании');
         $I->sendAjaxPostRequest(\yii\helpers\Url::to(['/nostro-entry/create']), [
             'account_id' => $this->foreignAccount->id,
             'ls' => NostroEntry::LS_LEDGER,
@@ -108,6 +111,7 @@ class NostroEntryApiCest
      */
     public function updateRejectsAccountFromAnotherCompany(\FunctionalTester $I): void
     {
+        $I->wantTo('Обновление записи: отклоняет смену счёта на счёт чужой компании');
         $I->sendAjaxPostRequest(\yii\helpers\Url::to(['/nostro-entry/update']), [
             'id' => $this->ownEntry->id,
             'account_id' => $this->foreignAccount->id,

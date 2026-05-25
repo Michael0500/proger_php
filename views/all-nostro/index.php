@@ -25,7 +25,7 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
             </div>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-            <button class="toolbar-btn outline" @click="filtersOpen = !filtersOpen"
+            <button class="toolbar-btn outline" @click="toggleFiltersPanel"
                     :style="(filtersOpen || activeFilterCount() > 0) ? 'border-color:#6366f1;color:#6366f1' : ''">
                 <i class="fas fa-filter"></i>Фильтры
                 <span v-if="activeFilterCount() > 0"
@@ -36,6 +36,31 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
             <button v-if="activeFilterCount() > 0" class="toolbar-btn outline" @click="clearAllFilters"
                     style="border-color:#ef4444;color:#ef4444">
                 <i class="fas fa-times"></i>Сбросить фильтры
+            </button>
+            <button class="toolbar-btn outline" @click="showAddEntryModal()">
+                <i class="fas fa-plus"></i>Добавить запись
+            </button>
+            <button class="toolbar-btn outline" @click="loadMatchingRules(); _showModal('rulesListModal')">
+                <i class="fas fa-sliders-h"></i>Правила
+            </button>
+            <button class="toolbar-btn primary" :disabled="autoMatchRunning" @click="runAutoMatch()">
+                <i :class="autoMatchRunning ? 'fas fa-spinner fa-spin' : 'fas fa-magic'"></i>
+                <template v-if="autoMatchRunning && autoMatchProgress">
+                    Правило {{ autoMatchProgress.current_step }}/{{ autoMatchProgress.total_steps }}
+                    (пар: {{ autoMatchProgress.total_matched }})
+                </template>
+                <template v-else-if="autoMatchRunning">Запуск...</template>
+                <template v-else>Автоквитование</template>
+            </button>
+            <button class="toolbar-btn success"
+                    :disabled="!hasSelection || !matchValidity.ok"
+                    :title="!matchValidity.ok ? matchValidity.reason : ''"
+                    @click="matchSelected">
+                <i class="fas fa-link"></i>
+                Сквитовать{{ selectedIds.length > 0 ? ' (' + selectedIds.length + ')' : '' }}
+            </button>
+            <button class="toolbar-btn danger-soft" v-if="selectedIds.length > 0" @click="clearSelection">
+                <i class="fas fa-times"></i>Сбросить
             </button>
             <div style="position:relative">
                 <button class="toolbar-btn outline" @click="toggleColsDropdown" data-col-toggle
@@ -53,7 +78,103 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
         </div>
     </div>
 
-    <?= $this->render("//partials/_entries-filters", ["showMultiPoolFilter" => true, "showAccountFilter" => true, "poolSelectId" => "an-filter-pools", "accountSelectId" => "an-filter-account"]) ?>
+    <!-- ПРОГРЕСС АВТОКВИТОВАНИЯ -->
+    <div v-if="autoMatchProgress && autoMatchRunning" class="auto-match-progress-bar">
+        <div class="d-flex align-items-center justify-content-between mb-1">
+            <small class="text-muted">
+                <i class="fas fa-cog fa-spin me-1"></i>
+                <template v-if="autoMatchProgress.current_step < autoMatchProgress.total_steps">
+                    Обрабатывается правило {{ autoMatchProgress.current_step + 1 }} из {{ autoMatchProgress.total_steps }}:
+                    <b>{{ autoMatchProgress.rules[autoMatchProgress.current_step] ? autoMatchProgress.rules[autoMatchProgress.current_step].name : '' }}</b>
+                </template>
+                <template v-else>Завершение...</template>
+            </small>
+            <small class="fw-bold">Сквитовано пар: {{ autoMatchProgress.total_matched }}</small>
+        </div>
+        <div class="progress" style="height:6px">
+            <div class="progress-bar bg-primary progress-bar-striped progress-bar-animated"
+                 :style="{ width: (autoMatchProgress.total_steps > 0 ? (autoMatchProgress.current_step / autoMatchProgress.total_steps * 100) : 0) + '%' }">
+            </div>
+        </div>
+    </div>
+
+    <?= $this->render("//partials/_entries-filters", [
+        "showMultiPoolFilter" => true,
+        "showAccountFilter"   => true,
+        "poolSelectId"        => "an-filter-pools",
+        "accountSelectId"     => "an-filter-account",
+    ]) ?>
+
+    <!-- ПАНЕЛЬ ИТОГОВ -->
+    <div v-if="selectionSummary && selectedIds.length > 0" class="summary-bar"
+         :class="summaryBalanced ? 'balanced' : 'unbalanced'"
+         style="margin-bottom:14px">
+        <span class="summary-item">
+            <i class="fas fa-check-square" style="color:#6366f1"></i>
+            <strong>{{ selectedIds.length }}</strong> выбрано
+        </span>
+        <template v-if="userSection !== 'INV'">
+            <template v-if="selectionSummary.same_account">
+                <span class="summary-sep">|</span>
+                <span class="summary-item">
+                    <span class="mono" style="color:#ef4444">D:</span>
+                    <strong class="mono">{{ formatAmount(selectionSummary.sum_debit) }}</strong>
+                    <span style="font-size:10px;color:#9ca3af">({{ selectionSummary.cnt_debit }})</span>
+                </span>
+                <span class="summary-sep">|</span>
+                <span class="summary-item">
+                    <span class="mono" style="color:#10b981">C:</span>
+                    <strong class="mono">{{ formatAmount(selectionSummary.sum_credit) }}</strong>
+                    <span style="font-size:10px;color:#9ca3af">({{ selectionSummary.cnt_credit }})</span>
+                </span>
+                <span class="summary-sep">|</span>
+                <span class="summary-item">
+                    <span class="mono" style="color:#f59e0b">D-C:</span>
+                    <strong class="mono" :style="selectionSummary.diff_dc === 0 ? 'color:#059669' : 'color:#d97706'">
+                        {{ formatAmount(selectionSummary.diff_dc) }}
+                    </strong>
+                </span>
+            </template>
+            <template v-else>
+                <span class="summary-sep">|</span>
+                <span class="summary-item">
+                    <span class="mono" style="color:#6366f1">L:</span>
+                    <strong class="mono">{{ formatAmount(selectionSummary.sum_ledger) }}</strong>
+                    <span style="font-size:10px;color:#9ca3af">({{ selectionSummary.cnt_ledger }})</span>
+                </span>
+                <span class="summary-sep">|</span>
+                <span class="summary-item">
+                    <span class="mono" style="color:#0284c7">S:</span>
+                    <strong class="mono">{{ formatAmount(selectionSummary.sum_statement) }}</strong>
+                    <span style="font-size:10px;color:#9ca3af">({{ selectionSummary.cnt_statement }})</span>
+                </span>
+            </template>
+        </template>
+        <template v-else>
+            <span class="summary-sep">|</span>
+            <span class="summary-item">
+                <span class="mono" style="color:#ef4444">D:</span>
+                <strong class="mono">{{ formatAmount(selectionSummary.sum_debit) }}</strong>
+            </span>
+            <span class="summary-sep">|</span>
+            <span class="summary-item">
+                <span class="mono" style="color:#10b981">C:</span>
+                <strong class="mono">{{ formatAmount(selectionSummary.sum_credit) }}</strong>
+            </span>
+        </template>
+        <span class="summary-sep">|</span>
+        <span class="summary-item" :style="summaryBalanced ? 'color:#059669;font-weight:700' : 'color:#d97706;font-weight:700'">
+            <i :class="summaryBalanced ? 'fas fa-check-circle' : 'fas fa-exclamation-triangle'"></i>
+            Разница: <span style="font-family:monospace">{{ formatAmount(Math.abs(summaryDiff)) }}</span>
+            <span v-if="summaryBalanced" style="font-weight:500;margin-left:4px">— готово!</span>
+            <span v-else style="font-weight:500;margin-left:4px">— квитование недоступно</span>
+        </span>
+        <span v-if="!matchValidity.ok" class="summary-sep">|</span>
+        <span v-if="!matchValidity.ok" class="summary-item" style="color:#dc2626;font-weight:700">
+            <i class="fas fa-ban"></i>
+            {{ matchValidity.reason }}
+        </span>
+    </div>
 
     <!-- ══ ТАБЛИЦА ══════════════════════════════════════════════ -->
     <div class="table-card">
@@ -68,8 +189,15 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
             <table class="entries-table">
                 <thead>
                     <tr>
+                        <th style="width:36px;min-width:36px;padding-left:14px">
+                            <input type="checkbox"
+                                   style="width:14px;height:14px;cursor:pointer;accent-color:#6366f1"
+                                   :checked="allUnmatchedSelected"
+                                   :indeterminate.prop="someSelected"
+                                   @change="toggleSelectAll($event.target.checked)">
+                        </th>
                         <th v-show="tblColVisible('id')" class="th-sort th-resizable" @click="sortBy('id')"
-                            :style="{width: colByKey('id').width+'px', minWidth: colByKey('id').width+'px', paddingLeft:'14px'}">
+                            :style="{width: colByKey('id').width+'px', minWidth: colByKey('id').width+'px'}">
                             <span>ID</span> <i :class="sortIcon('id')"></i>
                             <div class="col-resize-handle" @mousedown.stop.prevent="startColResize($event, colByKey('id'))" @click.stop></div>
                         </th>
@@ -143,14 +271,24 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                             <span>Статус</span> <i :class="sortIcon('match_status')"></i>
                             <div class="col-resize-handle" @mousedown.stop.prevent="startColResize($event, colByKey('match_status'))" @click.stop></div>
                         </th>
-                        <th style="width:60px;min-width:60px;text-align:right;padding-right:14px">
+                        <th style="width:90px;min-width:90px;text-align:right;padding-right:14px">
                             <i class="fas fa-cog" style="opacity:.3"></i>
                         </th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="entry in entries" :key="entry.id">
-                        <td v-show="tblColVisible('id')" style="font-size:11px;color:#9ca3af;font-family:monospace;padding-left:14px">{{ entry.id }}</td>
+                    <tr v-for="entry in entries" :key="entry.id"
+                        :class="{'entry-selected':isSelected(entry.id),'entry-matched':!isSelected(entry.id)&&entry.match_status==='M'}">
+
+                        <td style="padding-left:14px">
+                            <input type="checkbox"
+                                   style="width:14px;height:14px;cursor:pointer;accent-color:#6366f1"
+                                   v-if="entry.match_status==='U'"
+                                   :checked="isSelected(entry.id)"
+                                   @change="toggleEntrySelection(entry.id)">
+                            <i v-else class="fas fa-lock" style="font-size:10px;color:#d1d5db" title="Сквитовано"></i>
+                        </td>
+                        <td v-show="tblColVisible('id')" style="font-size:11px;color:#9ca3af;font-family:monospace">{{ entry.id }}</td>
                         <td v-show="tblColVisible('account_id')">
                             <div style="font-size:12px;font-weight:600;color:#374151">{{ entry.account_name || '—' }}</div>
                             <div v-if="entry.pool_name" style="font-size:10px;color:#9ca3af">
@@ -159,7 +297,7 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                             </div>
                         </td>
                         <td v-show="tblColVisible('match_id')">
-                            <span v-if="entry.match_id" class="match-id-badge">
+                            <span v-if="entry.match_id" class="match-id-badge" @click="showMatchGroup(entry.match_id)" title="Посмотреть сквитованную пару">
                                 <i class="fas fa-link" style="font-size:8px"></i>{{ entry.match_id }}
                             </span>
                             <span v-else style="color:#d1d5db;font-size:11px">—</span>
@@ -191,20 +329,42 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                             </span>
                         </td>
                         <td style="text-align:right;padding-right:8px">
-                            <button class="row-btn info" @click="openEntryDetail(entry)" title="Подробнее">
-                                <i class="fas fa-eye"></i>
-                            </button>
+                            <div style="display:flex;gap:3px;justify-content:flex-end">
+                                <button class="row-btn info" @click="openEntryDetail(entry)" title="Подробнее">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="row-btn history" @click="showHistory(entry)" title="История изменений">
+                                    <i class="fas fa-history"></i>
+                                </button>
+                                <button v-if="entry.match_status!=='M'" class="row-btn edit" @click="editEntry(entry)" title="Редактировать">
+                                    <i class="fas fa-pen"></i>
+                                </button>
+                                <button class="row-btn unlink" v-if="entry.match_status==='M'"
+                                        @click="unmatchEntry(entry.match_id)" title="Расквитовать">
+                                    <i class="fas fa-unlink"></i>
+                                </button>
+                                <div v-if="entry.match_status!=='M'" class="row-actions-dropdown">
+                                    <button class="row-btn more" @click.stop="toggleRowMenu('entry', entry.id, $event)" title="Ещё">
+                                        <i class="fas fa-ellipsis-v"></i>
+                                    </button>
+                                    <div v-if="openRowMenu==='entry-'+entry.id" class="row-actions-menu" :style="rowMenuStyle">
+                                        <button class="row-actions-menu-item danger" @click.stop="deleteEntry(entry); openRowMenu=null">
+                                            <i class="fas fa-trash"></i> Удалить
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                         </td>
                     </tr>
                     <tr v-if="entriesLoadingMore">
-                        <td colspan="16" style="text-align:center;padding:16px">
+                        <td colspan="17" style="text-align:center;padding:16px">
                             <div class="spinner-border spinner-border-sm"
                                  style="color:#6366f1;width:18px;height:18px;border-width:2px"></div>
                             <span style="margin-left:8px;font-size:12px;color:#9ca3af">Загрузка...</span>
                         </td>
                     </tr>
                     <tr v-if="!hasMoreEntries && entries.length>0 && !entriesLoading">
-                        <td colspan="16" style="text-align:center;padding:12px;font-size:11px;color:#c4c9d6;border-top:1px solid #f4f5f8">
+                        <td colspan="17" style="text-align:center;padding:12px;font-size:11px;color:#c4c9d6;border-top:1px solid #f4f5f8">
                             <i class="fas fa-check-circle me-1"></i>
                             Все {{ entriesTotal.toLocaleString() }} {{ recordText(entriesTotal) }} загружены
                         </td>
@@ -215,405 +375,14 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
     </div>
 
     <?= $this->render("//partials/_entries-detail-modal") ?>
+    <?= $this->render("//partials/_matching-modals", ['showBankSelect' => true]) ?>
 
 </div>
 
 <script>
-(function () {
-    'use strict';
-
-    var INIT = <?= $initJson ?>;
-
-    var ROUTES = {
+    window.AllNostroInit = <?= $initJson ?>;
+    window.AllNostroRoutes = {
         list:           '<?= Url::to(['/all-nostro/list']) ?>',
-        searchAccounts: '<?= Url::to(['/all-nostro/search-accounts']) ?>',
-        prefGet:        '<?= Url::to(['/user-preference/get']) ?>',
-        prefSave:       '<?= Url::to(['/user-preference/save']) ?>'
+        searchAccounts: '<?= Url::to(['/all-nostro/search-accounts']) ?>'
     };
-
-    document.addEventListener('DOMContentLoaded', function () {
-        var csrfMeta = document.querySelector('meta[name="csrf-token"]');
-        if (csrfMeta && window.axios) {
-            axios.defaults.headers.common['X-CSRF-Token'] = csrfMeta.getAttribute('content');
-        }
-
-        new Vue({
-            el: '#all-nostro-app',
-
-            data: {
-                pools: INIT.pools || [],
-
-                entries: [],
-                entriesTotal: 0,
-                entriesPage: 1,
-                entriesLimit: 50,
-                entriesLoading: false,
-                entriesLoadingMore: false,
-
-                sortCol: 'id',
-                sortDir: 'desc',
-
-                filters: {},
-                filtersOpen: false,
-
-                detailEntry: null,
-
-                // ── Настройки колонок (синхронизируются со страницей выверки) ──
-                tableColumns: [
-                    { key: 'id',             label: 'ID',             visible: false, width: 60  },
-                    { key: 'account_id',     label: 'Счёт',           visible: false, width: 120 },
-                    { key: 'match_id',       label: 'Match ID',       visible: true,  width: 100 },
-                    { key: 'ls',             label: 'L/S',            visible: true,  width: 55  },
-                    { key: 'dc',             label: 'D/C',            visible: true,  width: 55  },
-                    { key: 'amount',         label: 'Сумма',          visible: true,  width: 110 },
-                    { key: 'currency',       label: 'Вал.',           visible: true,  width: 55  },
-                    { key: 'value_date',     label: 'Value Date',     visible: true,  width: 100 },
-                    { key: 'post_date',      label: 'Post Date',      visible: true,  width: 100 },
-                    { key: 'instruction_id', label: 'Instr.ID',       visible: true,  width: 100 },
-                    { key: 'end_to_end_id',  label: 'E2E ID',         visible: true,  width: 95  },
-                    { key: 'transaction_id', label: 'Txn ID',         visible: true,  width: 95  },
-                    { key: 'message_id',     label: 'Msg ID',         visible: true,  width: 95  },
-                    { key: 'comment',        label: 'Комментарий',    visible: true,  width: 130 },
-                    { key: 'match_status',   label: 'Статус',         visible: false, width: 95  }
-                ],
-                showColsDropdown: false,
-                _tableColumnsLoaded: false,
-                _colsSaveTimer: null,
-
-                _filterDebounceTimer: null,
-                _poolsSelect2Inited: false,
-                _accountSelect2Inited: false
-            },
-
-            computed: {
-                hasMoreEntries: function () {
-                    return this.entries.length < this.entriesTotal;
-                }
-            },
-
-            watch: {
-                tableColumns: {
-                    handler: function () { this.saveTableColumnsPrefs(); },
-                    deep: true
-                }
-            },
-
-            mounted: function () {
-                var self = this;
-                self.loadTableColumnsPrefs();
-                self.loadEntries(true);
-                self.$nextTick(function () {
-                    self.initPoolsSelect2();
-                    self.initAccountSelect2();
-                });
-
-                document.addEventListener('click', function (e) {
-                    if (!self.showColsDropdown) return;
-                    if (e.target.closest && (e.target.closest('.col-mgr-dropdown') || e.target.closest('[data-col-toggle]'))) return;
-                    self.showColsDropdown = false;
-                });
-                document.addEventListener('keydown', function (e) {
-                    if (e.key === 'Escape') {
-                        self.showColsDropdown = false;
-                        self.closeEntryDetail();
-                    }
-                });
-            },
-
-            methods: {
-                recordText: function (count) {
-                    var n = Math.abs(count) % 100;
-                    var n1 = n % 10;
-                    if (n > 10 && n < 20) return 'записей';
-                    if (n1 > 1 && n1 < 5) return 'записи';
-                    if (n1 === 1) return 'запись';
-                    return 'записей';
-                },
-
-                loadEntries: function (reset) {
-                    if (reset) {
-                        this.entries = [];
-                        this.entriesPage = 1;
-                    }
-                    var self = this;
-                    var isFirst = self.entriesPage === 1;
-                    if (isFirst) self.entriesLoading = true;
-                    else self.entriesLoadingMore = true;
-
-                    axios.get(ROUTES.list, {
-                        params: {
-                            page:    self.entriesPage,
-                            limit:   self.entriesLimit,
-                            sort:    self.sortCol,
-                            dir:     self.sortDir,
-                            filters: JSON.stringify(self.filters)
-                        }
-                    }).then(function (response) {
-                        var r = response.data;
-                        if (r && r.success) {
-                            self.entries = reset ? r.data : self.entries.concat(r.data);
-                            self.entriesTotal = r.total;
-                        }
-                    }).catch(function () { /* no-op */ })
-                    .then(function () {
-                        self.entriesLoading = false;
-                        self.entriesLoadingMore = false;
-                    });
-                },
-
-                loadMoreEntries: function () {
-                    if (this.entriesLoadingMore || !this.hasMoreEntries) return;
-                    this.entriesPage++;
-                    this.loadEntries(false);
-                },
-
-                onTableScroll: function (e) {
-                    var el = e.target;
-                    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 160) {
-                        this.loadMoreEntries();
-                    }
-                },
-
-                sortBy: function (col) {
-                    if (this.sortCol === col) {
-                        this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc';
-                    } else {
-                        this.sortCol = col;
-                        this.sortDir = 'asc';
-                    }
-                    this.loadEntries(true);
-                },
-                sortIcon: function (col) {
-                    if (this.sortCol !== col) return 'fas fa-sort';
-                    return this.sortDir === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down';
-                },
-
-                applyFilter: function (field, value) {
-                    var v = (value === null || value === undefined) ? '' : String(value).trim();
-                    if (v === '') {
-                        this.$delete(this.filters, field);
-                    } else {
-                        this.$set(this.filters, field, v);
-                    }
-                    this.loadEntries(true);
-                },
-                debouncedFilter: function (field, value) {
-                    var self = this;
-                    if (self._filterDebounceTimer) clearTimeout(self._filterDebounceTimer);
-                    self._filterDebounceTimer = setTimeout(function () {
-                        self.applyFilter(field, value);
-                    }, 400);
-                },
-                clearFilter: function (field) {
-                    this.$delete(this.filters, field);
-                    this.loadEntries(true);
-                },
-                clearAllFilters: function () {
-                    this.filters = {};
-                    var $p = $('#an-filter-pools');
-                    if ($p.length && $p.data('select2')) $p.val(null).trigger('change');
-                    var $a = $('#an-filter-account');
-                    if ($a.length && $a.data('select2')) $a.val(null).trigger('change');
-                    this.loadEntries(true);
-                },
-                activeFilterCount: function () {
-                    var self = this, cnt = 0;
-                    Object.keys(self.filters).forEach(function (k) {
-                        var v = self.filters[k];
-                        if (v === undefined || v === '' || v === null) return;
-                        if (Array.isArray(v) && v.length === 0) return;
-                        cnt++;
-                    });
-                    return cnt;
-                },
-
-                // ── Select2: мультивыбор ностро-банков ────────────────
-                initPoolsSelect2: function () {
-                    var self = this;
-                    var $el = $('#an-filter-pools');
-                    if (!$el.length || self._poolsSelect2Inited) return;
-                    self._poolsSelect2Inited = true;
-
-                    var data = self.pools.map(function (p) {
-                        return { id: String(p.id), text: p.name };
-                    });
-
-                    $el.select2({
-                        theme:       'bootstrap-5',
-                        placeholder: 'Все ностро-банки...',
-                        allowClear:  true,
-                        data:        data,
-                        language: {
-                            noResults: function () { return 'Нет ностро-банков'; }
-                        }
-                    });
-
-                    $el.on('change', function () {
-                        var vals = $el.val() || [];
-                        if (vals.length === 0) {
-                            self.$delete(self.filters, 'pool_ids');
-                        } else {
-                            self.$set(self.filters, 'pool_ids', vals.map(function (v) { return parseInt(v, 10); }));
-                        }
-                        // Сбросим выбранный счёт — список мог стать невалидным
-                        var $a = $('#an-filter-account');
-                        if ($a.length && $a.data('select2')) $a.val(null).trigger('change');
-                        self.$delete(self.filters, 'account_id');
-
-                        self.loadEntries(true);
-                    });
-                },
-
-                // ── Select2: счёт ─────────────────────────────────────
-                initAccountSelect2: function () {
-                    var self = this;
-                    var $el = $('#an-filter-account');
-                    if (!$el.length || self._accountSelect2Inited) return;
-                    self._accountSelect2Inited = true;
-
-                    $el.select2({
-                        theme:              'bootstrap-5',
-                        placeholder:        'Все счета...',
-                        allowClear:         true,
-                        minimumInputLength: 0,
-                        ajax: {
-                            url: ROUTES.searchAccounts,
-                            dataType: 'json',
-                            delay: 200,
-                            data: function (p) {
-                                var req = { q: p.term || '' };
-                                var poolIds = (self.filters.pool_ids || []);
-                                if (poolIds.length) {
-                                    req['pool_ids'] = poolIds;
-                                }
-                                return req;
-                            },
-                            processResults: function (d) { return d; },
-                            cache: false
-                        },
-                        templateResult: function (item) {
-                            if (item.loading) return item.text;
-                            var tag = item.currency
-                                ? '<span style="background:#e0e7ff;color:#4338ca;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:5px">' + item.currency + '</span>'
-                                : '';
-                            return $('<span>' + item.text + tag + '</span>');
-                        }
-                    });
-
-                    $el.on('select2:select', function (e) {
-                        self.applyFilter('account_id', e.params.data.id);
-                    });
-                    $el.on('select2:clear', function () {
-                        self.clearFilter('account_id');
-                    });
-                },
-
-                openEntryDetail: function (entry) {
-                    this.detailEntry = entry;
-                    document.body.style.overflow = 'hidden';
-                },
-                closeEntryDetail: function () {
-                    this.detailEntry = null;
-                    document.body.style.overflow = '';
-                },
-
-                // ── Управление колонками (общий ключ с выверкой) ────────
-                colByKey: function (key) {
-                    return this.tableColumns.find(function (c) { return c.key === key; }) || { width: 100 };
-                },
-                tblColVisible: function (key) {
-                    var col = this.tableColumns.find(function (c) { return c.key === key; });
-                    return col ? col.visible : true;
-                },
-                toggleColsDropdown: function () {
-                    this.showColsDropdown = !this.showColsDropdown;
-                },
-                startColResize: function (e, col) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    var startX = e.clientX;
-                    var startW = col.width || 100;
-
-                    var onMove = function (ev) {
-                        ev.preventDefault();
-                        col.width = Math.max(50, startW + (ev.clientX - startX));
-                    };
-                    var onUp = function () {
-                        document.removeEventListener('mousemove', onMove);
-                        document.removeEventListener('mouseup', onUp);
-                        document.body.style.userSelect = '';
-                        document.body.style.cursor = '';
-                        document.body.classList.remove('resizing-col');
-                    };
-                    document.body.style.userSelect = 'none';
-                    document.body.style.cursor = 'col-resize';
-                    document.body.classList.add('resizing-col');
-                    document.addEventListener('mousemove', onMove);
-                    document.addEventListener('mouseup', onUp);
-                },
-
-                loadTableColumnsPrefs: function () {
-                    var self = this;
-                    axios.get(ROUTES.prefGet, { params: { key: 'entries_table_columns' } })
-                        .then(function (response) {
-                            var r = response && response.data ? response.data : null;
-                            if (r && r.success && Array.isArray(r.value)) {
-                                var saved = {};
-                                r.value.forEach(function (c) {
-                                    if (c && typeof c.key === 'string') saved[c.key] = c;
-                                });
-                                self.tableColumns.forEach(function (col) {
-                                    var s = saved[col.key];
-                                    if (!s) return;
-                                    if (typeof s.visible === 'boolean') col.visible = s.visible;
-                                    if (typeof s.width === 'number' && s.width >= 40) col.width = s.width;
-                                });
-                            }
-                        })
-                        .catch(function () { /* no-op */ })
-                        .then(function () {
-                            self.$nextTick(function () { self._tableColumnsLoaded = true; });
-                        });
-                },
-
-                saveTableColumnsPrefs: function () {
-                    if (!this._tableColumnsLoaded) return;
-                    var self = this;
-                    if (self._colsSaveTimer) clearTimeout(self._colsSaveTimer);
-                    self._colsSaveTimer = setTimeout(function () {
-                        var payload = self.tableColumns.map(function (c) {
-                            return { key: c.key, visible: !!c.visible, width: c.width };
-                        });
-                        axios.post(ROUTES.prefSave, {
-                            key: 'entries_table_columns',
-                            value: payload
-                        });
-                    }, 600);
-                },
-
-                formatAmount: function (val) {
-                    if (val === null || val === undefined || val === '') return '—';
-                    var s = String(val).trim();
-                    var sign = '';
-                    if (s.charAt(0) === '-') {
-                        sign = '-';
-                        s = s.slice(1);
-                    }
-                    s = s.replace(/\s/g, '').replace(/,/g, '');
-                    if (!/^\d+(\.\d+)?$/.test(s)) return '—';
-                    var parts = s.split('.');
-                    var intPart = parts[0].replace(/^0+(?=\d)/, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-                    var decPart = ((parts[1] || '') + '00').slice(0, 2);
-                    return sign + intPart + '.' + decPart;
-                },
-                fmtDate: function (val) {
-                    if (!val) return '—';
-                    var parts = String(val).slice(0, 10).split('-');
-                    if (parts.length === 3) return parts[2] + '.' + parts[1] + '.' + parts[0];
-                    return val;
-                }
-            }
-        });
-    });
-}());
 </script>

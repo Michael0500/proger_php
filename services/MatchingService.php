@@ -61,6 +61,43 @@ class MatchingService
             return ['success' => false, 'message' => 'Часть записей недоступна или уже сквитована'];
         }
 
+        // Проверка единства валюты — нельзя квитовать записи в разных валютах
+        if (count($entries) > 1) {
+            $currencies = [];
+            foreach ($entries as $e) {
+                $currencies[strtoupper((string)$e->currency)] = true;
+            }
+            if (count($currencies) > 1) {
+                return [
+                    'success' => false,
+                    'message' => 'Нельзя квитовать записи в разных валютах: ' . implode(', ', array_keys($currencies)),
+                ];
+            }
+        }
+
+        // Проверка единства ностро-банка — нельзя квитовать записи из разных банков.
+        // Берём pool_id всех счетов, по которым относятся выбранные записи.
+        if (count($entries) > 1) {
+            $accountIds = [];
+            foreach ($entries as $e) {
+                $accountIds[(int)$e->account_id] = true;
+            }
+            $poolIds = Account::find()
+                ->select(['pool_id'])
+                ->where(['id' => array_keys($accountIds)])
+                ->distinct()
+                ->column();
+            $poolIds = array_values(array_unique(array_map(function ($v) {
+                return $v === null ? null : (int)$v;
+            }, $poolIds)));
+            if (count($poolIds) > 1 || in_array(null, $poolIds, true)) {
+                return [
+                    'success' => false,
+                    'message' => 'Нельзя квитовать записи из разных ностро-банков',
+                ];
+            }
+        }
+
         // Для 1 записи: разрешаем только если сумма = 0
         if (count($entries) === 1) {
             if (round((float) $entries[0]->amount, 2) !== 0.0) {

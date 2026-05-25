@@ -64,6 +64,7 @@ class AllNostroApiCest
      */
     public function listFiltersBySelectedNostroBanksInsideCurrentCompany(\FunctionalTester $I): void
     {
+        $I->wantTo('All-nostro list: фильтрует по выбранным ностро-банкам внутри текущей компании');
         $I->sendAjaxGetRequest(\yii\helpers\Url::to(['/all-nostro/list']), [
             'limit' => 10,
             'filters' => json_encode(['pool_ids' => [$this->poolA->id]], JSON_UNESCAPED_UNICODE),
@@ -83,6 +84,7 @@ class AllNostroApiCest
      */
     public function listIgnoresForeignPoolIds(\FunctionalTester $I): void
     {
+        $I->wantTo('All-nostro list: игнорирует pool_id чужой компании, возвращает 0 записей');
         $I->sendAjaxGetRequest(\yii\helpers\Url::to(['/all-nostro/list']), [
             'limit' => 10,
             'filters' => json_encode(['pool_ids' => [$this->foreignPool->id]], JSON_UNESCAPED_UNICODE),
@@ -101,6 +103,7 @@ class AllNostroApiCest
      */
     public function searchAccountsFiltersByPoolAndCompany(\FunctionalTester $I): void
     {
+        $I->wantTo('All-nostro search-accounts: фильтрует счета по pool_id и текущей компании');
         $I->sendAjaxGetRequest(\yii\helpers\Url::to(['/all-nostro/search-accounts']), [
             'q' => 'ACC',
             'pool_ids' => [$this->poolB->id],

@@ -38,6 +38,7 @@ class MatchingApiCest
      */
     public function manualMatchRejectsForeignEntryIds(\FunctionalTester $I): void
     {
+        $I->wantTo('Ручное квитование: отклонить выборку, где есть запись из чужой компании');
         $own = SmartMatchTestHelper::createEntry([
             'company_id' => $this->company->id,
             'account_id' => $this->account->id,
@@ -75,6 +76,7 @@ class MatchingApiCest
      */
     public function manualMatchMatchesCurrentCompanyPair(\FunctionalTester $I): void
     {
+        $I->wantTo('Ручное квитование: успешно квитует сбалансированную пару текущей компании');
         $ledger = SmartMatchTestHelper::createEntry([
             'company_id' => $this->company->id,
             'account_id' => $this->account->id,
@@ -113,6 +115,7 @@ class MatchingApiCest
      */
     public function unmatchDoesNotTouchForeignCompanyRowsWithSameMatchId(\FunctionalTester $I): void
     {
+        $I->wantTo('Расквитование: не трогает записи чужой компании с тем же match_id');
         $ownFirst = SmartMatchTestHelper::createEntry([
             'company_id' => $this->company->id,
             'account_id' => $this->account->id,
@@ -156,6 +159,7 @@ class MatchingApiCest
      */
     public function calcSummaryUsesOnlyCurrentCompanyRows(\FunctionalTester $I): void
     {
+        $I->wantTo('CalcSummary: суммирует только записи текущей компании');
         $own = SmartMatchTestHelper::createEntry([
             'company_id' => $this->company->id,
             'account_id' => $this->account->id,

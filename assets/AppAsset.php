@@ -50,8 +50,8 @@ class AppAsset extends AssetBundle
         'js/app/mixins/modals.js?v5',
         'js/app/mixins/categories.js?v2',
         'js/app/mixins/pools.js?v3',
-        'js/app/mixins/entries.js?v23',
-        'js/app/mixins/matching.js?v13',
+        'js/app/mixins/entries.js?v25',
+        'js/app/mixins/matching.js?v14',
         'js/app/mixins/balance.js?v7',
         'js/app/mixins/archive.js?v7',
         'js/app/mixins/state-persistence.js?v2',
@@ -60,6 +60,7 @@ class AppAsset extends AssetBundle
         'js/app/page-balance.js?v3',
         'js/app/page-bank-balance.js?v2',
         'js/app/page-archive.js?v4',
+        'js/app/page-all-nostro.js?v1',
     ];
 
     // POS_END чтобы скрипты грузились после DOM

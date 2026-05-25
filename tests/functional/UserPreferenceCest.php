@@ -33,6 +33,7 @@ class UserPreferenceCest
      */
     public function saveAndLoadAllowedPreference(\FunctionalTester $I): void
     {
+        $I->wantTo('UserPreference: сохраняет и читает значение по разрешённому ключу');
         $value = [
             ['key' => 'amount', 'visible' => true, 'width' => 120],
         ];
@@ -59,6 +60,7 @@ class UserPreferenceCest
      */
     public function rejectsUnknownPreferenceKey(\FunctionalTester $I): void
     {
+        $I->wantTo('UserPreference: отклоняет сохранение по неизвестному ключу');
         $I->sendAjaxPostRequest(\yii\helpers\Url::to(['/user-preference/save']), [
             'key' => 'unknown_key',
             'value' => ['x' => true],

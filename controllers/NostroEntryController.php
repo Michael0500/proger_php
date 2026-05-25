@@ -108,7 +108,13 @@ class NostroEntryController extends BaseController
 
         $sortExpr = ($sort === 'account_id') ? 'ne.account_id' : "ne.{$sort}";
         $rows = $q
-            ->select(['ne.*', 'a.name AS account_name', 'a.is_suspense AS account_is_suspense', 'ap.name AS pool_name'])
+            ->select([
+                'ne.*',
+                'a.name AS account_name',
+                'a.is_suspense AS account_is_suspense',
+                'a.pool_id AS pool_id',
+                'ap.name AS pool_name',
+            ])
             ->orderBy([$sortExpr => $dir])
             ->offset(($page - 1) * $limit)
             ->limit($limit)

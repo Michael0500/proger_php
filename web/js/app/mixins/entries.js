@@ -35,6 +35,7 @@ var EntriesMixin = {
             _filterSelect2Inited:     false,
             _filterPoolSelect2Inited: false,
             _entrySelect2Inited:      false,
+            _entryPoolSelect2Inited:  false,
 
             /**
              * Форма создания/редактирования NostroEntry.
@@ -46,9 +47,12 @@ var EntriesMixin = {
              * @property {string} dc Направление суммы: `Debit` или `Credit`.
              * @property {string} amount Сумма в формате decimal-строки.
              * @property {string} currency Код валюты.
+             * @property {?number} pool_id ID ностро-банка (заполняется только когда в форме есть селект банка — `/all-nostro`).
+             * @property {string} pool_name Имя выбранного банка для display в Select2.
              */
             editingEntry: {
                 id: null, account_id: null, account_name: '',
+                pool_id: null, pool_name: '',
                 ls: 'L', dc: 'Debit', amount: '', currency: '',
                 value_date: '', post_date: '',
                 instruction_id: '', end_to_end_id: '',
@@ -534,13 +538,17 @@ var EntriesMixin = {
                 minimumInputLength: 0,
                 ajax: {
                     url: function () {
-                        return window.AppRoutes.entrySearchAccounts +
-                            '?pool_id=' + (self.selectedPool ? self.selectedPool.id : 0);
+                        // На /all-nostro pool_id берётся из editingEntry.pool_id (выбран в модалке),
+                        // на /site/index — из selectedPool (выбран в сайдбаре).
+                        var poolId = self.editingEntry && self.editingEntry.pool_id
+                            ? self.editingEntry.pool_id
+                            : (self.selectedPool ? self.selectedPool.id : 0);
+                        return window.AppRoutes.entrySearchAccounts + '?pool_id=' + poolId;
                     },
                     dataType: 'json', delay: 200,
                     data:     function (p) { return { q: p.term || '' }; },
                     processResults: function (d) { return d; },
-                    cache: true
+                    cache: false
                 },
                 templateResult: function (item) {
                     if (item.loading) return item.text;
@@ -578,6 +586,71 @@ var EntriesMixin = {
         },
 
         /**
+         * Инициализирует Select2 выбора ностро-банка в форме записи.
+         *
+         * Виджет существует только на странице `/all-nostro` (там есть DOM-узел
+         * `#entry-pool-select2`). На странице выверки банк уже задан через
+         * `selectedPool` в сайдбаре, поэтому метод просто выходит, если
+         * виджета нет.
+         *
+         * Источник данных — массив `accountPools`, который страница загружает
+         * на старте (см. `loadAccountPools`). После выбора банка пересоздаётся
+         * Select2 счёта, чтобы поиск шёл по новому `pool_id`.
+         *
+         * @returns {void}
+         */
+        initEntryPoolSelect2: function () {
+            var self = this;
+            var $el = $('#entry-pool-select2');
+            if (!$el.length || self._entryPoolSelect2Inited) return;
+            self._entryPoolSelect2Inited = true;
+
+            if ($el.data('select2')) {
+                $el.off('select2:select select2:clear');
+                $el.select2('destroy');
+            }
+
+            var data = (self.accountPools || []).map(function (p) {
+                return { id: String(p.id), text: p.name };
+            });
+
+            $el.select2({
+                dropdownParent:     $('#entryModal'),
+                theme:              'bootstrap-5',
+                placeholder:        'Выберите ностро-банк...',
+                allowClear:         true,
+                minimumInputLength: 0,
+                data:               data,
+                language: { noResults: function () { return 'Нет ностро-банков'; } }
+            });
+
+            $el.on('select2:select', function (e) {
+                self.editingEntry.pool_id   = parseInt(e.params.data.id, 10);
+                self.editingEntry.pool_name = e.params.data.text;
+                // Счёт мог быть выбран от другого банка — сбрасываем
+                self.editingEntry.account_id   = null;
+                self.editingEntry.account_name = '';
+                var $acc = $('#entry-account-select2');
+                if ($acc.length && $acc.data('select2')) $acc.val(null).trigger('change');
+                // Пересоздаём Select2 счёта, чтобы AJAX подхватил новый pool_id
+                self._entrySelect2Inited = false;
+                self.initEntryAccountSelect2();
+            });
+            $el.on('select2:clear', function () {
+                self.editingEntry.pool_id   = null;
+                self.editingEntry.pool_name = '';
+                self.editingEntry.account_id   = null;
+                self.editingEntry.account_name = '';
+                var $acc = $('#entry-account-select2');
+                if ($acc.length && $acc.data('select2')) $acc.val(null).trigger('change');
+            });
+
+            if (!self.editingEntry.id && !self.editingEntry.pool_id) {
+                $el.val(null).trigger('change');
+            }
+        },
+
+        /**
          * Открывает модалку создания записи выверки.
          *
          * Сбрасывает `editingEntry`, Select2 счёта и привязывает обработчик
@@ -588,19 +661,26 @@ var EntriesMixin = {
         showAddEntryModal: function () {
             var self = this;
             self._entrySelect2Inited = false;
+            self._entryPoolSelect2Inited = false;
             self.entrySaving = false;
             self.editingEntry = {
                 id: null, account_id: null, account_name: '',
+                pool_id: null, pool_name: '',
                 ls: 'L', dc: 'Debit', amount: '', currency: '',
                 value_date: '', post_date: '',
                 instruction_id: '', end_to_end_id: '',
                 transaction_id: '', message_id: '', comment: ''
             };
+            var $pool = $('#entry-pool-select2');
+            if ($pool.length && $pool.data('select2')) $pool.val(null).trigger('change');
             var $el = $('#entry-account-select2');
             if ($el.length && $el.data('select2')) $el.val(null).trigger('change');
             self._bindEntryModalHidePrevented();
             self._showModal('entryModal');
-            setTimeout(function () { self.initEntryAccountSelect2(); }, 300);
+            setTimeout(function () {
+                self.initEntryPoolSelect2();
+                self.initEntryAccountSelect2();
+            }, 300);
         },
 
         /**
@@ -615,12 +695,28 @@ var EntriesMixin = {
         editEntry: function (entry) {
             var self = this;
             self._entrySelect2Inited = false;
+            self._entryPoolSelect2Inited = false;
             self.entrySaving = false;
             self.editingEntry = JSON.parse(JSON.stringify(entry));
+            // pool_id для редактирования: берём из entry.account_pool_id / entry.pool_id, если есть
+            if (!self.editingEntry.pool_id && entry.pool_id) {
+                self.editingEntry.pool_id = entry.pool_id;
+            }
+            if (!self.editingEntry.pool_name && entry.pool_name) {
+                self.editingEntry.pool_name = entry.pool_name;
+            }
             self._bindEntryModalHidePrevented();
             self._showModal('entryModal');
             setTimeout(function () {
+                self.initEntryPoolSelect2();
                 self.initEntryAccountSelect2();
+                // Подставляем уже выбранный банк в Select2
+                if (self.editingEntry.pool_id && self.editingEntry.pool_name) {
+                    var $p = $('#entry-pool-select2');
+                    if ($p.length && $p.data('select2')) {
+                        $p.val(String(self.editingEntry.pool_id)).trigger('change.select2');
+                    }
+                }
                 if (entry.account_id && entry.account_name) {
                     var $el = $('#entry-account-select2');
                     if ($el.length) {
@@ -696,6 +792,13 @@ var EntriesMixin = {
             var self = this;
             if (self.entrySaving) return;
 
+            // На /all-nostro форма требует явный выбор ностро-банка (Select2 в DOM).
+            var poolSelectExists = document.getElementById('entry-pool-select2') !== null;
+            if (poolSelectExists && !self.editingEntry.pool_id) {
+                Swal.fire({ icon: 'warning', title: 'Выберите ностро-банк', toast: true,
+                    position: 'top-end', timer: 2000, showConfirmButton: false });
+                return;
+            }
             if (!self.editingEntry.account_id) {
                 Swal.fire({ icon: 'warning', title: 'Выберите счёт', toast: true,
                     position: 'top-end', timer: 2000, showConfirmButton: false });
@@ -987,6 +1090,20 @@ var EntriesMixin = {
                 });
         },
 
+        /**
+         * Возвращает описание колонки таблицы по ключу.
+         *
+         * Используется шаблонами для доступа к ширине колонки без знания её
+         * индекса в массиве `tableColumns`. Если колонка не найдена — возвращает
+         * безопасный дефолт.
+         *
+         * @param {string} key Ключ колонки.
+         * @returns {{key:string,label:string,visible:boolean,width:number}} Описание колонки.
+         */
+        colByKey: function (key) {
+            var col = this.tableColumns.find(function (c) { return c.key === key; });
+            return col || { key: key, label: '', visible: true, width: 100 };
+        },
         /**
          * Проверяет видимость колонки таблицы выверки.
          *

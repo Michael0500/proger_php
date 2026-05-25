@@ -33,6 +33,7 @@ class CookieAuthCest
      */
     public function guestSeesLoginPage(\FunctionalTester $I): void
     {
+        $I->wantTo('Гость видит страницу логина');
         $I->amOnRoute('site/login');
         $I->see('Login', 'h1');
     }
@@ -44,6 +45,7 @@ class CookieAuthCest
      */
     public function protectedPageRedirectsGuest(\FunctionalTester $I): void
     {
+        $I->wantTo('Защищённая страница редиректит гостя на логин');
         $I->amOnRoute('nostro-balance/page');
         $I->see('Login', 'h1');
     }
@@ -55,6 +57,7 @@ class CookieAuthCest
      */
     public function internalLoginById(\FunctionalTester $I): void
     {
+        $I->wantTo('amLoggedInAs принимает ID пользователя и выполняет вход');
         $I->amLoggedInAs((int)$this->user->id);
         $I->amOnRoute('site/index');
         $I->see('admin');
@@ -67,6 +70,7 @@ class CookieAuthCest
      */
     public function internalLoginByInstance(\FunctionalTester $I): void
     {
+        $I->wantTo('amLoggedInAs принимает экземпляр User и выполняет вход');
         $I->amLoggedInAs($this->user);
         $I->amOnRoute('site/index');
         $I->see('Выверка');

@@ -298,6 +298,7 @@ class AlertTest extends \Codeception\Test\Unit
 
     /**
      * Проверяет сценарий: flash integrity.
+     * @testdox Проверяет сценарий: flash integrity.
      * @return void
      */
     public function testFlashIntegrity()

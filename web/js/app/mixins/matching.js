@@ -104,7 +104,51 @@ var MatchingMixin = {
          *
          * @returns {boolean|null} `true`, если разница равна нулю.
          */
-        summaryBalanced: function () { return this.selectionSummary && this.summaryDiff === 0; }
+        summaryBalanced: function () { return this.selectionSummary && this.summaryDiff === 0; },
+
+        /**
+         * Проверяет, можно ли сквитовать выбранный набор записей.
+         *
+         * Используется на странице "Выверка по всем ностро-банкам", где в
+         * выборе могут оказаться записи из разных банков и валют. Возвращает
+         * объект `{ok, reason}`; на главной странице выверки записи всегда
+         * принадлежат одному выбранному пулу, поэтому проверка тривиально
+         * проходит.
+         *
+         * @returns {{ok: boolean, reason: string}} Признак валидности и причина блокировки.
+         */
+        matchValidity: function () {
+            var ids = this.selectedIds || [];
+            if (!ids.length) return { ok: true, reason: '' };
+
+            var entries = (this.entries || []).filter(function (e) {
+                return ids.indexOf(e.id) !== -1;
+            });
+            if (!entries.length) return { ok: true, reason: '' };
+
+            var currencies = {};
+            var pools      = {};
+            var poolUnknown = false;
+            entries.forEach(function (e) {
+                currencies[String(e.currency || '').toUpperCase()] = true;
+                var pid = (e.pool_id !== undefined && e.pool_id !== null && e.pool_id !== '')
+                    ? String(e.pool_id)
+                    : null;
+                if (pid === null) poolUnknown = true;
+                else pools[pid] = true;
+            });
+
+            if (Object.keys(currencies).length > 1) {
+                return {
+                    ok: false,
+                    reason: 'Нельзя квитовать записи в разных валютах (' + Object.keys(currencies).join(', ') + ')'
+                };
+            }
+            if (Object.keys(pools).length > 1 || (poolUnknown && Object.keys(pools).length > 0)) {
+                return { ok: false, reason: 'Нельзя квитовать записи из разных ностро-банков' };
+            }
+            return { ok: true, reason: '' };
+        }
     },
 
     methods: {
@@ -196,6 +240,19 @@ var MatchingMixin = {
                     : 'Выберите минимум 2 записи';
                 Swal.fire({ icon: 'warning', title: minMsg, toast: true,
                     position: 'top-end', timer: 2500, showConfirmButton: false });
+                return;
+            }
+            // На /all-nostro в выборе могут оказаться записи разных банков/валют —
+            // показываем пользователю причину блокировки.
+            var v = self.matchValidity;
+            if (v && !v.ok) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Квитование невозможно',
+                    text: v.reason,
+                    confirmButtonText: 'Понятно',
+                    confirmButtonColor: '#6366f1'
+                });
                 return;
             }
             if (self.summaryDiff !== 0) {
@@ -354,16 +411,34 @@ var MatchingMixin = {
          */
         runAutoMatch: function () {
             var self = this;
-            if (!self.selectedPool) return;
 
-            var poolId   = self.selectedPool.id;
-            var poolName = self.selectedPool.name;
-
-            self.autoMatchScope = {
-                type:     'pool',
-                poolId:   poolId,
-                poolName: poolName,
-            };
+            if (self.selectedPool) {
+                // Главная страница выверки: дефолт — текущий пул из сайдбара.
+                self.autoMatchScope = {
+                    type:     'pool',
+                    poolId:   self.selectedPool.id,
+                    poolName: self.selectedPool.name,
+                };
+            } else {
+                // /all-nostro: сайдбара нет. Если в фильтре выбран один банк —
+                // предлагаем его, иначе — `all` без привязки к конкретному пулу.
+                var poolIds = (self.filters && Array.isArray(self.filters.pool_ids))
+                    ? self.filters.pool_ids
+                    : [];
+                if (poolIds.length === 1) {
+                    var pid = parseInt(poolIds[0], 10);
+                    var pool = (self.accountPools || self.pools || []).find(function (p) {
+                        return parseInt(p.id, 10) === pid;
+                    });
+                    self.autoMatchScope = {
+                        type:     'pool',
+                        poolId:   pid,
+                        poolName: pool ? pool.name : '',
+                    };
+                } else {
+                    self.autoMatchScope = { type: 'all', poolId: null, poolName: '' };
+                }
+            }
 
             self._showModal('autoMatchScopeModal');
         },

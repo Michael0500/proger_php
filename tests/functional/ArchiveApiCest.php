@@ -37,6 +37,7 @@ class ArchiveApiCest
      */
     public function runBatchMovesMatchedEntriesToArchiveAndWritesAudit(\FunctionalTester $I): void
     {
+        $I->wantTo('Архивация: batch переносит сквитованные записи в архив и пишет аудит');
         SmartMatchTestHelper::createArchiveSettings((int)$this->company->id, ['archive_after_days' => 1]);
         SmartMatchTestHelper::createEntry([
             'company_id' => $this->company->id,
@@ -77,6 +78,7 @@ class ArchiveApiCest
      */
     public function restorePreviewAndRestoreWorkForWholeMatchGroup(\FunctionalTester $I): void
     {
+        $I->wantTo('Восстановление из архива: preview и restore работают для всей match-группы');
         $first = SmartMatchTestHelper::createArchivedEntry([
             'company_id' => $this->company->id,
             'account_id' => $this->account->id,

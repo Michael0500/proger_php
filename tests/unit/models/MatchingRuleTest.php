@@ -33,6 +33,7 @@ class MatchingRuleTest extends \Codeception\Test\Unit
 
     /**
      * Проверяет сценарий: empty conditions summary uses dash.
+     * @testdox Проверяет сценарий: empty conditions summary uses dash
      * @return void
      */
     public function testEmptyConditionsSummaryUsesDash(): void

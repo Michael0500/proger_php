@@ -14,7 +14,11 @@
       "Bash(node -c web/js/app/page-balance.js)",
       "Bash(node -c web/js/app/page-archive.js)",
       "Bash(node --check C:/OSPanelNew/home/smartmatch/web/js/app/page-bank-balance.js)",
-      "Bash(node --check C:/OSPanelNew/home/smartmatch/web/js/app/mixins/balance.js)"
+      "Bash(node --check C:/OSPanelNew/home/smartmatch/web/js/app/mixins/balance.js)",
+      "Bash(node -c /c/OSPanelNew/home/smartmatch/web/js/app/page-all-nostro.js)",
+      "Bash(node -c /c/OSPanelNew/home/smartmatch/web/js/app/mixins/matching.js)",
+      "Bash(node -c /c/OSPanelNew/home/smartmatch/web/js/app/mixins/entries.js)",
+      "Bash(vendor/bin/codecept run *)"
     ]
   }
 }

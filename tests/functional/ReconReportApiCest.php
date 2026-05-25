@@ -47,6 +47,7 @@ class ReconReportApiCest
      */
     public function generateBuildsPoolReportFromBalancesAndOutstandingItems(\FunctionalTester $I): void
     {
+        $I->wantTo('Раккорд: формирует отчёт по ностро-банку из балансов и outstanding items');
         SmartMatchTestHelper::createBalance([
             'company_id' => $this->company->id,
             'account_id' => $this->ledgerAccount->id,
