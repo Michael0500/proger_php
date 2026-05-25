@@ -26,6 +26,7 @@ class m260522_120001_create_ph_tds_stmt_dtl_table extends Migration
             'txn_type' => $this->string(10)->comment('Transaction type code'),
             'instr_id' => $this->string(35)->comment('Owner reference (MT950 ref_owner / CAMT InstrId)'),
             'tx_id' => $this->string(35),
+            'msg_id' => $this->string(35),
             'end_to_end_id' => $this->string(35)->comment('Bank reference (MT950 ref_bank / CAMT end_to_end_id)'),
             'ref_edno' => $this->decimal(),
             'ref_eddate' => $this->date(),
