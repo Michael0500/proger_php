@@ -3,6 +3,8 @@
 /** @var bool $showPoolFilter Показывать ли Select2-фильтр ностро-банка (только для страницы "Баланс по всем ностро-банкам") */
 /** @var bool $showSidebarTitle Использовать ли заголовок-имя выбранного ностро-банка из сайдбара */
 /** @var string $currencySelectId id <select multiple> для мультивыбора валют в фильтрах */
+use yii\helpers\Url;
+
 $showPoolFilter   = $showPoolFilter   ?? true;
 $showSidebarTitle = $showSidebarTitle ?? false;
 $currencySelectId = $currencySelectId ?? 'balance-filter-currency-select2';
@@ -42,6 +44,9 @@ $currencySelectId = $currencySelectId ?? 'balance-filter-currency-select2';
                 <button class="toolbar-btn outline" @click="resetBalanceFilters()">
                     <i class="fas fa-times"></i>Сбросить
                 </button>
+                <a class="toolbar-btn outline" href="<?= Url::to(['/balance-archive']) ?>">
+                    <i class="fas fa-archive"></i>Архив
+                </a>
                 <button class="toolbar-btn success" @click="openCreateBalanceModal">
                     <i class="fas fa-plus"></i>Добавить
                 </button>

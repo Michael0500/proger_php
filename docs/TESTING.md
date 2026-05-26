@@ -116,6 +116,7 @@ vendor/bin/codecept run --coverage --coverage-html
 |---|---|
 | `tests/functional/AllNostroApiCest.php` | `/all-nostro/list` и `/all-nostro/search-accounts`: фильтр по выбранным ностро-банкам, игнорирование чужих pool ID, поиск счетов только внутри компании. |
 | `tests/functional/ArchiveApiCest.php` | `/archive/run-batch`, `/archive/restore-preview`, `/archive/restore`: batch-архивирование, аудит archive, восстановление всей группы по `match_id`, аудит restore. |
+| `tests/functional/BalanceArchiveApiCest.php` | `/balance-archive/run-batch`, `/balance-archive/restore`: batch-архивирование старых балансов, аудит archive/restore, восстановление активной строки. |
 | `tests/functional/CookieAuthCest.php` | Страница логина, редирект гостя с защищённой страницы и внутренний cookie/session login helper. |
 | `tests/functional/MatchingApiCest.php` | `/matching/match-manual`, `/matching/unmatch`, `/matching/calc-summary`: scoped-квитование текущей компании, отказ при чужих ID, защита от расквитования чужих строк с тем же `match_id`, summary без утечки чужих данных. |
 | `tests/functional/NostroEntryApiCest.php` | `/nostro-entry/list`, `/nostro-entry/create`, `/nostro-entry/update`: `company_id` scope, нормализация суммы, upper-case валюты, запрет создания/переноса записи на счёт другой компании. |

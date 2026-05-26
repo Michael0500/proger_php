@@ -88,6 +88,9 @@ $config = [
                 'archive'          => 'archive/page',
                 'archive/<action>' => 'archive/<action>',
 
+                'balance-archive'          => 'balance-archive/page',
+                'balance-archive/<action>' => 'balance-archive/<action>',
+
                 // ── Справочники (валюты, страны) ─────────────────
                 'references'             => 'reference/index',
                 'reference/<action>'     => 'reference/<action>',

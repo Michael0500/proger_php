@@ -41,6 +41,7 @@ $isAllNostroPage    = ($currentRoute === 'all-nostro/index');
 $isAllBalancePage   = ($currentRoute === 'nostro-balance/page');
 $isBalancePage      = $isBankBalancePage || $isAllBalancePage;
 $isArchivePage      = ($currentRoute === 'archive/page');
+$isBalanceArchivePage = ($currentRoute === 'balance-archive/page');
 $isReferencePage    = ($currentRoute === 'reference/index');
 
 $hasOwnSidebar = $isEntriesPage || $isBankBalancePage;
@@ -112,6 +113,12 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
                         'encode' => false,
                         'url'    => ['/archive'],
                         'active' => $isArchivePage,
+                ];
+                $menuItems[] = [
+                        'label'  => '<i class="fas fa-archive me-1"></i>Архив балансов',
+                        'encode' => false,
+                        'url'    => ['/balance-archive'],
+                        'active' => $isBalanceArchivePage,
                 ];
                 $menuItems[] = [
                         'label'   => '<i class="fas fa-file-alt me-1"></i>Раккорд',
@@ -193,7 +200,7 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
 
     <?php elseif ($showApp): ?>
         <!-- ── Любая другая страница залогиненного пользователя ── -->
-        <?php $isWidePage = $isAllBalancePage || $isArchivePage || $isAllNostroPage; ?>
+        <?php $isWidePage = $isAllBalancePage || $isArchivePage || $isBalanceArchivePage || $isAllNostroPage; ?>
         <main style="margin-top:52px; padding:24px 28px">
             <div class="container-fluid" style="<?= $isWidePage ? 'max-width:100%' : 'max-width:1400px' ?>">
                 <?= Alert::widget() ?>

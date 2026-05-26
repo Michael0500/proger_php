@@ -84,6 +84,18 @@ try {
         archiveAccounts:     '<?= Url::to(['/archive/accounts']) ?>',
         archiveHistory:      '<?= Url::to(['/archive/history']) ?>',
 
+        // ── Архив балансов ───────────────────────────────────────
+        balanceArchiveList:         '<?= Url::to(['/balance-archive/list']) ?>',
+        balanceArchiveCount:        '<?= Url::to(['/balance-archive/count']) ?>',
+        balanceArchiveRunBatch:     '<?= Url::to(['/balance-archive/run-batch']) ?>',
+        balanceArchiveRestore:      '<?= Url::to(['/balance-archive/restore']) ?>',
+        balanceArchivePurgeExpired: '<?= Url::to(['/balance-archive/purge-expired']) ?>',
+        balanceArchiveSettings:     '<?= Url::to(['/balance-archive/settings']) ?>',
+        balanceArchiveSaveSettings: '<?= Url::to(['/balance-archive/save-settings']) ?>',
+        balanceArchiveStats:        '<?= Url::to(['/balance-archive/stats']) ?>',
+        balanceArchiveAccounts:     '<?= Url::to(['/balance-archive/accounts']) ?>',
+        balanceArchiveHistory:      '<?= Url::to(['/balance-archive/history']) ?>',
+
         // ── Пользовательские настройки UI ─────────────────────────
         userPreferenceGet:  '<?= Url::to(['/user-preference/get']) ?>',
         userPreferenceSave: '<?= Url::to(['/user-preference/save']) ?>',

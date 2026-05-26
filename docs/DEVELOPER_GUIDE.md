@@ -201,6 +201,7 @@ Pretty routes описаны в `config/web.php`.
 | `/nostro-banks` | Ностро-банки. |
 | `/balance` | Балансы. |
 | `/archive` | Архив. |
+| `/balance-archive` | Архив балансов. |
 | `/references` | Валюты и страны. |
 | `/recon-report` | Раккорд. |
 
@@ -210,6 +211,7 @@ API-группы:
 - `/matching/<action>`;
 - `/nostro-balance/<action>`;
 - `/archive/<action>`;
+- `/balance-archive/<action>`;
 - `/account-pool/<action>`;
 - `/reference/<action>`;
 - `/user-preference/<action>`.
@@ -228,6 +230,7 @@ API-группы:
 | `AccountPool` | `account_pools` | Ностро-банки. |
 | `Category` | `categories` | Категории сайдбара. |
 | `NostroBalance` | `nostro_balance` | Балансы по счетам и датам. |
+| `NostroBalanceArchive` | `nostro_balance_archive` | Архив балансов. |
 | `NostroEntryAudit` | `nostro_entry_audit` | Аудит записей выверки. |
 | `NostroEntryArchive` | `nostro_entries_archive` | Архив сквитованных записей. |
 | `ArchiveSettings` | `archive_settings` | Настройки архивации. |
@@ -385,6 +388,16 @@ Frontend: `web/js/app/page-archive.js` и `web/js/app/mixins/archive.js`.
 
 Восстановление выполняется группой по `match_id`. При восстановлении сохраняется исходный `matched_at`.
 
+### 10.1. Архив балансов
+
+Страница: `views/balance-archive/page.php`.
+
+Frontend: `web/js/app/page-balance-archive.js` и `web/js/app/mixins/balance-archive.js`.
+
+Архивация выполняется порциями через `/balance-archive/run-batch`. Кандидаты: строки `nostro_balance` текущей компании со статусом `normal` или `confirmed`, у которых `value_date` старше `archive_settings.archive_after_days`. Строки со статусом `error` автоматически не архивируются.
+
+Восстановление выполняется по одной строке через `/balance-archive/restore`. Аудит балансов не имеет FK на активную таблицу, чтобы история сохранялась после переноса в архив; события архивации и восстановления пишутся как `archive` и `restore` с `archived_id`.
+
 При изменении архива проверяйте:
 
 - перенос активных строк в архив;
@@ -481,7 +494,8 @@ Frontend использует несколько изолированных Vue-
 
 - `entries_table_columns`;
 - `balance_table_columns`;
-- `archive_table_columns`.
+- `archive_table_columns`;
+- `balance_archive_table_columns`.
 
 При добавлении нового ключа:
 

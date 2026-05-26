@@ -33,6 +33,7 @@ class UserPreferenceController extends BaseController
         UserPreference::KEY_ENTRIES_TABLE_COLUMNS,
         UserPreference::KEY_BALANCE_TABLE_COLUMNS,
         UserPreference::KEY_ARCHIVE_TABLE_COLUMNS,
+        UserPreference::KEY_BALANCE_ARCHIVE_TABLE_COLUMNS,
     ];
 
     /**

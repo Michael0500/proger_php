@@ -21,6 +21,7 @@ class UserPreference extends ActiveRecord
     const KEY_ENTRIES_TABLE_COLUMNS = 'entries_table_columns';
     const KEY_BALANCE_TABLE_COLUMNS = 'balance_table_columns';
     const KEY_ARCHIVE_TABLE_COLUMNS = 'archive_table_columns';
+    const KEY_BALANCE_ARCHIVE_TABLE_COLUMNS = 'balance_archive_table_columns';
 
     /**
      * Возвращает имя таблицы пользовательских настроек.

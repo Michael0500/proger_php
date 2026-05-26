@@ -7,6 +7,7 @@ use app\models\Category;
 use app\models\Company;
 use app\models\MatchingRule;
 use app\models\NostroBalance;
+use app\models\NostroBalanceArchive;
 use app\models\NostroEntry;
 use app\models\NostroEntryArchive;
 use app\models\User;
@@ -31,6 +32,7 @@ final class SmartMatchTestHelper
             'nostro_entries_archive',
             'nostro_entries',
             'nostro_balance_audit',
+            'nostro_balance_archive',
             'nostro_balance',
             'archive_settings',
             'matching_rules',
@@ -314,6 +316,40 @@ final class SmartMatchTestHelper
             'source' => 'TEST',
             'match_status' => NostroEntryArchive::STATUS_ARCHIVED,
             'matched_at' => '2026-01-11 10:00:00',
+            'archived_at' => '2026-01-12 10:00:00',
+            'expires_at' => '2031-01-12 10:00:00',
+            'archived_by' => null,
+            'original_created_at' => '2026-01-10 10:00:00',
+            'original_updated_at' => '2026-01-11 10:00:00',
+        ], $attributes));
+        $archive->save(false);
+        return $archive;
+    }
+
+    /**
+     * Выполняет тестовый сценарий: create archived balance.
+     *
+     * @return void
+     */
+    public static function createArchivedBalance(array $attributes = []): NostroBalanceArchive
+    {
+        $archive = new NostroBalanceArchive(array_merge([
+            'original_id' => 1,
+            'company_id' => null,
+            'account_id' => null,
+            'ls_type' => NostroBalance::LS_LEDGER,
+            'statement_number' => null,
+            'currency' => 'RUB',
+            'value_date' => '2026-01-10',
+            'opening_balance' => '0.00',
+            'opening_dc' => NostroBalance::DC_CREDIT,
+            'closing_balance' => '100.00',
+            'closing_dc' => NostroBalance::DC_CREDIT,
+            'section' => NostroBalance::SECTION_NRE,
+            'source' => NostroBalance::SOURCE_MANUAL,
+            'status' => NostroBalance::STATUS_NORMAL,
+            'comment' => null,
+            'branch_code' => null,
             'archived_at' => '2026-01-12 10:00:00',
             'expires_at' => '2031-01-12 10:00:00',
             'archived_by' => null,

@@ -10,10 +10,11 @@ use yii\db\ActiveRecord;
  * @property int         $id
  * @property int         $balance_id
  * @property int         $user_id
- * @property string      $action       confirm|edit|import
+ * @property string      $action       confirm|edit|import|archive|restore
  * @property string|null $old_values   JSON
  * @property string|null $new_values   JSON
  * @property string|null $reason
+ * @property int|null    $archived_id
  * @property string      $created_at
  *
  * @property NostroBalance $balance
@@ -23,6 +24,8 @@ class NostroBalanceAudit extends ActiveRecord
     const ACTION_CONFIRM = 'confirm';
     const ACTION_EDIT    = 'edit';
     const ACTION_IMPORT  = 'import';
+    const ACTION_ARCHIVE = 'archive';
+    const ACTION_RESTORE = 'restore';
 
     /**
      * Возвращает имя таблицы аудита балансов.
@@ -46,7 +49,7 @@ class NostroBalanceAudit extends ActiveRecord
     {
         return [
             [['balance_id', 'user_id', 'action'], 'required'],
-            [['balance_id', 'user_id'], 'integer'],
+            [['balance_id', 'user_id', 'archived_id'], 'integer'],
             [['action'], 'string', 'max' => 20],
             [['reason'], 'string', 'max' => 255],
             [['old_values', 'new_values'], 'string'],
@@ -71,10 +74,11 @@ class NostroBalanceAudit extends ActiveRecord
      * Переданные массивы кодируются в JSON без дополнительной нормализации.
      *
      * @param int $balanceId ID балансовой записи.
-     * @param string $action Действие `confirm`, `edit` или `import`.
+     * @param string $action Действие `confirm`, `edit`, `import`, `archive` или `restore`.
      * @param array|null $oldValues Старые значения баланса.
      * @param array|null $newValues Новые значения баланса.
      * @param string|null $reason Комментарий или причина события.
+     * @param int|null $archivedId ID архивной записи для archive/restore.
      * @return void
      */
     public static function log(
@@ -82,7 +86,8 @@ class NostroBalanceAudit extends ActiveRecord
         string $action,
         ?array $oldValues = null,
         ?array $newValues = null,
-        ?string $reason = null
+        ?string $reason = null,
+        ?int $archivedId = null
     ): void {
         $log             = new self();
         $log->balance_id = $balanceId;
@@ -91,6 +96,7 @@ class NostroBalanceAudit extends ActiveRecord
         $log->old_values = $oldValues ? json_encode($oldValues, JSON_UNESCAPED_UNICODE) : null;
         $log->new_values = $newValues ? json_encode($newValues, JSON_UNESCAPED_UNICODE) : null;
         $log->reason     = $reason;
+        $log->archived_id = $archivedId;
         $log->save(false);
     }
 
@@ -108,6 +114,7 @@ class NostroBalanceAudit extends ActiveRecord
             'old_values' => $this->old_values ? json_decode($this->old_values, true) : null,
             'new_values' => $this->new_values ? json_decode($this->new_values, true) : null,
             'reason'     => $this->reason,
+            'archived_id'=> $this->archived_id,
             'created_at' => $this->created_at,
         ];
     }
