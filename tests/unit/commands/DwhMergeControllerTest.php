@@ -50,8 +50,8 @@ class DwhMergeControllerTest extends \Codeception\Test\Unit
             'cbaccount' => 'SUSP-001',
             'amount' => '1.999999',
             'dc_indicator' => 'D',
-            'saldo_in_amt' => '1000.129999',
-            'saldo_out_amt' => '1200.456789',
+            'saldo_in_amt' => '7777.770000',
+            'saldo_out_amt' => '8888.880000',
             'originaltran_ref' => 'ORIG-1002',
             'narrative' => 'second',
         ]);
@@ -107,6 +107,7 @@ class DwhMergeControllerTest extends \Codeception\Test\Unit
         $this->assertSame('1200.45', $balances[0]['closing_balance']);
         $this->assertSame('D', $balances[0]['opening_dc']);
         $this->assertSame('D', $balances[0]['closing_dc']);
+        $this->assertNotContains('7777.77', array_column($balances, 'opening_balance'));
 
         $notMerged = (int)Yii::$app->db->createCommand(
             "SELECT COUNT(*) FROM {{%suspend_posting}} WHERE is_merged = FALSE"

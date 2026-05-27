@@ -105,7 +105,7 @@ class DwhMergeController extends Controller
                     $this->stdout("│  Нет строк suspend_posting для обработки.\n", Console::FG_GREY);
                 }
 
-                $allOk = $summary['skipped_rows'] === 0 && $summary['skipped_balances'] === 0;
+                $allOk = $summary['skipped_rows'] === 0;
                 if ($allOk) {
                     $db->createCommand()
                         ->update('{{%tds_status}}', ['is_merged' => true], ['id' => $statusId])
@@ -121,9 +121,6 @@ class DwhMergeController extends Controller
                 }
                 if ($summary['duplicate_posting_ids'] > 0) {
                     $this->stdout(", дублей posting_id: {$summary['duplicate_posting_ids']}", Console::FG_YELLOW);
-                }
-                if ($summary['skipped_balances'] > 0) {
-                    $this->stdout(", конфликтов баланса: {$summary['skipped_balances']}", Console::FG_YELLOW);
                 }
                 $this->stdout("\n");
 
@@ -151,9 +148,6 @@ class DwhMergeController extends Controller
         }
         if ($total['duplicate_posting_ids'] > 0) {
             $this->stdout(", дублей posting_id {$total['duplicate_posting_ids']}", Console::FG_YELLOW);
-        }
-        if ($total['skipped_balances'] > 0) {
-            $this->stdout(", конфликтов баланса {$total['skipped_balances']}", Console::FG_YELLOW);
         }
         if ($errors > 0) {
             $this->stdout(", ошибок {$errors}", Console::FG_RED);
@@ -218,7 +212,6 @@ class DwhMergeController extends Controller
             'entries' => 0,
             'balances' => 0,
             'duplicate_posting_ids' => 0,
-            'skipped_balances' => 0,
         ];
     }
 
@@ -378,10 +371,9 @@ class DwhMergeController extends Controller
             }
 
             if (isset($plannedTargetKeys[$targetKey])) {
-                $this->progress(
-                    "Пропуск группы баланса cbaccount='{$row['cbaccount']}', valuedate='{$row['valuedate']}': конфликт уникального ключа"
-                );
-                $summary['skipped_balances']++;
+                foreach ($group['source_ids'] as $sourceId) {
+                    $handledIds[$sourceId] = true;
+                }
                 continue;
             }
             $plannedTargetKeys[$targetKey] = true;
