@@ -27,6 +27,7 @@ final class SmartMatchTestHelper
     {
         $db = Yii::$app->db;
         $tables = [
+            'tds_status',
             'suspend_posting',
             'user_preferences',
             'nostro_entry_audit',

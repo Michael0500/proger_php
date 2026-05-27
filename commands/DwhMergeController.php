@@ -12,6 +12,17 @@ use yii\helpers\Console;
 /**
  * Переносит проводки DWH из suspend_posting в INV-балансы и записи выверки.
  *
+ * Алгоритм:
+ *   1. В tds_status ищем type = 'DWH' и is_merged = false.
+ *   2. Для каждой такой записи открываем транзакцию.
+ *   3. Из suspend_posting выбираем строки с is_merged = false.
+ *      - сгруппированные остатки → nostro_balance (section=INV, ls_type=L);
+ *      - строки с amount → nostro_entries (ls=L).
+ *   4. Успешно обработанные строки suspend_posting помечаются is_merged=true
+ *      или удаляются при --delete-source.
+ *   5. Если пропусков нет — tds_status.is_merged := true.
+ *   6. Commit.
+ *
  * Использование:
  *   php yii dwh-merge/run
  *   php yii dwh-merge/run --delete-source
@@ -62,37 +73,94 @@ class DwhMergeController extends Controller
         $mode = $this->deleteSource ? ' [delete-source]' : '';
         $this->stdout("=== DWH merge: " . date('Y-m-d H:i:s') . $mode . " ===\n", Console::BOLD);
 
-        try {
-            $summary = $this->mergePending($this->deleteSource);
-        } catch (\Throwable $e) {
-            $this->stderr("Ошибка: " . $e->getMessage() . "\n", Console::FG_RED);
-            return ExitCode::SOFTWARE;
-        }
+        $db = Yii::$app->db;
+        $pending = $db->createCommand(
+            "SELECT id, type
+               FROM {{%tds_status}}
+              WHERE type = :type
+                AND is_merged = FALSE
+              ORDER BY id",
+            [':type' => self::SOURCE]
+        )->queryAll();
 
-        if ($summary['source_rows'] === 0) {
+        if (empty($pending)) {
             $this->stdout("Нет записей для обработки.\n", Console::FG_GREY);
             return ExitCode::OK;
         }
 
+        $this->stdout("К обработке: " . count($pending) . "\n");
+
+        $total = $this->emptySummary();
+        $errors = 0;
+
+        foreach ($pending as $row) {
+            $statusId = (int)$row['id'];
+            $this->stdout("\n┌─ tds_status.id={$statusId}, type={$row['type']}\n", Console::FG_CYAN);
+
+            $tx = $db->beginTransaction();
+            try {
+                $summary = $this->mergePending($this->deleteSource);
+
+                if ($summary['source_rows'] === 0) {
+                    $this->stdout("│  Нет строк suspend_posting для обработки.\n", Console::FG_GREY);
+                }
+
+                $allOk = $summary['skipped_rows'] === 0 && $summary['skipped_balances'] === 0;
+                if ($allOk) {
+                    $db->createCommand()
+                        ->update('{{%tds_status}}', ['is_merged' => true], ['id' => $statusId])
+                        ->execute();
+                }
+
+                $tx->commit();
+                $this->addSummary($total, $summary);
+
+                $this->stdout("│  Балансов: {$summary['balances']}, записей: {$summary['entries']}");
+                if ($summary['skipped_rows'] > 0) {
+                    $this->stdout(", пропущено строк: {$summary['skipped_rows']}", Console::FG_YELLOW);
+                }
+                if ($summary['duplicate_posting_ids'] > 0) {
+                    $this->stdout(", дублей posting_id: {$summary['duplicate_posting_ids']}", Console::FG_YELLOW);
+                }
+                if ($summary['skipped_balances'] > 0) {
+                    $this->stdout(", конфликтов баланса: {$summary['skipped_balances']}", Console::FG_YELLOW);
+                }
+                $this->stdout("\n");
+
+                if ($allOk) {
+                    $this->stdout("└─ OK\n");
+                } else {
+                    $this->stdout("└─ PARTIAL (tds_status не помечен merged, будет повторён)\n", Console::FG_YELLOW);
+                }
+            } catch (\Throwable $e) {
+                $tx->rollBack();
+                $errors++;
+                $this->stderr("│  Ошибка: " . $e->getMessage() . "\n", Console::FG_RED);
+                $this->stdout("└─ ROLLBACK\n", Console::FG_RED);
+            }
+        }
+
         $this->stdout(
-            "Итого: обработано строк {$summary['processed_rows']}, "
-            . "балансов {$summary['balances']}, записей {$summary['entries']}",
+            "\n=== Итого: обработано строк {$total['processed_rows']}, "
+            . "балансов {$total['balances']}, записей {$total['entries']}",
             Console::BOLD
         );
 
-        if ($summary['skipped_rows'] > 0) {
-            $this->stdout(", пропущено строк {$summary['skipped_rows']}", Console::FG_YELLOW);
+        if ($total['skipped_rows'] > 0) {
+            $this->stdout(", пропущено строк {$total['skipped_rows']}", Console::FG_YELLOW);
         }
-        if ($summary['duplicate_posting_ids'] > 0) {
-            $this->stdout(", дублей posting_id {$summary['duplicate_posting_ids']}", Console::FG_YELLOW);
+        if ($total['duplicate_posting_ids'] > 0) {
+            $this->stdout(", дублей posting_id {$total['duplicate_posting_ids']}", Console::FG_YELLOW);
         }
-        if ($summary['skipped_balances'] > 0) {
-            $this->stdout(", конфликтов баланса {$summary['skipped_balances']}", Console::FG_YELLOW);
+        if ($total['skipped_balances'] > 0) {
+            $this->stdout(", конфликтов баланса {$total['skipped_balances']}", Console::FG_YELLOW);
         }
+        if ($errors > 0) {
+            $this->stdout(", ошибок {$errors}", Console::FG_RED);
+        }
+        $this->stdout(" ===\n");
 
-        $this->stdout("\n");
-
-        return ExitCode::OK;
+        return $errors > 0 ? ExitCode::SOFTWARE : ExitCode::OK;
     }
 
     /**
@@ -103,8 +171,47 @@ class DwhMergeController extends Controller
      */
     private function mergePending(bool $deleteSource = false): array
     {
-        $db = Yii::$app->db;
-        $summary = [
+        $summary = $this->emptySummary();
+
+        $lastId = 0;
+        $accountCache = [];
+
+        while (true) {
+            $rows = Yii::$app->db->createCommand(
+                "SELECT *
+                   FROM {{%suspend_posting}}
+                  WHERE is_merged = FALSE
+                    AND id > :last_id
+                  ORDER BY id
+                  LIMIT :limit",
+                [':last_id' => $lastId, ':limit' => self::FETCH_CHUNK]
+            )->queryAll();
+
+            if (empty($rows)) {
+                break;
+            }
+
+            $summary['source_rows'] += count($rows);
+            $lastId = (int)$rows[count($rows) - 1]['id'];
+
+            $this->processRows($rows, $deleteSource, $accountCache, $summary);
+
+            if (count($rows) < self::FETCH_CHUNK) {
+                break;
+            }
+        }
+
+        return $summary;
+    }
+
+    /**
+     * Возвращает пустую структуру статистики обработки.
+     *
+     * @return array
+     */
+    private function emptySummary(): array
+    {
+        return [
             'source_rows' => 0,
             'processed_rows' => 0,
             'skipped_rows' => 0,
@@ -113,44 +220,20 @@ class DwhMergeController extends Controller
             'duplicate_posting_ids' => 0,
             'skipped_balances' => 0,
         ];
+    }
 
-        $lastId = 0;
-        $accountCache = [];
-
-        $tx = $db->beginTransaction();
-        try {
-            while (true) {
-                $rows = $db->createCommand(
-                    "SELECT *
-                       FROM {{%suspend_posting}}
-                      WHERE is_merged = FALSE
-                        AND id > :last_id
-                      ORDER BY id
-                      LIMIT :limit",
-                    [':last_id' => $lastId, ':limit' => self::FETCH_CHUNK]
-                )->queryAll();
-
-                if (empty($rows)) {
-                    break;
-                }
-
-                $summary['source_rows'] += count($rows);
-                $lastId = (int)$rows[count($rows) - 1]['id'];
-
-                $this->processRows($rows, $deleteSource, $accountCache, $summary);
-
-                if (count($rows) < self::FETCH_CHUNK) {
-                    break;
-                }
-            }
-
-            $tx->commit();
-        } catch (\Throwable $e) {
-            $tx->rollBack();
-            throw $e;
+    /**
+     * Добавляет статистику одного пакета к общей статистике.
+     *
+     * @param array $total Итоговая статистика.
+     * @param array $summary Статистика пакета.
+     * @return void
+     */
+    private function addSummary(array &$total, array $summary): void
+    {
+        foreach ($total as $key => $value) {
+            $total[$key] += $summary[$key] ?? 0;
         }
-
-        return $summary;
     }
 
     /**

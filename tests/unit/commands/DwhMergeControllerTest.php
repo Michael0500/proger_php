@@ -33,6 +33,7 @@ class DwhMergeControllerTest extends \Codeception\Test\Unit
     {
         [, $account, $wrongCompanyAccount] = $this->createDwhAccount('SUSP-001');
         $longNarrative = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-extra-tail';
+        $statusId = $this->insertDwhStatus();
 
         $this->insertSuspendPosting([
             'posting_id' => 1001,
@@ -110,7 +111,12 @@ class DwhMergeControllerTest extends \Codeception\Test\Unit
         $notMerged = (int)Yii::$app->db->createCommand(
             "SELECT COUNT(*) FROM {{%suspend_posting}} WHERE is_merged = FALSE"
         )->queryScalar();
+        $statusMerged = Yii::$app->db->createCommand(
+            "SELECT is_merged FROM {{%tds_status}} WHERE id = :id",
+            [':id' => $statusId]
+        )->queryScalar();
         $this->assertSame(0, $notMerged);
+        $this->assertTrue((bool)$statusMerged);
 
         $entryAuditCount = (int)Yii::$app->db->createCommand(
             "SELECT COUNT(*)
@@ -140,6 +146,7 @@ class DwhMergeControllerTest extends \Codeception\Test\Unit
     public function testRepeatRunAndDuplicatePostingIdDoNotDuplicateEntries(): void
     {
         $this->createDwhAccount('SUSP-002');
+        $this->insertDwhStatus();
         $this->insertSuspendPosting([
             'posting_id' => 2001,
             'cbaccount' => 'SUSP-002',
@@ -154,6 +161,7 @@ class DwhMergeControllerTest extends \Codeception\Test\Unit
             'cbaccount' => 'SUSP-002',
             'amount' => '99.999999',
         ]);
+        $this->insertDwhStatus();
 
         $this->assertSame(ExitCode::OK, $this->runDwhMerge());
 
@@ -182,9 +190,43 @@ class DwhMergeControllerTest extends \Codeception\Test\Unit
     {
         \SmartMatchTestHelper::createCompany();
         \SmartMatchTestHelper::createCompany();
+        $statusId = $this->insertDwhStatus();
         $sourceId = $this->insertSuspendPosting([
             'posting_id' => 3001,
             'cbaccount' => 'MISSING-ACCOUNT',
+            'amount' => '10.00',
+        ]);
+
+        $this->assertSame(ExitCode::OK, $this->runDwhMerge());
+
+        $isMerged = Yii::$app->db->createCommand(
+            "SELECT is_merged FROM {{%suspend_posting}} WHERE id = :id",
+            [':id' => $sourceId]
+        )->queryScalar();
+        $statusMerged = Yii::$app->db->createCommand(
+            "SELECT is_merged FROM {{%tds_status}} WHERE id = :id",
+            [':id' => $statusId]
+        )->queryScalar();
+        $entryCount = (int)Yii::$app->db->createCommand(
+            "SELECT COUNT(*) FROM {{%nostro_entries}}"
+        )->queryScalar();
+
+        $this->assertFalse((bool)$isMerged);
+        $this->assertFalse((bool)$statusMerged);
+        $this->assertSame(0, $entryCount);
+    }
+
+    /**
+     * Проверяет, что без pending DWH-строки в tds_status источник не переносится.
+     *
+     * @return void
+     */
+    public function testWithoutPendingDwhStatusDoesNotMergeSource(): void
+    {
+        $this->createDwhAccount('SUSP-003');
+        $sourceId = $this->insertSuspendPosting([
+            'posting_id' => 4001,
+            'cbaccount' => 'SUSP-003',
             'amount' => '10.00',
         ]);
 
@@ -211,6 +253,21 @@ class DwhMergeControllerTest extends \Codeception\Test\Unit
     {
         $controller = new DwhMergeController('dwh-merge', Yii::$app);
         return $controller->actionRun();
+    }
+
+    /**
+     * Добавляет pending-запись tds_status для DWH.
+     *
+     * @return int ID созданной строки.
+     */
+    private function insertDwhStatus(): int
+    {
+        Yii::$app->db->createCommand()->insert('{{%tds_status}}', [
+            'type' => DwhMergeController::SOURCE,
+            'is_merged' => false,
+        ])->execute();
+
+        return (int)Yii::$app->db->getLastInsertID('tds_status_id_seq');
     }
 
     /**
