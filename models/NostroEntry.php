@@ -11,6 +11,7 @@ use yii\db\ActiveRecord;
  * @property int         $id
  * @property int         $account_id
  * @property int         $company_id
+ * @property int|null    $posting_id
  * @property string|null $match_id
  * @property string      $ls           L=Ledger, S=Statement
  * @property string      $dc           Debit|Credit
@@ -85,7 +86,7 @@ class NostroEntry extends ActiveRecord
     {
         return [
             [['account_id', 'company_id', 'ls', 'dc', 'amount', 'currency'], 'required'],
-            [['account_id', 'company_id', 'created_by', 'updated_by'], 'integer'],
+            [['account_id', 'company_id', 'posting_id', 'created_by', 'updated_by'], 'integer'],
             [['amount'], 'validateMoneyAmount'],
             [['value_date', 'post_date', 'matched_at', 'created_at', 'updated_at'], 'safe'],
             [['ls'], 'string', 'max' => 1],
@@ -143,6 +144,7 @@ class NostroEntry extends ActiveRecord
             'id'             => 'ID',
             'account_id'     => 'Ностро банк',
             'company_id'     => 'Компания',
+            'posting_id'     => 'Posting ID',
             'match_id'       => 'Match ID',
             'ls'             => 'L/S',
             'dc'             => 'D/C',

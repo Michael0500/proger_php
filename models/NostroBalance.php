@@ -65,6 +65,7 @@ class NostroBalance extends ActiveRecord
     const SOURCE_ED211   = 'ED211';
     const SOURCE_FCC12   = 'FCC12';
     const SOURCE_BARS_GL = 'BARS_GL';
+    const SOURCE_DWH     = 'DWH';
     const SOURCE_MANUAL  = 'MANUAL';
 
     /**
@@ -288,6 +289,7 @@ class NostroBalance extends ActiveRecord
             self::SOURCE_ED211   => 'ED211',
             self::SOURCE_FCC12   => 'FCC12',
             self::SOURCE_BARS_GL => 'BARS GL',
+            self::SOURCE_DWH     => 'DWH',
             self::SOURCE_MANUAL  => 'Ручной ввод',
         ];
     }

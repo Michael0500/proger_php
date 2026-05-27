@@ -27,6 +27,7 @@ final class SmartMatchTestHelper
     {
         $db = Yii::$app->db;
         $tables = [
+            'suspend_posting',
             'user_preferences',
             'nostro_entry_audit',
             'nostro_entries_archive',
@@ -190,6 +191,7 @@ final class SmartMatchTestHelper
         $entry = new NostroEntry(array_merge([
             'account_id' => null,
             'company_id' => null,
+            'posting_id' => null,
             'match_id' => null,
             'ls' => NostroEntry::LS_LEDGER,
             'dc' => NostroEntry::DC_DEBIT,
