@@ -1613,6 +1613,20 @@ body.resizing-col, body.resizing-col * { cursor:col-resize !important; user-sele
     box-shadow: none !important;
     color: #1a202c !important;
 }
+.select2-container--bootstrap-5 .select2-selection--single {
+    padding-right: 50px !important;
+}
+.select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding-right: 0 !important;
+}
+.select2-container--bootstrap-5 .select2-selection--single .select2-selection__clear {
+    right: 28px;
+}
 .select2-container--bootstrap-5.select2-container--focus .select2-selection,
 .select2-container--bootstrap-5.select2-container--open .select2-selection {
     border-color: #6366f1 !important;

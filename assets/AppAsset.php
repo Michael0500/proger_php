@@ -22,7 +22,7 @@ class AppAsset extends AssetBundle
         'css/select2-bootstrap-5-theme.min.css',
         'css/sweetalert2.min.css',
         'css/flatpickr.min.css',
-        'css/app.css?v20',
+        'css/app.css?v21',
         'fontawesome/css/all.min.css',
     ];
 
@@ -52,9 +52,9 @@ class AppAsset extends AssetBundle
         'js/app/mixins/pools.js?v3',
         'js/app/mixins/entries.js?v26',
         'js/app/mixins/matching.js?v14',
-        'js/app/mixins/balance.js?v8',
-        'js/app/mixins/balance-archive.js?v1',
-        'js/app/mixins/archive.js?v8',
+        'js/app/mixins/balance.js?v14',
+        'js/app/mixins/balance-archive.js?v4',
+        'js/app/mixins/archive.js?v11',
         'js/app/mixins/state-persistence.js?v2',
         // 9. Стартеры Vue — каждый активируется по наличию своего корневого элемента
         'js/app/page-entries.js?v2',

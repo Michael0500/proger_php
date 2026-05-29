@@ -31,28 +31,28 @@ $currencySelectId = $currencySelectId ?? 'balance-filter-currency-select2';
                 </span>
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-                <button class="toolbar-btn outline" @click="openImportModal('bnd')">
+                <button type="button" class="toolbar-btn outline" @click.prevent="openImportModal('bnd')">
                     <i class="fas fa-file-code"></i>Импорт БНД
                 </button>
-                <button class="toolbar-btn outline" @click="openImportModal('asb')">
+                <button type="button" class="toolbar-btn outline" @click.prevent="openImportModal('asb')">
                     <i class="fas fa-file-alt"></i>Импорт АСБ
                 </button>
-                <button class="toolbar-btn outline" @click="toggleBalanceFilters"
+                <button type="button" class="toolbar-btn outline" @click.prevent="toggleBalanceFilters"
                         :style="balanceFiltersOpen?'border-color:#6366f1;color:#6366f1':''">
                     <i class="fas fa-filter"></i>Фильтры
                 </button>
-                <button class="toolbar-btn outline" @click="resetBalanceFilters()">
+                <button type="button" class="toolbar-btn outline" @click.prevent="resetBalanceFilters()">
                     <i class="fas fa-times"></i>Сбросить
                 </button>
                 <a class="toolbar-btn outline" href="<?= Url::to(['/balance-archive']) ?>">
                     <i class="fas fa-archive"></i>Архив
                 </a>
-                <button class="toolbar-btn success" @click="openCreateBalanceModal">
+                <button type="button" class="toolbar-btn success" @click.prevent="openCreateBalanceModal">
                     <i class="fas fa-plus"></i>Добавить
                 </button>
                 <!-- Кнопка управления колонками -->
                 <div style="position:relative">
-                    <button class="toolbar-btn outline" @click="toggleBalanceColsDropdown" data-balance-col-toggle
+                    <button type="button" class="toolbar-btn outline" @click.prevent="toggleBalanceColsDropdown" data-balance-col-toggle
                             :style="showBalanceColsDropdown ? 'border-color:#6366f1;color:#6366f1' : ''">
                         <i class="fas fa-columns"></i>Столбцы
                     </button>
@@ -80,17 +80,17 @@ $currencySelectId = $currencySelectId ?? 'balance-filter-currency-select2';
         <?php endif; ?>
 
         <!-- ФИЛЬТРЫ -->
-        <div v-show="balanceFiltersOpen" class="filters-panel" style="display:none;margin-bottom:14px">
+        <div v-show="balanceFiltersOpen" class="filters-panel" style="margin-bottom:14px">
             <div style="display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-end">
                 <div class="filter-field">
                     <label class="filter-label">Тип</label>
                     <div class="filter-toggle-group">
-                        <button class="ftg-btn" :class="{active:!balanceFilters.ls_type}"
-                                @click="balanceFilters.ls_type='';onBalanceFilterChange()">Все</button>
-                        <button class="ftg-btn" :class="{active:balanceFilters.ls_type==='L'}"
-                                @click="balanceFilters.ls_type='L';onBalanceFilterChange()">L</button>
-                        <button class="ftg-btn" :class="{active:balanceFilters.ls_type==='S'}"
-                                @click="balanceFilters.ls_type='S';onBalanceFilterChange()">S</button>
+                        <button type="button" class="ftg-btn" :class="{active:!balanceFilters.ls_type}"
+                                @click.prevent="balanceFilters.ls_type='';onBalanceFilterChange()">Все</button>
+                        <button type="button" class="ftg-btn" :class="{active:balanceFilters.ls_type==='L'}"
+                                @click.prevent="balanceFilters.ls_type='L';onBalanceFilterChange()">L</button>
+                        <button type="button" class="ftg-btn" :class="{active:balanceFilters.ls_type==='S'}"
+                                @click.prevent="balanceFilters.ls_type='S';onBalanceFilterChange()">S</button>
                     </div>
                 </div>
                 <div class="filter-field">
@@ -100,26 +100,26 @@ $currencySelectId = $currencySelectId ?? 'balance-filter-currency-select2';
                     </template>
                     <template v-else>
                         <div class="filter-toggle-group">
-                            <button class="ftg-btn" :class="{active:!balanceFilters.section}"
-                                    @click="balanceFilters.section='';onBalanceFilterChange()">Все</button>
-                            <button class="ftg-btn" :class="{active:balanceFilters.section==='NRE'}"
-                                    @click="balanceFilters.section='NRE';onBalanceFilterChange()">NRE</button>
-                            <button class="ftg-btn" :class="{active:balanceFilters.section==='INV'}"
-                                    @click="balanceFilters.section='INV';onBalanceFilterChange()">INV</button>
+                            <button type="button" class="ftg-btn" :class="{active:!balanceFilters.section}"
+                                    @click.prevent="balanceFilters.section='';onBalanceFilterChange()">Все</button>
+                            <button type="button" class="ftg-btn" :class="{active:balanceFilters.section==='NRE'}"
+                                    @click.prevent="balanceFilters.section='NRE';onBalanceFilterChange()">NRE</button>
+                            <button type="button" class="ftg-btn" :class="{active:balanceFilters.section==='INV'}"
+                                    @click.prevent="balanceFilters.section='INV';onBalanceFilterChange()">INV</button>
                         </div>
                     </template>
                 </div>
                 <div class="filter-field">
                     <label class="filter-label">Статус</label>
                     <div class="filter-toggle-group">
-                        <button class="ftg-btn" :class="{active:!balanceFilters.status}"
-                                @click="balanceFilters.status='';onBalanceFilterChange()">Все</button>
-                        <button class="ftg-btn" :class="{active:balanceFilters.status==='normal'}"
-                                @click="balanceFilters.status='normal';onBalanceFilterChange()">⚪</button>
-                        <button class="ftg-btn" :class="{active:balanceFilters.status==='error'}"
-                                @click="balanceFilters.status='error';onBalanceFilterChange()">🔴</button>
-                        <button class="ftg-btn" :class="{active:balanceFilters.status==='confirmed'}"
-                                @click="balanceFilters.status='confirmed';onBalanceFilterChange()">⚫</button>
+                        <button type="button" class="ftg-btn" :class="{active:!balanceFilters.status}"
+                                @click.prevent="balanceFilters.status='';onBalanceFilterChange()">Все</button>
+                        <button type="button" class="ftg-btn" :class="{active:balanceFilters.status==='normal'}"
+                                @click.prevent="balanceFilters.status='normal';onBalanceFilterChange()">⚪</button>
+                        <button type="button" class="ftg-btn" :class="{active:balanceFilters.status==='error'}"
+                                @click.prevent="balanceFilters.status='error';onBalanceFilterChange()">🔴</button>
+                        <button type="button" class="ftg-btn" :class="{active:balanceFilters.status==='confirmed'}"
+                                @click.prevent="balanceFilters.status='confirmed';onBalanceFilterChange()">⚫</button>
                     </div>
                 </div>
                 <div class="filter-field" style="min-width:220px">
@@ -148,7 +148,7 @@ $currencySelectId = $currencySelectId ?? 'balance-filter-currency-select2';
                     </select>
                 </div>
                 <div class="filter-field" style="align-self:end">
-                    <button class="toolbar-btn outline" @click="resetBalanceFilters()">
+                    <button type="button" class="toolbar-btn outline" @click.prevent="resetBalanceFilters()">
                         <i class="fas fa-times"></i>Сброс
                     </button>
                 </div>

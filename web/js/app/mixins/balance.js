@@ -324,6 +324,7 @@ var BalanceMixin = {
                 theme:       'bootstrap-5',
                 placeholder: 'Все валюты...',
                 allowClear:  true,
+                closeOnSelect: false,
                 data:        data,
                 language: { noResults: function () { return 'Нет валют'; } }
             });

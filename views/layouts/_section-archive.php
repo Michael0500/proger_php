@@ -152,16 +152,9 @@
                 </div>
 
                 <!-- Валюта -->
-                <div class="filter-field">
-                    <label class="filter-label">Валюта</label>
-                    <div class="filter-input-wrap">
-                        <select class="filter-input"
-                                :value="archiveFilters.currency||''"
-                                @change="applyArchiveFilter('currency',$event.target.value)">
-                            <option value="">Все</option>
-                            <option v-for="c in dictCurrencies" :key="c.code" :value="c.code">{{ c.code }}</option>
-                        </select>
-                    </div>
+                <div class="filter-field" style="min-width:220px">
+                    <label class="filter-label">Валюта (можно несколько)</label>
+                    <select id="archive-currency-select2" multiple="multiple" style="width:100%"></select>
                 </div>
 
                 <!-- Сумма -->

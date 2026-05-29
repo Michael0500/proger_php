@@ -47,6 +47,7 @@ var BalanceArchiveMixin = {
             _balanceArchiveDebounceTimer:        null,
             _balanceArchivePoolSelect2Inited:    false,
             _balanceArchiveAccountSelect2Inited: false,
+            _balanceArchiveCurrencySelect2Inited: false,
             _balanceArchiveSubmitGuardBound:     false,
 
             balanceArchiveTableColumns: [
@@ -167,11 +168,24 @@ var BalanceArchiveMixin = {
 
         applyBalanceArchiveFilter: function (field, value) {
             this.balanceArchiveFiltersOpen = true;
-            var v = (value === null || value === undefined) ? '' : String(value).trim();
-            if (v === '') {
-                this.$delete(this.balanceArchiveFilters, field);
+            if (Array.isArray(value)) {
+                var values = value.map(function (item) {
+                    return String(item || '').trim();
+                }).filter(function (item) {
+                    return item !== '';
+                });
+                if (values.length) {
+                    this.$set(this.balanceArchiveFilters, field, values);
+                } else {
+                    this.$delete(this.balanceArchiveFilters, field);
+                }
             } else {
-                this.$set(this.balanceArchiveFilters, field, v);
+                var v = (value === null || value === undefined) ? '' : String(value).trim();
+                if (v === '') {
+                    this.$delete(this.balanceArchiveFilters, field);
+                } else {
+                    this.$set(this.balanceArchiveFilters, field, v);
+                }
             }
             this.saveBalanceArchiveFilterState();
             this.loadBalanceArchive(true, true);
@@ -200,6 +214,8 @@ var BalanceArchiveMixin = {
             if ($pool.length && $pool.data('select2')) $pool.val(null).trigger('change');
             var $account = $('#balance-archive-account-select2');
             if ($account.length && $account.data('select2')) $account.val(null).trigger('change');
+            var $currency = $('#balance-archive-currency-select2');
+            if ($currency.length && $currency.data('select2')) $currency.val(null).trigger('change');
             this.loadBalanceArchive(true, true);
         },
 
@@ -222,10 +238,12 @@ var BalanceArchiveMixin = {
             this.balanceArchiveFiltersOpen = true;
             this._balanceArchivePoolSelect2Inited = false;
             this._balanceArchiveAccountSelect2Inited = false;
+            this._balanceArchiveCurrencySelect2Inited = false;
             var self = this;
             this.$nextTick(function () {
                 self.initBalanceArchivePoolSelect2();
                 self.initBalanceArchiveAccountSelect2();
+                self.initBalanceArchiveCurrencySelect2();
             });
         },
 
@@ -242,8 +260,15 @@ var BalanceArchiveMixin = {
                 $account.select2('destroy');
             }
 
+            var $currency = $('#balance-archive-currency-select2');
+            if ($currency.length && $currency.data('select2')) {
+                $currency.off('change.balanceArchiveCurrency');
+                $currency.select2('destroy');
+            }
+
             this._balanceArchivePoolSelect2Inited = false;
             this._balanceArchiveAccountSelect2Inited = false;
+            this._balanceArchiveCurrencySelect2Inited = false;
         },
 
         initBalanceArchivePoolSelect2: function () {
@@ -293,6 +318,33 @@ var BalanceArchiveMixin = {
             });
             $el.on('select2:clear', function () {
                 self.clearBalanceArchiveFilter('account_id');
+            });
+        },
+
+        initBalanceArchiveCurrencySelect2: function () {
+            var self = this;
+            var $el = $('#balance-archive-currency-select2');
+            if (!$el.length || self._balanceArchiveCurrencySelect2Inited) return;
+            self._balanceArchiveCurrencySelect2Inited = true;
+
+            $el.select2({
+                theme: 'bootstrap-5',
+                placeholder: 'Все валюты...',
+                allowClear: true,
+                closeOnSelect: false,
+                data: (self.dictCurrencies || []).map(function (c) {
+                    return { id: c.code, text: c.code };
+                }),
+                language: { noResults: function () { return 'Нет валют'; } }
+            });
+
+            var current = self.balanceArchiveFilters.currency;
+            if (current) {
+                $el.val(Array.isArray(current) ? current : [current]).trigger('change.select2');
+            }
+
+            $el.off('change.balanceArchiveCurrency').on('change.balanceArchiveCurrency', function () {
+                self.applyBalanceArchiveFilter('currency', $el.val() || []);
             });
         },
 

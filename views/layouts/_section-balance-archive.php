@@ -150,13 +150,9 @@
                     <option value="error">error</option>
                 </select>
             </div>
-            <div class="filter-field">
-                <label class="filter-label">Валюта</label>
-                <select class="filter-input" :value="balanceArchiveFilters.currency||''"
-                        @change="applyBalanceArchiveFilter('currency',$event.target.value)">
-                    <option value="">Все</option>
-                    <option v-for="c in dictCurrencies" :key="c.code" :value="c.code">{{ c.code }}</option>
-                </select>
+            <div class="filter-field" style="min-width:220px">
+                <label class="filter-label">Валюта (можно несколько)</label>
+                <select id="balance-archive-currency-select2" multiple="multiple" style="width:100%"></select>
             </div>
             <div class="filter-field">
                 <label class="filter-label">Дата с</label>

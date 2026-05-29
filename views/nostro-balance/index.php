@@ -7,7 +7,7 @@ $this->title = 'Баланс';
 ?>
 
 <main role="main">
-    <div id="bank-balance-app" class="d-flex" v-cloak>
+    <div id="bank-balance-app" class="d-flex" v-cloak @submit.prevent.stop @keydown.enter.prevent.stop>
         <?= $this->render('//layouts/_sidebar') ?>
         <div id="main" :class="{ 'sidebar-collapsed': isSidebarCollapsed }">
             <?= Alert::widget() ?>
