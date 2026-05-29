@@ -73,6 +73,25 @@ class Country extends ActiveRecord
     }
 
     /**
+     * Нормализует коды страны до запуска валидаторов.
+     *
+     * @return bool Можно ли продолжать валидацию.
+     */
+    public function beforeValidate(): bool
+    {
+        if (!parent::beforeValidate()) {
+            return false;
+        }
+        $this->code = strtoupper(trim((string)$this->code));
+        if ($this->code3 !== null && $this->code3 !== '') {
+            $this->code3 = strtoupper(trim((string)$this->code3));
+        } else {
+            $this->code3 = null;
+        }
+        return true;
+    }
+
+    /**
      * Нормализует коды страны и обновляет служебные даты.
      *
      * @param bool $insert Признак создания новой страны.

@@ -70,6 +70,25 @@ class MatchingController extends BaseController
         return in_array($code, ['NRE', 'INV']) ? $code : null;
     }
 
+    /**
+     * Читает boolean-параметр из POST с поддержкой JSON bool и строк `0/1`.
+     *
+     * @param string $name Имя параметра.
+     * @param bool $default Значение по умолчанию.
+     * @return bool Нормализованное boolean-значение.
+     */
+    private function postBool(string $name, bool $default = false): bool
+    {
+        $value = Yii::$app->request->post($name, $default);
+        if (is_bool($value)) {
+            return $value;
+        }
+        if (is_numeric($value)) {
+            return (int)$value === 1;
+        }
+        return in_array(strtolower((string)$value), ['1', 'true', 'yes', 'on'], true);
+    }
+
     // ── Ручное квитование ─────────────────────────────────────────────
 
     /**
@@ -334,15 +353,15 @@ class MatchingController extends BaseController
         $rule->name                 = Yii::$app->request->post('name');
         $rule->section              = Yii::$app->request->post('section');
         $rule->pair_type            = Yii::$app->request->post('pair_type', 'LS');
-        $rule->match_dc             = (bool) Yii::$app->request->post('match_dc');
-        $rule->match_amount         = (bool) Yii::$app->request->post('match_amount');
-        $rule->match_value_date     = (bool) Yii::$app->request->post('match_value_date');
-        $rule->match_instruction_id = (bool) Yii::$app->request->post('match_instruction_id');
-        $rule->match_end_to_end_id  = (bool) Yii::$app->request->post('match_end_to_end_id');
-        $rule->match_transaction_id = (bool) Yii::$app->request->post('match_transaction_id');
-        $rule->match_message_id     = (bool) Yii::$app->request->post('match_message_id');
-        $rule->cross_id_search      = (bool) Yii::$app->request->post('cross_id_search');
-        $rule->is_active            = (bool) Yii::$app->request->post('is_active', true);
+        $rule->match_dc             = $this->postBool('match_dc');
+        $rule->match_amount         = $this->postBool('match_amount');
+        $rule->match_value_date     = $this->postBool('match_value_date');
+        $rule->match_instruction_id = $this->postBool('match_instruction_id');
+        $rule->match_end_to_end_id  = $this->postBool('match_end_to_end_id');
+        $rule->match_transaction_id = $this->postBool('match_transaction_id');
+        $rule->match_message_id     = $this->postBool('match_message_id');
+        $rule->cross_id_search      = $this->postBool('cross_id_search');
+        $rule->is_active            = $this->postBool('is_active', true);
         $rule->priority             = (int) Yii::$app->request->post('priority', 100);
         $rule->description          = Yii::$app->request->post('description', '');
 

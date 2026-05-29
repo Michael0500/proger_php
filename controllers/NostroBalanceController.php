@@ -75,6 +75,18 @@ class NostroBalanceController extends BaseController
     }
 
     /**
+     * Проверяет принадлежность счёта текущей компании.
+     *
+     * @param int $accountId ID счёта.
+     * @param int $cid ID компании.
+     * @return bool Счёт существует в компании.
+     */
+    private function accountBelongsToCompany(int $accountId, int $cid): bool
+    {
+        return Account::find()->where(['id' => $accountId, 'company_id' => $cid])->exists();
+    }
+
+    /**
      * Возвращает постраничный список балансовых записей.
      *
      * GET `/nostro-balance/list`. Поддерживает фильтры по L/S, валюте,
@@ -175,6 +187,11 @@ class NostroBalanceController extends BaseController
         if (!$cid) return ['success' => false, 'message' => 'Компания не выбрана'];
 
         $p  = Yii::$app->request->post();
+        $accountId = (int)($p['account_id'] ?? 0);
+        if (!$accountId || !$this->accountBelongsToCompany($accountId, $cid)) {
+            return ['success' => false, 'message' => 'Счёт не найден'];
+        }
+
         $m  = new NostroBalance();
         $this->fillModel($m, $p, $cid);
         $m->source = NostroBalance::SOURCE_MANUAL;
@@ -211,6 +228,11 @@ class NostroBalanceController extends BaseController
 
         $oldValues = $m->toApiArray();
         $p = Yii::$app->request->post();
+        $accountId = (int)($p['account_id'] ?? $m->account_id);
+        if (!$accountId || !$this->accountBelongsToCompany($accountId, $cid)) {
+            return ['success' => false, 'message' => 'Счёт не найден'];
+        }
+
         $this->fillModel($m, $p, $cid);
 
         $settings = $this->getValidationSettings();
@@ -347,6 +369,9 @@ class NostroBalanceController extends BaseController
         $section   = Yii::$app->request->post('section', NostroBalance::SECTION_NRE);
 
         if (!$accountId) return ['success' => false, 'message' => 'Укажите счёт'];
+        if (!$this->accountBelongsToCompany($accountId, $cid)) {
+            return ['success' => false, 'message' => 'Счёт не найден'];
+        }
 
         $file = UploadedFile::getInstanceByName('file');
         if (!$file) return ['success' => false, 'message' => 'Файл не выбран'];
@@ -383,6 +408,9 @@ class NostroBalanceController extends BaseController
         $section   = Yii::$app->request->post('section', NostroBalance::SECTION_NRE);
 
         if (!$accountId) return ['success' => false, 'message' => 'Укажите счёт'];
+        if (!$this->accountBelongsToCompany($accountId, $cid)) {
+            return ['success' => false, 'message' => 'Счёт не найден'];
+        }
 
         $file = UploadedFile::getInstanceByName('file');
         if (!$file) return ['success' => false, 'message' => 'Файл не выбран'];

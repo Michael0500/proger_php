@@ -71,6 +71,20 @@ class Currency extends ActiveRecord
     }
 
     /**
+     * Нормализует код валюты до запуска валидаторов.
+     *
+     * @return bool Можно ли продолжать валидацию.
+     */
+    public function beforeValidate(): bool
+    {
+        if (!parent::beforeValidate()) {
+            return false;
+        }
+        $this->code = strtoupper(trim((string)$this->code));
+        return true;
+    }
+
+    /**
      * Нормализует код валюты и обновляет служебные даты.
      *
      * @param bool $insert Признак создания новой валюты.

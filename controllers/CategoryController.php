@@ -16,6 +16,29 @@ use app\models\AccountPool;
 class CategoryController extends BaseController
 {
     /**
+     * Отключает CSRF для JSON API категорий.
+     *
+     * @param \yii\base\Action $action Запускаемое действие.
+     * @return bool Можно ли продолжать выполнение action.
+     */
+    public function beforeAction($action): bool
+    {
+        $this->enableCsrfValidation = false;
+        return parent::beforeAction($action);
+    }
+
+    /**
+     * Возвращает ID компании текущего пользователя.
+     *
+     * @return int|null ID компании или `null`.
+     */
+    private function cid(): ?int
+    {
+        $u = Yii::$app->user->identity;
+        return ($u && $u->company_id) ? (int)$u->company_id : null;
+    }
+
+    /**
      * Возвращает категории текущей компании вместе с ностро-банками.
      *
      * GET `/category/get-categories`.
@@ -26,10 +49,9 @@ class CategoryController extends BaseController
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
 
-        $userId = Yii::$app->user->id;
-        $user = \app\models\User::findOne($userId);
+        $cid = $this->cid();
 
-        if (!$user || !$user->company_id) {
+        if (!$cid) {
             return [
                 'success' => false,
                 'message' => 'Компания не выбрана'
@@ -37,7 +59,7 @@ class CategoryController extends BaseController
         }
 
         $categories = Category::find()
-            ->where(['company_id' => $user->company_id])
+            ->where(['company_id' => $cid])
             ->with('pools')
             ->orderBy('name')
             ->all();
@@ -75,9 +97,13 @@ class CategoryController extends BaseController
     public function actionCreate()
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
+        $cid = $this->cid();
+        if (!$cid) {
+            return ['success' => false, 'message' => 'Компания не выбрана'];
+        }
 
         $model = new Category();
-        $model->company_id = Yii::$app->user->identity->company_id;
+        $model->company_id = $cid;
         $model->name = Yii::$app->request->post('name');
         $model->description = Yii::$app->request->post('description');
 
@@ -106,9 +132,13 @@ class CategoryController extends BaseController
     public function actionUpdate()
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
+        $cid = $this->cid();
+        if (!$cid) {
+            return ['success' => false, 'message' => 'Компания не выбрана'];
+        }
 
         $id = Yii::$app->request->post('id');
-        $model = Category::findOne($id);
+        $model = Category::findOne(['id' => $id, 'company_id' => $cid]);
 
         if (!$model) {
             return [
@@ -147,9 +177,13 @@ class CategoryController extends BaseController
     public function actionDelete()
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
+        $cid = $this->cid();
+        if (!$cid) {
+            return ['success' => false, 'message' => 'Компания не выбрана'];
+        }
 
         $id = Yii::$app->request->post('id');
-        $model = Category::findOne($id);
+        $model = Category::findOne(['id' => $id, 'company_id' => $cid]);
 
         if (!$model) {
             return [

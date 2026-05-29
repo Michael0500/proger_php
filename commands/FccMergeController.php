@@ -329,6 +329,7 @@ class FccMergeController extends Controller
         if (empty($lineNos)) {
             return;
         }
+        $lineNoList = implode(',', array_map('intval', $lineNos));
 
         $rows = Yii::$app->db->createCommand(
             "SELECT id, account_id, company_id, ls, dc, amount, currency,
@@ -339,13 +340,12 @@ class FccMergeController extends Controller
               WHERE id > :last_id
                 AND source = :source
                 AND extract_no = :extract_no
-                AND line_no = ANY(:line_nos)
+                AND line_no IN ({$lineNoList})
               ORDER BY id",
             [
                 ':last_id'    => $lastId,
                 ':source'     => self::SOURCE,
                 ':extract_no' => (int)$insertedRows[0][13],
-                ':line_nos'   => '{' . implode(',', $lineNos) . '}',
             ]
         )->queryAll();
 
@@ -386,10 +386,11 @@ class FccMergeController extends Controller
      */
     private function writeBalanceAuditAfterFlush(int $lastId, array $insertedRows): void
     {
-        $lineNos = $this->extractLineNos($insertedRows, 14);
+        $lineNos = $this->extractLineNos($insertedRows, 13);
         if (empty($lineNos)) {
             return;
         }
+        $lineNoList = implode(',', array_map('intval', $lineNos));
 
         $rows = Yii::$app->db->createCommand(
             "SELECT id, company_id, account_id, ls_type, statement_number, currency,
@@ -399,13 +400,12 @@ class FccMergeController extends Controller
               WHERE id > :last_id
                 AND source = :source
                 AND extract_no = :extract_no
-                AND line_no = ANY(:line_nos)
+                AND line_no IN ({$lineNoList})
               ORDER BY id",
             [
                 ':last_id'    => $lastId,
                 ':source'     => self::SOURCE,
-                ':extract_no' => (int)$insertedRows[0][13],
-                ':line_nos'   => '{' . implode(',', $lineNos) . '}',
+                ':extract_no' => (int)$insertedRows[0][12],
             ]
         )->queryAll();
 

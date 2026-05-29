@@ -98,6 +98,8 @@ vendor/bin/codecept run --coverage --coverage-html
 
 | Файл | Что проверяет |
 |---|---|
+| `tests/unit/commands/FccMergeControllerTest.php` | FCC12 merge: перенос строк-балансов и транзакций, трассировка `extract_no/line_no/branch_code`, аудит, удаление источника и partial-режим при ненайденном счёте. |
+| `tests/unit/components/BalanceParsersTest.php` | Парсеры BND/CAMT и ASB: корректный разбор XML с namespace, Windows-1251 ASB, ошибки отсутствующего closing balance и некорректной даты. |
 | `tests/unit/models/ArchiveSettingsTest.php` | Настройки архива по умолчанию и валидацию границ `archive_after_days` / `retention_years`. |
 | `tests/unit/models/CookieAuthTest.php` | Внутреннюю авторизацию пользователя через Yii user component без пользовательского пароля. |
 | `tests/unit/models/MatchingRuleTest.php` | Текстовое описание включённых критериев правила квитования. |
@@ -114,12 +116,18 @@ vendor/bin/codecept run --coverage --coverage-html
 
 | Файл | Что проверяет |
 |---|---|
+| `tests/functional/AccountApiCest.php` | `/account/list`, `/account/create`, `/account/update`, `/account/delete`: `company_id` scope, запрет чужого `pool_id`, создание начального баланса при добавлении счёта. |
+| `tests/functional/AccountPoolApiCest.php` | `/account-pool/*`: список ностро-банков текущей компании, привязка только доступных счетов, запрет чужих счетов/категорий, отвязка счетов при удалении. |
 | `tests/functional/AllNostroApiCest.php` | `/all-nostro/list` и `/all-nostro/search-accounts`: фильтр по выбранным ностро-банкам, игнорирование чужих pool ID, поиск счетов только внутри компании. |
 | `tests/functional/ArchiveApiCest.php` | `/archive/run-batch`, `/archive/restore-preview`, `/archive/restore`: batch-архивирование, аудит archive, восстановление всей группы по `match_id`, аудит restore. |
 | `tests/functional/BalanceArchiveApiCest.php` | `/balance-archive/run-batch`, `/balance-archive/restore`: batch-архивирование старых балансов, аудит archive/restore, восстановление активной строки. |
+| `tests/functional/CategoryApiCest.php` | `/category/get-categories`, `/category/create`, `/category/update`, `/category/delete`: дерево категорий текущей компании, запрет обновления/удаления чужих категорий. |
 | `tests/functional/CookieAuthCest.php` | Страница логина, редирект гостя с защищённой страницы и внутренний cookie/session login helper. |
 | `tests/functional/MatchingApiCest.php` | `/matching/match-manual`, `/matching/unmatch`, `/matching/calc-summary`: scoped-квитование текущей компании, отказ при чужих ID, защита от расквитования чужих строк с тем же `match_id`, summary без утечки чужих данных. |
+| `tests/functional/MatchingRuleApiCest.php` | `/matching/get-rules`, `/matching/save-rule`, `/matching/delete-rule`: `company_id` scope правил, сортировка по приоритету, корректное чтение boolean-параметров `0/1`. |
+| `tests/functional/NostroBalanceApiCest.php` | `/nostro-balance/list`, `/nostro-balance/create`, `/nostro-balance/update`, `/nostro-balance/confirm`, `/nostro-balance/delete`: scope балансов, фильтры по банку/счёту, запрет чужих счетов, аудит ручного ввода и подтверждения. |
 | `tests/functional/NostroEntryApiCest.php` | `/nostro-entry/list`, `/nostro-entry/create`, `/nostro-entry/update`: `company_id` scope, нормализация суммы, upper-case валюты, запрет создания/переноса записи на счёт другой компании. |
+| `tests/functional/ReferenceApiCest.php` | `/reference/*`: CRUD валют и стран, нормализация ISO-кодов до валидации, сортировка и отказ невалидных кодов. |
 | `tests/functional/ReconReportApiCest.php` | `/recon-report/generate`: сбор отчёта по ностро-банку из Ledger/Statement closing balances и outstanding items, исключение уже сквитованных записей. |
 | `tests/functional/UserPreferenceCest.php` | `/user-preference/save` и `/user-preference/get`: сохранение разрешённого ключа, отказ неизвестного ключа. |
 

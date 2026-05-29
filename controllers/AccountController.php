@@ -40,6 +40,18 @@ class AccountController extends BaseController
     }
 
     /**
+     * Проверяет, что ностро-банк принадлежит текущей компании.
+     *
+     * @param int $poolId ID ностро-банка.
+     * @param int $cid ID компании.
+     * @return bool Ностро-банк существует в компании.
+     */
+    private function poolBelongsToCompany(int $poolId, int $cid): bool
+    {
+        return AccountPool::find()->where(['id' => $poolId, 'company_id' => $cid])->exists();
+    }
+
+    /**
      * Рендерит standalone-страницу управления счетами.
      *
      * GET `/accounts`. Передаёт во Vue список счетов и ностро-банков
@@ -161,7 +173,15 @@ class AccountController extends BaseController
         $model->date_close   = $r->post('date_close') ?: null;
 
         $poolId = $r->post('pool_id');
-        $model->pool_id = ($poolId !== '' && $poolId !== null) ? (int)$poolId : null;
+        if ($poolId !== '' && $poolId !== null) {
+            $poolId = (int)$poolId;
+            if (!$this->poolBelongsToCompany($poolId, $cid)) {
+                return ['success' => false, 'message' => 'Ностро-банк не найден'];
+            }
+        } else {
+            $poolId = null;
+        }
+        $model->pool_id = $poolId;
 
         if ($model->save()) {
             $model->refresh();
@@ -218,7 +238,15 @@ class AccountController extends BaseController
         $model->date_close   = $r->post('date_close') ?: null;
 
         $poolId = $r->post('pool_id');
-        $model->pool_id = ($poolId !== '' && $poolId !== null) ? (int)$poolId : null;
+        if ($poolId !== '' && $poolId !== null) {
+            $poolId = (int)$poolId;
+            if (!$this->poolBelongsToCompany($poolId, $cid)) {
+                return ['success' => false, 'message' => 'Ностро-банк не найден'];
+            }
+        } else {
+            $poolId = null;
+        }
+        $model->pool_id = $poolId;
 
         if ($model->save()) {
             $model->refresh();

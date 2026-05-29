@@ -4,6 +4,12 @@
 # visual studio code project files
 .vscode
 
+# local agent instructions and settings
+README.md
+CLAUDE.md
+AGENTS.md
+.claude/
+
 # netbeans project files
 nbproject
 
