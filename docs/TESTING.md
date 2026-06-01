@@ -1,6 +1,6 @@
 # Тестирование SmartMatch
 
-Документ описывает, какие тесты есть в проекте, зачем они запускаются и какие проверки выполняют. Тестовый стек: Codeception + PHPUnit + Yii2 module.
+Документ описывает, какие тесты есть в проекте, зачем они запускаются и какие проверки выполняют. Тестовый стек: Codeception + PHPUnit + Yii2 module для PHP/backend и Vitest для browser JS-модулей.
 
 ## 1. База для тестов
 
@@ -38,9 +38,10 @@ SMARTMATCH_TEST_DB_PASSWORD=""
 
 ```bash
 vendor/bin/codecept run
+npm run test:js
 ```
 
-Запускать перед передачей изменений, если правки затрагивают модели, сервисы, контроллеры, миграции, права доступа, JSON API или бизнес-логику.
+Запускать перед передачей изменений, если правки затрагивают модели, сервисы, контроллеры, миграции, права доступа, JSON API, бизнес-логику или `web/js/app`.
 
 Unit-тесты:
 
@@ -58,11 +59,21 @@ vendor/bin/codecept run functional
 
 Проверяют web/API-сценарии через Yii request layer: авторизацию, JSON endpoints, `company_id` scoping, request parsing, транзакции контроллеров.
 
+JS-тесты:
+
+```bash
+npm install
+npm run test:js
+```
+
+Проверяют browser scripts из `web/js/app` в sandbox-окружении Vitest без запуска Yii-сервера: общие Vue-хелперы, хранение UI-состояния и thin API wrapper поверх axios.
+
 Один тестовый файл:
 
 ```bash
 vendor/bin/codecept run unit tests/unit/models/NostroEntryTest.php
 vendor/bin/codecept run functional tests/functional/MatchingApiCest.php
+npx vitest run --config vitest.config.mjs tests/js/common.test.js
 ```
 
 Пересборка actor-классов:
@@ -99,7 +110,10 @@ vendor/bin/codecept run --coverage --coverage-html
 | Файл | Что проверяет |
 |---|---|
 | `tests/unit/commands/FccMergeControllerTest.php` | FCC12 merge: перенос строк-балансов и транзакций, трассировка `extract_no/line_no/branch_code`, аудит, удаление источника и partial-режим при ненайденном счёте. |
+| `tests/unit/commands/DwhMergeControllerTest.php` | DWH merge: перенос suspend_posting в INV, группировка балансов, маппинг D/C, обрезка денег до 2 знаков, аудит, защита от дублей `posting_id`, partial при ненайденном счёте. |
+| `tests/unit/commands/TdsMergeControllerTest.php` | TDS merge (CAMT053/MT950/ED211/ED743): маппинг D/C, `is_merged` только без пропусков, partial при ненайденном/пустом счёте, `--type`/`--delete-source`, MT950 `statement_number`/`other_id`, ED `edno/eddate/edauthor`, трассировка `stmt_id/line_no/branch_code`, аудит импорта, chunking. |
 | `tests/unit/components/BalanceParsersTest.php` | Парсеры BND/CAMT и ASB: корректный разбор XML с namespace, Windows-1251 ASB, ошибки отсутствующего closing balance и некорректной даты. |
+| `tests/unit/controllers/ReconReportExportTest.php` | Экспорт раккорда: createXlsxFile (валидный XLSX), createPdfFile (сигнатура %PDF), createZipFile (несколько файлов), уникальные имена в ZIP, safeFilename/reportFilename. |
 | `tests/unit/models/ArchiveSettingsTest.php` | Настройки архива по умолчанию и валидацию границ `archive_after_days` / `retention_years`. |
 | `tests/unit/models/CookieAuthTest.php` | Внутреннюю авторизацию пользователя через Yii user component без пользовательского пароля. |
 | `tests/unit/models/MatchingRuleTest.php` | Текстовое описание включённых критериев правила квитования. |
@@ -108,8 +122,8 @@ vendor/bin/codecept run --coverage --coverage-html
 | `tests/unit/models/NostroEntryTest.php` | Валидацию суммы `decimal(20,2)`, автоматическое выставление/очистку `matched_at`, аудит create/update/delete. |
 | `tests/unit/models/UserPreferenceTest.php` | Upsert JSON-настроек UI и чтение старого double-encoded JSON. |
 | `tests/unit/models/UserTest.php` | Поиск активных пользователей, исключение удалённых и внутренний cookie/session login найденного пользователя. |
-| `tests/unit/services/MatchingServiceTest.php` | Ручное квитование NRE и INV, отказ при дисбалансе, одиночную нулевую запись, расквитование группы, summary выбранных строк. |
-| `tests/unit/services/AutoMatchingServiceTest.php` | Автоквитование уникальной пары, cross-id search, отказ правила без условий, пошаговый запуск с category scope. |
+| `tests/unit/services/MatchingServiceTest.php` | Ручное квитование NRE/INV (в т.ч. набор >2, только Ledger, регистр валюты), отказ при дисбалансе NRE/INV, разные валюты/банки, уже сквитованная запись в наборе, одиночная нулевая/ненулевая, откат транзакции при ошибке БД, расквитование группы и scope по компании, summary с tenant-фильтром. |
+| `tests/unit/services/AutoMatchingServiceTest.php` | Автоквитование: пары LS/LL/SS, реверс D/C, дедупликация (1 L на 2 S), match по amount+value_date, scope `limitAccountIds` и `accountId`, изоляция по пулам, порядок правил по priority, устойчивость к ошибке правила, отказ без активных правил, `autoMatchStep` неизвестный/завершённый job, `resolveScopeAccounts` и пустой scope, формат/уникальность `match_id`, обработка >5000 пар. |
 | `tests/unit/widgets/AlertTest.php` | Рендер системных flash-уведомлений Yii. |
 
 ## 5. Functional-тесты
@@ -128,7 +142,7 @@ vendor/bin/codecept run --coverage --coverage-html
 | `tests/functional/NostroBalanceApiCest.php` | `/nostro-balance/list`, `/nostro-balance/create`, `/nostro-balance/update`, `/nostro-balance/confirm`, `/nostro-balance/delete`: scope балансов, фильтры по банку/счёту, запрет чужих счетов, аудит ручного ввода и подтверждения. |
 | `tests/functional/NostroEntryApiCest.php` | `/nostro-entry/list`, `/nostro-entry/create`, `/nostro-entry/update`: `company_id` scope, нормализация суммы, upper-case валюты, запрет создания/переноса записи на счёт другой компании. |
 | `tests/functional/ReferenceApiCest.php` | `/reference/*`: CRUD валют и стран, нормализация ISO-кодов до валидации, сортировка и отказ невалидных кодов. |
-| `tests/functional/ReconReportApiCest.php` | `/recon-report/generate`: сбор отчёта по ностро-банку из Ledger/Statement closing balances и outstanding items, исключение уже сквитованных записей. |
+| `tests/functional/ReconReportApiCest.php` | `/recon-report/generate`: сбор отчёта по ностро-банку из Ledger/Statement closing balances и outstanding items, исключение уже сквитованных записей; валидация (нет компании, pool+category/ни одного, период и даты), Closing Balance по последнему балансу ≤ даты, MULTI-валюта, окно дат prevDay+recon, изоляция чужого пула. |
 | `tests/functional/UserPreferenceCest.php` | `/user-preference/save` и `/user-preference/get`: сохранение разрешённого ключа, отказ неизвестного ключа. |
 
 ## 6. Как добавлять новые тесты
@@ -137,6 +151,8 @@ vendor/bin/codecept run --coverage --coverage-html
 
 Для контроллера, access control, JSON API, `company_id` scoping, request parsing и транзакций добавляйте functional-тест.
 
+Для JS-кода в `web/js/app` добавляйте Vitest-тест, если поведение можно проверить без полного браузера: форматтеры, storage helpers, API wrapper, чистые функции и устойчивость к отсутствующим globals. Для сценариев, где важны реальный DOM, Vue lifecycle, datepicker, модальные окна или переходы между страницами, добавляйте браузерный E2E-тест отдельным набором.
+
 Каждый новый тест должен:
 
 - начинать сценарий с `SmartMatchTestHelper::resetDatabase()`;
@@ -144,6 +160,13 @@ vendor/bin/codecept run --coverage --coverage-html
 - явно проверять `company_id` scope, если endpoint читает или меняет бизнес-данные;
 - не зависеть от реальных сидов, пользовательских данных и текущей даты без необходимости;
 - проверять не только `success`, но и состояние БД после операции.
+
+Для JS-тестов каждый новый тест должен:
+
+- загружать browser script через `tests/js/helpers/load-browser-script.js`;
+- явно задавать нужные globals (`window`, `Vue`, `axios`, `AppRoutes`, `localStorage`) в sandbox;
+- не обращаться к рабочему серверу и реальному `localStorage`;
+- проверять payload/side effects, а не только факт вызова функции.
 
 ## 7. Частые проблемы
 

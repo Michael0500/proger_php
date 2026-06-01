@@ -12,6 +12,8 @@ use app\models\NostroEntryArchive;
  */
 class NostroEntryArchiveTest extends \Codeception\Test\Unit
 {
+    use \PrintsTestDescription;
+
     /**
      * Подготавливает окружение перед тестом.
      * @return void
@@ -46,5 +48,7 @@ class NostroEntryArchiveTest extends \Codeception\Test\Unit
         verify($archive->matched_at)->equals($entry->matched_at);
         verify($archive->archived_by)->equals(42);
         verify(strtotime($archive->expires_at))->greaterThan(strtotime($archive->archived_at));
+
+        $this->stdout('archiveEntry: сквитованная запись копируется в архив со статусом A, сохраняется match_id/matched_at, проставляется archived_by и expires_at > archived_at.');
     }
 }

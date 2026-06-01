@@ -11,6 +11,8 @@ use app\models\NostroBalance;
  */
 class NostroBalanceTest extends \Codeception\Test\Unit
 {
+    use \PrintsTestDescription;
+
     /**
      * Подготавливает окружение перед тестом.
      * @return void
@@ -38,6 +40,8 @@ class NostroBalanceTest extends \Codeception\Test\Unit
         $balance->clearErrors();
         $balance->opening_balance = '1234567890123456789.00';
         verify($balance->validate(['opening_balance']))->false();
+
+        $this->stdout('Денежная валидация баланса decimal(20,2): знаковое 18+2 знака — ок; 3 знака после точки и 19 цифр до точки — отклоняются.');
     }
 
     /**
@@ -86,6 +90,8 @@ class NostroBalanceTest extends \Codeception\Test\Unit
         ]);
 
         verify($bad->checkBalanceContinuity())->stringContainsString('не совпадает');
+
+        $this->stdout('Непрерывность Statement-балансов: opening следующего = closing предыдущего — ок; расхождение → сообщение «не совпадает».');
     }
 
     /**
@@ -120,5 +126,7 @@ class NostroBalanceTest extends \Codeception\Test\Unit
         ]);
 
         verify($duplicate->checkStatementSequence())->stringContainsString('Дублирующийся номер');
+
+        $this->stdout('Последовательность выписок: повтор statement_number на счёте → сообщение «Дублирующийся номер».');
     }
 }

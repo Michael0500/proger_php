@@ -13,6 +13,8 @@ use yii\console\ExitCode;
  */
 class DwhMergeControllerTest extends \Codeception\Test\Unit
 {
+    use \PrintsTestDescription;
+
     /**
      * Подготавливает окружение перед тестом.
      *
@@ -136,6 +138,8 @@ class DwhMergeControllerTest extends \Codeception\Test\Unit
 
         $this->assertSame(3, $entryAuditCount);
         $this->assertSame(2, $balanceAuditCount);
+
+        $this->stdout('DWH merge: suspend_posting → INV (company_id=2, source=DWH), маппинг D/C, обрезка денег до 2 знаков без округления, группировка балансов, аудит create/import; scope по company_id.');
     }
 
     /**
@@ -180,6 +184,8 @@ class DwhMergeControllerTest extends \Codeception\Test\Unit
         $this->assertSame(1, $entryCount);
         $this->assertSame(0, $notMerged);
         $this->assertSame(1, $entryAuditCount);
+
+        $this->stdout('DWH merge: повторный запуск и дубль posting_id не создают дублей в nostro_entries (уникальность posting_id), аудит создаётся один раз.');
     }
 
     /**
@@ -215,6 +221,8 @@ class DwhMergeControllerTest extends \Codeception\Test\Unit
         $this->assertFalse((bool)$isMerged);
         $this->assertFalse((bool)$statusMerged);
         $this->assertSame(0, $entryCount);
+
+        $this->stdout('DWH merge: строка с ненайденным cbaccount не помечается обработанной (is_merged=false), записи не создаются, tds_status не merged.');
     }
 
     /**
@@ -243,6 +251,8 @@ class DwhMergeControllerTest extends \Codeception\Test\Unit
 
         $this->assertFalse((bool)$isMerged);
         $this->assertSame(0, $entryCount);
+
+        $this->stdout('DWH merge: без pending-строки type=DWH в tds_status источник не переносится (is_merged=false, записей нет).');
     }
 
     /**

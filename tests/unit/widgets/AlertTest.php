@@ -12,6 +12,8 @@ use Yii;
  */
 class AlertTest extends \Codeception\Test\Unit
 {
+    use \PrintsTestDescription;
+
     /**
      * Проверяет сценарий: single error message.
      * @return void
@@ -30,6 +32,8 @@ class AlertTest extends \Codeception\Test\Unit
         verify($renderingResult)->stringNotContainsString('alert-success');
         verify($renderingResult)->stringNotContainsString('alert-info');
         verify($renderingResult)->stringNotContainsString('alert-warning');
+
+        $this->stdout('Alert: одиночное flash «error» рендерится с классом alert-danger и без классов других типов.');
     }
 
     /**
@@ -52,6 +56,8 @@ class AlertTest extends \Codeception\Test\Unit
         verify($renderingResult)->stringNotContainsString('alert-success');
         verify($renderingResult)->stringNotContainsString('alert-info');
         verify($renderingResult)->stringNotContainsString('alert-warning');
+
+        $this->stdout('Alert: массив flash «error» рендерит оба сообщения с классом alert-danger.');
     }
 
     /**
@@ -72,6 +78,8 @@ class AlertTest extends \Codeception\Test\Unit
         verify($renderingResult)->stringNotContainsString('alert-success');
         verify($renderingResult)->stringNotContainsString('alert-info');
         verify($renderingResult)->stringNotContainsString('alert-warning');
+
+        $this->stdout('Alert: одиночное flash «danger» рендерится с классом alert-danger.');
     }
 
     /**
@@ -94,6 +102,8 @@ class AlertTest extends \Codeception\Test\Unit
         verify($renderingResult)->stringNotContainsString('alert-success');
         verify($renderingResult)->stringNotContainsString('alert-info');
         verify($renderingResult)->stringNotContainsString('alert-warning');
+
+        $this->stdout('Alert: массив flash «danger» рендерит оба сообщения с классом alert-danger.');
     }
 
     /**
@@ -114,6 +124,8 @@ class AlertTest extends \Codeception\Test\Unit
         verify($renderingResult)->stringNotContainsString('alert-danger');
         verify($renderingResult)->stringNotContainsString('alert-info');
         verify($renderingResult)->stringNotContainsString('alert-warning');
+
+        $this->stdout('Alert: одиночное flash «success» рендерится с классом alert-success.');
     }
 
     /**
@@ -136,6 +148,8 @@ class AlertTest extends \Codeception\Test\Unit
         verify($renderingResult)->stringNotContainsString('alert-danger');
         verify($renderingResult)->stringNotContainsString('alert-info');
         verify($renderingResult)->stringNotContainsString('alert-warning');
+
+        $this->stdout('Alert: массив flash «success» рендерит оба сообщения с классом alert-success.');
     }
 
     /**
@@ -156,6 +170,8 @@ class AlertTest extends \Codeception\Test\Unit
         verify($renderingResult)->stringNotContainsString('alert-danger');
         verify($renderingResult)->stringNotContainsString('alert-success');
         verify($renderingResult)->stringNotContainsString('alert-warning');
+
+        $this->stdout('Alert: одиночное flash «info» рендерится с классом alert-info.');
     }
 
     /**
@@ -178,6 +194,8 @@ class AlertTest extends \Codeception\Test\Unit
         verify($renderingResult)->stringNotContainsString('alert-danger');
         verify($renderingResult)->stringNotContainsString('alert-success');
         verify($renderingResult)->stringNotContainsString('alert-warning');
+
+        $this->stdout('Alert: массив flash «info» рендерит оба сообщения с классом alert-info.');
     }
 
     /**
@@ -198,6 +216,8 @@ class AlertTest extends \Codeception\Test\Unit
         verify($renderingResult)->stringNotContainsString('alert-danger');
         verify($renderingResult)->stringNotContainsString('alert-success');
         verify($renderingResult)->stringNotContainsString('alert-info');
+
+        $this->stdout('Alert: одиночное flash «warning» рендерится с классом alert-warning.');
     }
 
     /**
@@ -220,6 +240,8 @@ class AlertTest extends \Codeception\Test\Unit
         verify($renderingResult)->stringNotContainsString('alert-danger');
         verify($renderingResult)->stringNotContainsString('alert-success');
         verify($renderingResult)->stringNotContainsString('alert-info');
+
+        $this->stdout('Alert: массив flash «warning» рендерит оба сообщения с классом alert-warning.');
     }
 
     /**
@@ -252,6 +274,8 @@ class AlertTest extends \Codeception\Test\Unit
         verify($renderingResult)->stringContainsString('alert-success');
         verify($renderingResult)->stringContainsString('alert-info');
         verify($renderingResult)->stringContainsString('alert-warning');
+
+        $this->stdout('Alert: набор одиночных flash всех типов рендерится с соответствующими классами danger/success/info/warning одновременно.');
     }
 
     /**
@@ -294,6 +318,8 @@ class AlertTest extends \Codeception\Test\Unit
         verify($renderingResult)->stringContainsString('alert-success');
         verify($renderingResult)->stringContainsString('alert-info');
         verify($renderingResult)->stringContainsString('alert-warning');
+
+        $this->stdout('Alert: массивы flash всех типов рендерят все сообщения с корректными классами одновременно.');
     }
 
     /**
@@ -317,5 +343,7 @@ class AlertTest extends \Codeception\Test\Unit
 
         verify(Yii::$app->session->getFlash('error'))->empty();
         verify(Yii::$app->session->getFlash('unrelated'))->equals($unrelatedMessage);
+
+        $this->stdout('Alert: виджет потребляет только свои flash (error удалён после рендера), посторонний flash «unrelated» сохраняется.');
     }
 }

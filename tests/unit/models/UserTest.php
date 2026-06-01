@@ -11,6 +11,8 @@ use app\models\User;
  */
 class UserTest extends \Codeception\Test\Unit
 {
+    use \PrintsTestDescription;
+
     private User $activeUser;
     private User $deletedUser;
 
@@ -52,6 +54,8 @@ class UserTest extends \Codeception\Test\Unit
         verify($user->username)->equals('admin');
 
         verify(User::findIdentity($this->deletedUser->id))->empty();
+
+        $this->stdout('findIdentity по id: находит активного пользователя, удалённого (status=DELETED) — не возвращает.');
     }
 
     /**
@@ -63,6 +67,8 @@ class UserTest extends \Codeception\Test\Unit
         verify($user = User::findByUsername('admin'))->notEmpty();
         verify($user->id)->equals($this->activeUser->id);
         verify(User::findByUsername('deleted'))->empty();
+
+        $this->stdout('findByUsername: находит активного по username, удалённого — не возвращает.');
     }
 
     /**
@@ -76,5 +82,7 @@ class UserTest extends \Codeception\Test\Unit
         verify(\Yii::$app->user->login($user, 0))->true();
         verify(\Yii::$app->user->isGuest)->false();
         verify((int)\Yii::$app->user->id)->equals((int)$this->activeUser->id);
+
+        $this->stdout('Внутренний вход найденного пользователя через cookie/session: isGuest=false, id совпадает с активным пользователем.');
     }
 }

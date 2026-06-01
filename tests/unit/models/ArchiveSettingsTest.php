@@ -11,6 +11,8 @@ use app\models\ArchiveSettings;
  */
 class ArchiveSettingsTest extends \Codeception\Test\Unit
 {
+    use \PrintsTestDescription;
+
     /**
      * Подготавливает окружение перед тестом.
      * @return void
@@ -38,6 +40,8 @@ class ArchiveSettingsTest extends \Codeception\Test\Unit
             'retention_years' => ArchiveSettings::DEFAULT_RETENTION_YEARS,
             'auto_archive_enabled' => true,
         ]);
+
+        $this->stdout('Настройки архива для компании без записи: возвращается новый объект с дефолтами (archive_after_days/retention_years) и корректным toApiArray.');
     }
 
     /**
@@ -56,5 +60,7 @@ class ArchiveSettingsTest extends \Codeception\Test\Unit
         verify($settings->validate())->false();
         verify($settings->errors)->arrayHasKey('archive_after_days');
         verify($settings->errors)->arrayHasKey('retention_years');
+
+        $this->stdout('Валидация настроек архива: archive_after_days=0 и retention_years=21 вне диапазона → ошибки по обоим полям.');
     }
 }

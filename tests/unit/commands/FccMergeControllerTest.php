@@ -15,6 +15,8 @@ use yii\console\ExitCode;
  */
 class FccMergeControllerTest extends \Codeception\Test\Unit
 {
+    use \PrintsTestDescription;
+
     /**
      * Подготавливает окружение перед тестом.
      *
@@ -100,6 +102,8 @@ class FccMergeControllerTest extends \Codeception\Test\Unit
 
         $this->assertSame(0, $sourceCount);
         $this->assertTrue((bool)$statusMerged);
+
+        $this->stdout('FCC12 merge: строки-балансы → nostro_balance, транзакции → nostro_entries (ls=L, source=FCC12), трассировка extract_no/line_no/branch_code, аудит create/import, источник очищен, статус merged.');
     }
 
     /**
@@ -135,6 +139,8 @@ class FccMergeControllerTest extends \Codeception\Test\Unit
 
         $this->assertSame(1, $sourceCount);
         $this->assertFalse((bool)$statusMerged);
+
+        $this->stdout('FCC12 merge (partial): счёт не найден → строка источника остаётся, записи не создаются, tds_status.is_merged=false для повторного прогона.');
     }
 
     /**

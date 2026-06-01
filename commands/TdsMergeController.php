@@ -384,9 +384,9 @@ class TdsMergeController extends Controller
             $hdr['opening_currency'] ?? null,
             $hdr['opening_value_dt'] ?? null,
             $hdr['opening_amount'] ?? 0,
-            $this->mapDc($hdr['opening_dc'] ?? null, $type),
+            $this->mapDcShort($hdr['opening_dc'] ?? null, $type),
             $hdr['closing_amount'] ?? 0,
-            $this->mapDc($hdr['closing_dc'] ?? null, $type),
+            $this->mapDcShort($hdr['closing_dc'] ?? null, $type),
             self::SECTION,
             $hdr['format_type'],
             'normal',
@@ -546,6 +546,27 @@ class TdsMergeController extends Controller
         }
 
         throw new \RuntimeException("Некорректный D/C для {$type}: '{$raw}'");
+    }
+
+    /**
+     * Преобразует D/C-признак в односимвольный код `D`/`C` для nostro_balance.
+     *
+     * Колонки nostro_balance.opening_dc/closing_dc — char(1), поэтому полная
+     * форма `Debit`/`Credit` из mapDc() в них не помещается. Метод нормализует
+     * результат к односимвольному виду, сохраняя строгую проверку источника.
+     *
+     * @param string|null $raw Сырое значение из источника.
+     * @param string $type Тип источника.
+     * @return string|null `D`, `C` или `null` для пустого значения.
+     * @throws \RuntimeException Если признак не распознан.
+     */
+    private function mapDcShort(?string $raw, string $type): ?string
+    {
+        $full = $this->mapDc($raw, $type);
+        if ($full === null) {
+            return null;
+        }
+        return $full === 'Debit' ? 'D' : 'C';
     }
 
     /**

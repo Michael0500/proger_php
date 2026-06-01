@@ -11,6 +11,8 @@ use app\models\UserPreference;
  */
 class UserPreferenceTest extends \Codeception\Test\Unit
 {
+    use \PrintsTestDescription;
+
     /**
      * Подготавливает окружение перед тестом.
      * @return void
@@ -41,6 +43,8 @@ class UserPreferenceTest extends \Codeception\Test\Unit
 
         verify(UserPreference::find()->count())->equals(1);
         verify(UserPreference::getValue((int)$user->id, UserPreference::KEY_ENTRIES_TABLE_COLUMNS))->equals($updated);
+
+        $this->stdout('setValue делает upsert JSON-настройки: повторное сохранение того же ключа обновляет одну строку (count=1), getValue возвращает новое значение.');
     }
 
     /**
@@ -62,5 +66,7 @@ class UserPreferenceTest extends \Codeception\Test\Unit
         ])->execute();
 
         verify(UserPreference::getValue((int)$user->id, UserPreference::KEY_ENTRIES_TABLE_COLUMNS))->equals($value);
+
+        $this->stdout('getValue корректно читает старый дважды-закодированный JSON (legacy double-encoded), возвращая исходный массив.');
     }
 }

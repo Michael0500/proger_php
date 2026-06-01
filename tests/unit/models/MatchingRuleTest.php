@@ -11,6 +11,8 @@ use app\models\MatchingRule;
  */
 class MatchingRuleTest extends \Codeception\Test\Unit
 {
+    use \PrintsTestDescription;
+
     /**
      * Проверяет сценарий: conditions summary lists enabled criteria.
      * @return void
@@ -29,6 +31,8 @@ class MatchingRuleTest extends \Codeception\Test\Unit
         ]);
 
         verify($rule->conditionsSummary)->equals('D/C, Сумма, Instruction, Message, ⟷ Перекрёстный');
+
+        $this->stdout('conditionsSummary правила: перечисляет включённые критерии (D/C, Сумма, Instruction, Message) и пометку перекрёстного поиска.');
     }
 
     /**
@@ -41,5 +45,7 @@ class MatchingRuleTest extends \Codeception\Test\Unit
         $rule = new MatchingRule();
 
         verify($rule->conditionsSummary)->equals('—');
+
+        $this->stdout('conditionsSummary правила без критериев: возвращает тире «—».');
     }
 }

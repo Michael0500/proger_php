@@ -24,6 +24,10 @@ Thumbs.db
 # composer vendor dir
 /vendor
 
+# npm dependencies and JS test output
+/node_modules
+/coverage
+
 # composer itself is not needed
 composer.phar
 

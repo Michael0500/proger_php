@@ -11,6 +11,8 @@ use app\models\NostroBalance;
  */
 class BalanceParsersTest extends \Codeception\Test\Unit
 {
+    use \PrintsTestDescription;
+
     /** @var string[] Временные файлы теста */
     private array $files = [];
 
@@ -73,6 +75,8 @@ class BalanceParsersTest extends \Codeception\Test\Unit
         $this->assertEquals(900.10, $rows[0]['closing_balance']);
         $this->assertSame(NostroBalance::DC_DEBIT, $rows[0]['closing_dc']);
         $this->assertSame(NostroBalance::SOURCE_BND, $rows[0]['source']);
+
+        $this->stdout('BND/CAMT парсер: разбирает CAMT053 XML с namespace — opening/closing balance, валюта, дата, D/C (CRDT/DBIT) и source=BND.');
     }
 
     /**
@@ -100,6 +104,8 @@ class BalanceParsersTest extends \Codeception\Test\Unit
 
         $this->assertSame([], $rows);
         $this->assertContains('Stmt STMT-002: не найден баланс CLBD', $parser->getErrors());
+
+        $this->stdout('BND/CAMT парсер: при отсутствии closing balance (CLBD) строки не возвращаются и фиксируется ошибка «не найден баланс CLBD».');
     }
 
     /**
@@ -135,6 +141,8 @@ class BalanceParsersTest extends \Codeception\Test\Unit
         $this->assertSame(NostroBalance::DC_CREDIT, $rows[0]['closing_dc']);
         $this->assertSame(NostroBalance::SOURCE_ASB, $rows[0]['source']);
         $this->assertSame(NostroBalance::SECTION_INV, $rows[0]['section']);
+
+        $this->stdout('ASB парсер: разбирает Windows-1251 файл (числа с запятой и пробелами), валюта RUB, дата dd.mm.yyyy→ISO, source=ASB, секция INV.');
     }
 
     /**
@@ -151,6 +159,8 @@ class BalanceParsersTest extends \Codeception\Test\Unit
 
         $this->assertSame([], $rows);
         $this->assertContains("АСБ: некорректная дата '2026/99/99'", $parser->getErrors());
+
+        $this->stdout('ASB парсер: некорректная дата «2026/99/99» → строки не возвращаются, фиксируется ошибка о некорректной дате.');
     }
 
     /**

@@ -12,6 +12,8 @@ use app\models\NostroEntryAudit;
  */
 class NostroEntryTest extends \Codeception\Test\Unit
 {
+    use \PrintsTestDescription;
+
     /**
      * Подготавливает окружение перед тестом.
      * @return void
@@ -42,6 +44,8 @@ class NostroEntryTest extends \Codeception\Test\Unit
         $entry->clearErrors();
         $entry->amount = '1234567890123456789.00';
         verify($entry->validate(['amount']))->false();
+
+        $this->stdout('Денежная валидация суммы записи decimal(20,2): 18+2 знака — ок; 3 знака, отрицательная сумма и 19 цифр до точки — отклоняются.');
     }
 
     /**
@@ -66,6 +70,8 @@ class NostroEntryTest extends \Codeception\Test\Unit
         $entry->save(false);
 
         verify($entry->matched_at)->null();
+
+        $this->stdout('beforeSave: статус M проставляет matched_at; смена на U очищает matched_at даже при явно заданном значении.');
     }
 
     /**
@@ -103,5 +109,7 @@ class NostroEntryTest extends \Codeception\Test\Unit
             'entry_id' => $entryId,
             'action' => NostroEntryAudit::ACTION_DELETE,
         ])->count())->equals(1);
+
+        $this->stdout('Аудит записи: create при вставке, update с changed_field при изменении comment, delete перед удалением — по одной записи аудита на каждое событие.');
     }
 }

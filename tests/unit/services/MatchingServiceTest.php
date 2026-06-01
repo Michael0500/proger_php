@@ -14,6 +14,8 @@ use Yii;
  */
 class MatchingServiceTest extends \Codeception\Test\Unit
 {
+    use \PrintsTestDescription;
+
     /**
      * Подготавливает окружение перед тестом.
      * @return void
@@ -56,6 +58,8 @@ class MatchingServiceTest extends \Codeception\Test\Unit
         verify($statement->match_status)->equals(NostroEntry::STATUS_MATCHED);
         verify($ledger->match_id)->equals($statement->match_id);
         verify($ledger->matched_at)->notEmpty();
+
+        $this->stdout('Ручное квитование сбалансированной пары Ledger(Debit 100)+Statement(Credit 100): обе записи получили статус M, общий match_id и matched_at.');
     }
 
     /**
@@ -85,6 +89,8 @@ class MatchingServiceTest extends \Codeception\Test\Unit
         verify($result['success'])->false();
         verify($result['warning'])->true();
         verify($result['diff'])->equals(10.0);
+
+        $this->stdout('Ручное квитование несбалансированного NRE-набора (100 против 90): отказ с warning и разницей diff=10.');
     }
 
     /**
@@ -104,6 +110,8 @@ class MatchingServiceTest extends \Codeception\Test\Unit
 
         verify($result['success'])->true();
         verify($result['count'])->equals(1);
+
+        $this->stdout('Ручное квитование одиночной записи с суммой 0: разрешено, count=1.');
     }
 
     /**
@@ -132,6 +140,8 @@ class MatchingServiceTest extends \Codeception\Test\Unit
 
         verify($result['success'])->true();
         verify($result['count'])->equals(2);
+
+        $this->stdout('Ручное квитование INV по балансу Debit/Credit (50=50): успешно, count=2.');
     }
 
     /**
@@ -169,6 +179,8 @@ class MatchingServiceTest extends \Codeception\Test\Unit
         $eur->refresh();
         verify($usd->match_status)->equals(NostroEntry::STATUS_UNMATCHED);
         verify($eur->match_status)->equals(NostroEntry::STATUS_UNMATCHED);
+
+        $this->stdout('Ручное квитование записей в разных валютах (USD+EUR): отказ, записи остаются незаквитованными.');
     }
 
     /**
@@ -211,6 +223,8 @@ class MatchingServiceTest extends \Codeception\Test\Unit
         $b->refresh();
         verify($a->match_status)->equals(NostroEntry::STATUS_UNMATCHED);
         verify($b->match_status)->equals(NostroEntry::STATUS_UNMATCHED);
+
+        $this->stdout('Ручное квитование записей из разных ностро-банков (pool A и pool B): отказ, записи остаются незаквитованными.');
     }
 
     /**
@@ -251,6 +265,8 @@ class MatchingServiceTest extends \Codeception\Test\Unit
 
         verify($result['success'])->false();
         verify($result['message'])->stringContainsString('разных ностро-банков');
+
+        $this->stdout('Ручное квитование набора, где у счёта pool_id IS NULL: отказ (счёт без ностро-банка нельзя квитовать).');
     }
 
     /**
@@ -287,6 +303,8 @@ class MatchingServiceTest extends \Codeception\Test\Unit
 
         verify($result['success'])->true();
         verify($result['count'])->equals(2);
+
+        $this->stdout('Ручное квитование двух счетов одного ностро-банка и валюты (USD 75=75): успешно, count=2 (проверка единства банка не ломает базовый сценарий).');
     }
 
     /**
@@ -323,6 +341,8 @@ class MatchingServiceTest extends \Codeception\Test\Unit
         verify($second->match_status)->equals(NostroEntry::STATUS_UNMATCHED);
         verify($first->match_id)->null();
         verify($second->matched_at)->null();
+
+        $this->stdout('Расквитование группы по match_id: обе записи группы переведены в U, match_id и matched_at очищены.');
     }
 
     /**
@@ -354,5 +374,330 @@ class MatchingServiceTest extends \Codeception\Test\Unit
         verify($summary['diff'])->equals(30.0);
         verify($summary['cnt_ledger'])->equals(1);
         verify($summary['cnt_statement'])->equals(1);
+
+        $this->stdout('calcSummary по набору (Ledger 100, Statement 70): суммы и счётчики корректны, diff=30.');
+    }
+
+    // ── TC-040 ────────────────────────────────────────────────────────────
+
+    /**
+     * TC-040. В наборе есть уже сквитованная запись: количество найденных
+     * незаквитованных не совпадает с числом ID → отказ.
+     *
+     * @return void
+     */
+    public function testManualMatchRejectsWhenSomeEntryAlreadyMatched(): void
+    {
+        [$company, , $account] = \SmartMatchTestHelper::createCompanyPoolAccount();
+        $unmatched = \SmartMatchTestHelper::createEntry([
+            'company_id' => $company->id, 'account_id' => $account->id,
+            'ls' => NostroEntry::LS_LEDGER, 'dc' => NostroEntry::DC_DEBIT, 'amount' => '100.00',
+        ]);
+        $matched = \SmartMatchTestHelper::createEntry([
+            'company_id' => $company->id, 'account_id' => $account->id,
+            'ls' => NostroEntry::LS_STATEMENT, 'dc' => NostroEntry::DC_CREDIT, 'amount' => '100.00',
+            'match_id' => 'MTCH00009999', 'match_status' => NostroEntry::STATUS_MATCHED,
+        ]);
+
+        $result = (new MatchingService())->matchManual([$unmatched->id, $matched->id]);
+
+        verify($result['success'])->false();
+        verify($result['message'])->stringContainsString('Часть записей недоступна');
+        $unmatched->refresh();
+        verify($unmatched->match_status)->equals(NostroEntry::STATUS_UNMATCHED);
+
+        $this->stdout('TC-040: в наборе есть уже сквитованная запись → отказ «Часть записей недоступна», незаквитованная не трогается.');
+    }
+
+    // ── TC-041 ────────────────────────────────────────────────────────────
+
+    /**
+     * TC-041. Сбалансированный набор более чем из двух записей: два Ledger Debit
+     * и один Statement Credit на ту же сумму квитуются успешно.
+     *
+     * @return void
+     */
+    public function testManualMatchBalancesMultiEntryNreSet(): void
+    {
+        [$company, , $account] = \SmartMatchTestHelper::createCompanyPoolAccount();
+        $l1 = \SmartMatchTestHelper::createEntry([
+            'company_id' => $company->id, 'account_id' => $account->id,
+            'ls' => NostroEntry::LS_LEDGER, 'dc' => NostroEntry::DC_DEBIT, 'amount' => '100.00',
+        ]);
+        $l2 = \SmartMatchTestHelper::createEntry([
+            'company_id' => $company->id, 'account_id' => $account->id,
+            'ls' => NostroEntry::LS_LEDGER, 'dc' => NostroEntry::DC_DEBIT, 'amount' => '50.00',
+        ]);
+        $s1 = \SmartMatchTestHelper::createEntry([
+            'company_id' => $company->id, 'account_id' => $account->id,
+            'ls' => NostroEntry::LS_STATEMENT, 'dc' => NostroEntry::DC_CREDIT, 'amount' => '150.00',
+        ]);
+
+        $result = (new MatchingService())->matchManual([$l1->id, $l2->id, $s1->id]);
+
+        verify($result['success'])->true();
+        verify($result['count'])->equals(3);
+
+        $this->stdout('TC-041: сбалансированный набор 2×Ledger Debit (100+50) + Statement Credit 150 → успешно, count=3.');
+    }
+
+    // ── TC-042 ────────────────────────────────────────────────────────────
+
+    /**
+     * TC-042. NRE-набор только из Ledger (нет Statement): балансировка L/S
+     * пропускается (нет обеих сторон) и набор квитуется.
+     *
+     * @return void
+     */
+    public function testManualMatchLedgerOnlySetSkipsBalanceCheck(): void
+    {
+        [$company, , $account] = \SmartMatchTestHelper::createCompanyPoolAccount();
+        $l1 = \SmartMatchTestHelper::createEntry([
+            'company_id' => $company->id, 'account_id' => $account->id,
+            'ls' => NostroEntry::LS_LEDGER, 'dc' => NostroEntry::DC_DEBIT, 'amount' => '100.00',
+        ]);
+        $l2 = \SmartMatchTestHelper::createEntry([
+            'company_id' => $company->id, 'account_id' => $account->id,
+            'ls' => NostroEntry::LS_LEDGER, 'dc' => NostroEntry::DC_DEBIT, 'amount' => '50.00',
+        ]);
+
+        $result = (new MatchingService())->matchManual([$l1->id, $l2->id]);
+
+        verify($result['success'])->true();
+        verify($result['count'])->equals(2);
+
+        $this->stdout('TC-042: NRE-набор только из Ledger (без Statement) → проверка баланса L/S пропускается, квитование успешно (документирует текущее поведение).');
+    }
+
+    // ── TC-043 ────────────────────────────────────────────────────────────
+
+    /**
+     * TC-043. Валюта сравнивается регистронезависимо: `usd` и `USD` считаются
+     * одной валютой и не блокируют квитование.
+     *
+     * @return void
+     */
+    public function testManualMatchCurrencyComparisonIsCaseInsensitive(): void
+    {
+        [$company, , $account] = \SmartMatchTestHelper::createCompanyPoolAccount();
+        $ledger = \SmartMatchTestHelper::createEntry([
+            'company_id' => $company->id, 'account_id' => $account->id,
+            'ls' => NostroEntry::LS_LEDGER, 'dc' => NostroEntry::DC_DEBIT, 'amount' => '100.00',
+            'currency' => 'usd',
+        ]);
+        $statement = \SmartMatchTestHelper::createEntry([
+            'company_id' => $company->id, 'account_id' => $account->id,
+            'ls' => NostroEntry::LS_STATEMENT, 'dc' => NostroEntry::DC_CREDIT, 'amount' => '100.00',
+            'currency' => 'USD',
+        ]);
+
+        $result = (new MatchingService())->matchManual([$ledger->id, $statement->id]);
+
+        verify($result['success'])->true();
+        verify($result['count'])->equals(2);
+
+        $this->stdout('TC-043: валюты «usd» и «USD» трактуются как одна (strtoupper) → квитование не блокируется, count=2.');
+    }
+
+    // ── TC-044 ────────────────────────────────────────────────────────────
+
+    /**
+     * TC-044. Одиночная запись с ненулевой суммой не квитуется.
+     *
+     * @return void
+     */
+    public function testManualMatchRejectsSingleNonZeroEntry(): void
+    {
+        [$company, , $account] = \SmartMatchTestHelper::createCompanyPoolAccount();
+        $entry = \SmartMatchTestHelper::createEntry([
+            'company_id' => $company->id, 'account_id' => $account->id, 'amount' => '100.00',
+        ]);
+
+        $result = (new MatchingService())->matchManual([$entry->id]);
+
+        verify($result['success'])->false();
+        verify($result['message'])->stringContainsString('минимум 2 записи');
+        $entry->refresh();
+        verify($entry->match_status)->equals(NostroEntry::STATUS_UNMATCHED);
+
+        $this->stdout('TC-044: одиночная запись с ненулевой суммой 100 → отказ «минимум 2 записи», запись остаётся U.');
+    }
+
+    // ── TC-045 ────────────────────────────────────────────────────────────
+
+    /**
+     * TC-045. INV-набор с дисбалансом Debit/Credit: отказ с warning и разницей.
+     *
+     * @return void
+     */
+    public function testManualMatchRejectsImbalancedInvSet(): void
+    {
+        [$company, , $account] = \SmartMatchTestHelper::createCompanyPoolAccount();
+        $debit = \SmartMatchTestHelper::createEntry([
+            'company_id' => $company->id, 'account_id' => $account->id,
+            'ls' => NostroEntry::LS_LEDGER, 'dc' => NostroEntry::DC_DEBIT, 'amount' => '70.00',
+        ]);
+        $credit = \SmartMatchTestHelper::createEntry([
+            'company_id' => $company->id, 'account_id' => $account->id,
+            'ls' => NostroEntry::LS_LEDGER, 'dc' => NostroEntry::DC_CREDIT, 'amount' => '50.00',
+        ]);
+
+        $result = (new MatchingService())->matchManual([$debit->id, $credit->id], MatchingRule::SECTION_INV);
+
+        verify($result['success'])->false();
+        verify($result['warning'])->true();
+        verify($result['diff'])->equals(20.0);
+
+        $this->stdout('TC-045: INV-набор с дисбалансом Debit/Credit (70 против 50) → отказ с warning и diff=20.');
+    }
+
+    // ── TC-046 ────────────────────────────────────────────────────────────
+
+    /**
+     * TC-046. Ошибка БД при сохранении откатывает транзакцию: ни одна запись
+     * не получает match_id. Эмулируется слишком длинным match_id (> varchar(255)).
+     *
+     * @return void
+     */
+    public function testManualMatchRollsBackOnDbError(): void
+    {
+        [$company, , $account] = \SmartMatchTestHelper::createCompanyPoolAccount();
+        $ledger = \SmartMatchTestHelper::createEntry([
+            'company_id' => $company->id, 'account_id' => $account->id,
+            'ls' => NostroEntry::LS_LEDGER, 'dc' => NostroEntry::DC_DEBIT, 'amount' => '100.00',
+        ]);
+        $statement = \SmartMatchTestHelper::createEntry([
+            'company_id' => $company->id, 'account_id' => $account->id,
+            'ls' => NostroEntry::LS_STATEMENT, 'dc' => NostroEntry::DC_CREDIT, 'amount' => '100.00',
+        ]);
+
+        $service = new class extends MatchingService {
+            public function generateMatchId(): string
+            {
+                // 300 символов > varchar(255) → ошибка БД при save().
+                return str_repeat('X', 300);
+            }
+        };
+
+        $result = $service->matchManual([$ledger->id, $statement->id]);
+
+        verify($result['success'])->false();
+        verify($result['message'])->stringContainsString('Ошибка БД');
+        $ledger->refresh();
+        $statement->refresh();
+        verify($ledger->match_status)->equals(NostroEntry::STATUS_UNMATCHED);
+        verify($statement->match_status)->equals(NostroEntry::STATUS_UNMATCHED);
+
+        $this->stdout('TC-046: ошибка БД при сохранении (match_id > 255 символов) → транзакция откатывается, обе записи остаются U.');
+    }
+
+    // ── TC-047 ────────────────────────────────────────────────────────────
+
+    /**
+     * TC-047. unmatch ограничен компанией: при общем match_id у двух компаний
+     * расквитываются только записи указанной компании.
+     *
+     * @return void
+     */
+    public function testUnmatchIsScopedByCompany(): void
+    {
+        $matchId = 'MTCHSHARED01';
+
+        $companyA = \SmartMatchTestHelper::createCompany();
+        $poolA = \SmartMatchTestHelper::createPool((int)$companyA->id);
+        $accountA = \SmartMatchTestHelper::createAccount((int)$companyA->id, (int)$poolA->id);
+        $entryA = \SmartMatchTestHelper::createEntry([
+            'company_id' => $companyA->id, 'account_id' => $accountA->id,
+            'match_id' => $matchId, 'match_status' => NostroEntry::STATUS_MATCHED,
+        ]);
+
+        $companyB = \SmartMatchTestHelper::createCompany();
+        $poolB = \SmartMatchTestHelper::createPool((int)$companyB->id);
+        $accountB = \SmartMatchTestHelper::createAccount((int)$companyB->id, (int)$poolB->id);
+        $entryB = \SmartMatchTestHelper::createEntry([
+            'company_id' => $companyB->id, 'account_id' => $accountB->id,
+            'match_id' => $matchId, 'match_status' => NostroEntry::STATUS_MATCHED,
+        ]);
+
+        $result = (new MatchingService())->unmatch($matchId, (int)$companyA->id);
+
+        verify($result['success'])->true();
+        verify($result['count'])->equals(1);
+        $entryA->refresh();
+        $entryB->refresh();
+        verify($entryA->match_status)->equals(NostroEntry::STATUS_UNMATCHED);
+        verify($entryB->match_status)->equals(NostroEntry::STATUS_MATCHED);
+
+        $this->stdout('TC-047: общий match_id у двух компаний → unmatch для компании A расквитовал только её запись, запись компании B осталась M.');
+    }
+
+    // ── TC-048 ────────────────────────────────────────────────────────────
+
+    /**
+     * TC-048. unmatch несуществующего match_id возвращает отказ.
+     *
+     * @return void
+     */
+    public function testUnmatchNonexistentMatchIdFails(): void
+    {
+        $company = \SmartMatchTestHelper::createCompany();
+
+        $result = (new MatchingService())->unmatch('MTCHNOPE99', (int)$company->id);
+
+        verify($result['success'])->false();
+        verify($result['message'])->stringContainsString('MTCHNOPE99');
+
+        $this->stdout('TC-048: unmatch несуществующего match_id → отказ с упоминанием искомого ID.');
+    }
+
+    // ── TC-049 ────────────────────────────────────────────────────────────
+
+    /**
+     * TC-049. calcSummary не учитывает записи чужой компании: ID из другой
+     * компании отбрасываются tenant-фильтром.
+     *
+     * @return void
+     */
+    public function testCalcSummaryExcludesOtherCompany(): void
+    {
+        $companyA = \SmartMatchTestHelper::createCompany();
+        $poolA = \SmartMatchTestHelper::createPool((int)$companyA->id);
+        $accountA = \SmartMatchTestHelper::createAccount((int)$companyA->id, (int)$poolA->id);
+        $ledgerA = \SmartMatchTestHelper::createEntry([
+            'company_id' => $companyA->id, 'account_id' => $accountA->id,
+            'ls' => NostroEntry::LS_LEDGER, 'amount' => '100.00',
+        ]);
+
+        $companyB = \SmartMatchTestHelper::createCompany();
+        $poolB = \SmartMatchTestHelper::createPool((int)$companyB->id);
+        $accountB = \SmartMatchTestHelper::createAccount((int)$companyB->id, (int)$poolB->id);
+        $ledgerB = \SmartMatchTestHelper::createEntry([
+            'company_id' => $companyB->id, 'account_id' => $accountB->id,
+            'ls' => NostroEntry::LS_LEDGER, 'amount' => '999.00',
+        ]);
+
+        $summary = (new MatchingService())->calcSummary([$ledgerA->id, $ledgerB->id], (int)$companyA->id);
+
+        verify($summary['sum_ledger'])->equals(100.0);
+        verify($summary['cnt_ledger'])->equals(1);
+
+        $this->stdout('TC-049: calcSummary с ID из чужой компании → чужая запись (999) исключена, sum_ledger=100, cnt_ledger=1.');
+    }
+
+    // ── TC-050 ────────────────────────────────────────────────────────────
+
+    /**
+     * TC-050. Пустой набор ID: matchManual возвращает отказ.
+     *
+     * @return void
+     */
+    public function testManualMatchRejectsEmptyIdSet(): void
+    {
+        $result = (new MatchingService())->matchManual([]);
+
+        verify($result['success'])->false();
+        verify($result['message'])->stringContainsString('Незаквитованные записи не найдены');
+
+        $this->stdout('TC-050: пустой набор ID → отказ «Незаквитованные записи не найдены».');
     }
 }

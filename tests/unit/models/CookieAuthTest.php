@@ -11,6 +11,8 @@ use app\models\User;
  */
 class CookieAuthTest extends \Codeception\Test\Unit
 {
+    use \PrintsTestDescription;
+
     private User $user;
 
     /**
@@ -43,6 +45,8 @@ class CookieAuthTest extends \Codeception\Test\Unit
     public function testGuestByDefault(): void
     {
         verify(\Yii::$app->user->isGuest)->true();
+
+        $this->stdout('По умолчанию пользователь не авторизован — Yii::$app->user->isGuest = true.');
     }
 
     /**
@@ -54,5 +58,7 @@ class CookieAuthTest extends \Codeception\Test\Unit
         verify(\Yii::$app->user->login($this->user, 0))->true();
         verify(\Yii::$app->user->isGuest)->false();
         verify((int)\Yii::$app->user->id)->equals((int)$this->user->id);
+
+        $this->stdout('Внутренний вход через Yii::$app->user->login($user, 0) без пароля: сессия установлена, isGuest=false, id совпадает.');
     }
 }
