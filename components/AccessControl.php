@@ -18,6 +18,7 @@ class AccessControl extends ActionFilter
         'site/signup',
         'site/error',
         'site/index', // если главная страница публичная
+        'pcr-callback/wallet-info', // публичный callback СЦР (свой Basic Auth)
     ];
 
     /**

@@ -94,6 +94,9 @@ $config = [
                 // ── Справочники (валюты, страны) ─────────────────
                 'references'             => 'reference/index',
                 'reference/<action>'     => 'reference/<action>',
+
+                // ── Callback СЦР (Цифровой рубль) ────────────────
+                'POST api/v4/fi/callback/wallet/FIWalletInfo' => 'pcr-callback/wallet-info',
             ],
         ],
         'authManager' => [
