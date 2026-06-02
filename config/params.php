@@ -31,7 +31,8 @@ return [
         'dcOut'         => 'D',          // Дт/Кт исходящего остатка
 
         // Входящий callback от СЦР (/api/v4/fi/callback/wallet/FIWalletInfo).
-        'callbackAuth' => ['username' => '', 'password' => ''], // Basic Auth, который шлёт нам СЦР
+        // enabled=true → требуем Basic Auth (username/password) на входящем callback.
+        'callbackAuth' => ['enabled' => false, 'username' => '', 'password' => ''],
 
         // Формирование текстового файла.
         'exportDir'    => '@runtime/pcr',

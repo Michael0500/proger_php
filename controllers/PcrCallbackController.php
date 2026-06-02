@@ -157,20 +157,22 @@ class PcrCallbackController extends Controller
     /**
      * Проверяет Basic Auth входящего callback против params.pcr.callbackAuth.
      *
-     * Если логин/пароль в конфиге не заданы — проверка пропускается
-     * (удобно для локального теста; на проде заполнить callbackAuth).
+     * Управляется флагом `params.pcr.callbackAuth.enabled`:
+     *   - false (по умолчанию) — проверка пропускается (удобно для локального теста);
+     *   - true — требуется совпадение username/password из конфига.
      *
      * @return bool
      */
     private function checkAuth(): bool
     {
         $cfg = Yii::$app->params['pcr']['callbackAuth'] ?? [];
-        $user = $cfg['username'] ?? '';
-        $pass = $cfg['password'] ?? '';
 
-        if ($user === '' && $pass === '') {
+        if (empty($cfg['enabled'])) {
             return true;
         }
+
+        $user = (string)($cfg['username'] ?? '');
+        $pass = (string)($cfg['password'] ?? '');
 
         [$gotUser, $gotPass] = Yii::$app->request->getAuthCredentials();
         return hash_equals($user, (string)$gotUser) && hash_equals($pass, (string)$gotPass);

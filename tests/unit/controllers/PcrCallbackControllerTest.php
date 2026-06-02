@@ -23,8 +23,8 @@ class PcrCallbackControllerTest extends \Codeception\Test\Unit
     {
         \SmartMatchTestHelper::resetDatabase();
         Yii::$app->db->createCommand('TRUNCATE pcr_operation, pcr_wallet_info, pcr_callback RESTART IDENTITY CASCADE')->execute();
-        // По умолчанию проверка Basic Auth выключена (пустые callbackAuth).
-        Yii::$app->params['pcr']['callbackAuth'] = ['username' => '', 'password' => ''];
+        // По умолчанию проверка Basic Auth выключена (enabled=false).
+        Yii::$app->params['pcr']['callbackAuth'] = ['enabled' => false, 'username' => '', 'password' => ''];
         $_SERVER['REQUEST_METHOD'] = 'POST';
         unset($_SERVER['PHP_AUTH_USER'], $_SERVER['PHP_AUTH_PW']);
     }
@@ -112,7 +112,7 @@ class PcrCallbackControllerTest extends \Codeception\Test\Unit
      */
     public function testBasicAuthGuardsEndpoint(): void
     {
-        Yii::$app->params['pcr']['callbackAuth'] = ['username' => 'scr', 'password' => 'secret'];
+        Yii::$app->params['pcr']['callbackAuth'] = ['enabled' => true, 'username' => 'scr', 'password' => 'secret'];
 
         // Без реквизитов → 401.
         $res = $this->postCallback($this->samplePayload(), null, null, false);
