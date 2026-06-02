@@ -772,6 +772,10 @@ class AutoMatchingServiceTest extends \Codeception\Test\Unit
      * TC-036. Набор пар больше batchSize (5000) обрабатывается циклом do/while
      * полностью: квитуются все 5001 пар.
      *
+     * Нагрузочный сценарий: ~14 с (10k вставок + два batched UPDATE). Для
+     * быстрого локального TDD можно исключить группой: `--skip-group slow`.
+     *
+     * @group slow
      * @return void
      */
     public function testRunRuleProcessesMoreThanOneBatch(): void

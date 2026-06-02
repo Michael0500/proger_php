@@ -51,6 +51,12 @@ vendor/bin/codecept run unit
 
 Проверяют доменную логику без HTTP-слоя: модели, сервисы, валидацию, аудит, расчёты, SQL-логику автоквитования.
 
+Быстрый локальный прогон без нагрузочных кейсов (`@group slow` — TC-036, ~14 с):
+
+```bash
+vendor/bin/codecept run unit --skip-group slow
+```
+
 Functional-тесты:
 
 ```bash
@@ -112,6 +118,7 @@ vendor/bin/codecept run --coverage --coverage-html
 | `tests/unit/commands/FccMergeControllerTest.php` | FCC12 merge: перенос строк-балансов и транзакций, трассировка `extract_no/line_no/branch_code`, аудит, удаление источника и partial-режим при ненайденном счёте. |
 | `tests/unit/commands/DwhMergeControllerTest.php` | DWH merge: перенос suspend_posting в INV, группировка балансов, маппинг D/C, обрезка денег до 2 знаков, аудит, защита от дублей `posting_id`, partial при ненайденном счёте. |
 | `tests/unit/commands/TdsMergeControllerTest.php` | TDS merge (CAMT053/MT950/ED211/ED743): маппинг D/C, `is_merged` только без пропусков, partial при ненайденном/пустом счёте, `--type`/`--delete-source`, MT950 `statement_number`/`other_id`, ED `edno/eddate/edauthor`, трассировка `stmt_id/line_no/branch_code`, аудит импорта, chunking. |
+| `tests/unit/commands/AutoMatchControllerTest.php` | Консольный wrapper автоквитования: `run` без фильтров обходит все компании; `--company`/`--account` ограничивают область; `status` без побочных эффектов; консольный (guest) запуск пишет `updated_by=NULL` в сквитованные записи. |
 | `tests/unit/commands/PcrControllerTest.php` | PCRFIHIST export (`pcr/export`): формат строк 60/61 — фиксированные ширины и паддинг, разделитель `|`, RUB→RUR, дата `dd/MM/YYYY`, суммы с `.`, `operationId` без дефисов, `Debit→D`/`Credit→C`, фильтры `--correlation-id`/`--date`, пустой случай. |
 | `tests/unit/controllers/PcrCallbackControllerTest.php` | Приёмник callback СЦР (`PcrCallbackController`): нормализация FIWalletInfo в `pcr_callback`/`pcr_wallet_info`/`pcr_operation`, идемпотентность по `(operation_id, part_id)`, Basic Auth (401 без/с неверными реквизитами). |
 | `tests/unit/components/BalanceParsersTest.php` | Парсеры BND/CAMT и ASB: корректный разбор XML с namespace, Windows-1251 ASB, ошибки отсутствующего closing balance и некорректной даты. |
@@ -119,9 +126,9 @@ vendor/bin/codecept run --coverage --coverage-html
 | `tests/unit/models/ArchiveSettingsTest.php` | Настройки архива по умолчанию и валидацию границ `archive_after_days` / `retention_years`. |
 | `tests/unit/models/CookieAuthTest.php` | Внутреннюю авторизацию пользователя через Yii user component без пользовательского пароля. |
 | `tests/unit/models/MatchingRuleTest.php` | Текстовое описание включённых критериев правила квитования. |
-| `tests/unit/models/NostroBalanceTest.php` | Денежную точность балансов, continuity statement-балансов, дубли номеров statement. |
+| `tests/unit/models/NostroBalanceTest.php` | Денежную точность балансов, continuity statement-балансов, дубли номеров statement, `statement_number` required для `ls_type=S`, enum D/C для `opening_dc`/`closing_dc`. |
 | `tests/unit/models/NostroEntryArchiveTest.php` | Перенос сквитованной записи в архив, сохранение `matched_at`, срок retention и пользователя архивирования. |
-| `tests/unit/models/NostroEntryTest.php` | Валидацию суммы `decimal(20,2)`, автоматическое выставление/очистку `matched_at`, аудит create/update/delete. |
+| `tests/unit/models/NostroEntryTest.php` | Валидацию суммы `decimal(20,2)`, автоматическое выставление/очистку `matched_at`, аудит create/update/delete, enum `ls/dc/match_status`, длины строковых полей, `exist` для `account_id`/`company_id`. |
 | `tests/unit/models/UserPreferenceTest.php` | Upsert JSON-настроек UI и чтение старого double-encoded JSON. |
 | `tests/unit/models/UserTest.php` | Поиск активных пользователей, исключение удалённых и внутренний cookie/session login найденного пользователя. |
 | `tests/unit/services/MatchingServiceTest.php` | Ручное квитование NRE/INV (в т.ч. набор >2, только Ledger, регистр валюты), отказ при дисбалансе NRE/INV, разные валюты/банки, уже сквитованная запись в наборе, одиночная нулевая/ненулевая, откат транзакции при ошибке БД, расквитование группы и scope по компании, summary с tenant-фильтром. |
@@ -135,7 +142,7 @@ vendor/bin/codecept run --coverage --coverage-html
 | `tests/functional/AccountApiCest.php` | `/account/list`, `/account/create`, `/account/update`, `/account/delete`: `company_id` scope, запрет чужого `pool_id`, создание начального баланса при добавлении счёта. |
 | `tests/functional/AccountPoolApiCest.php` | `/account-pool/*`: список ностро-банков текущей компании, привязка только доступных счетов, запрет чужих счетов/категорий, отвязка счетов при удалении. |
 | `tests/functional/AllNostroApiCest.php` | `/all-nostro/list` и `/all-nostro/search-accounts`: фильтр по выбранным ностро-банкам, игнорирование чужих pool ID, поиск счетов только внутри компании. |
-| `tests/functional/ArchiveApiCest.php` | `/archive/run-batch`, `/archive/restore-preview`, `/archive/restore`: batch-архивирование, аудит archive, восстановление всей группы по `match_id`, аудит restore. |
+| `tests/functional/ArchiveApiCest.php` | `/archive/run-batch`, `/archive/restore-preview`, `/archive/restore`: batch-архивирование, аудит archive (с `archived_id`), восстановление всей группы по `match_id`, аудит restore; `/archive/count` по `matched_at` (не `updated_at`), `/archive/purge-expired` со scope по компании, `/archive/save-settings` валидация диапазонов, `/archive/list` фильтры (amount/search/scope), clamp `limit∈[10..200]`, `/archive/restore-preview` для чужой записи, `/archive/history` по `original_id`, `/archive/stats` счётчики. |
 | `tests/functional/BalanceArchiveApiCest.php` | `/balance-archive/run-batch`, `/balance-archive/restore`: batch-архивирование старых балансов, аудит archive/restore, восстановление активной строки. |
 | `tests/functional/CategoryApiCest.php` | `/category/get-categories`, `/category/create`, `/category/update`, `/category/delete`: дерево категорий текущей компании, запрет обновления/удаления чужих категорий. |
 | `tests/functional/CookieAuthCest.php` | Страница логина, редирект гостя с защищённой страницы и внутренний cookie/session login helper. |
@@ -146,6 +153,7 @@ vendor/bin/codecept run --coverage --coverage-html
 | `tests/functional/ReferenceApiCest.php` | `/reference/*`: CRUD валют и стран, нормализация ISO-кодов до валидации, сортировка и отказ невалидных кодов. |
 | `tests/functional/ReconReportApiCest.php` | `/recon-report/generate`: сбор отчёта по ностро-банку из Ledger/Statement closing balances и outstanding items, исключение уже сквитованных записей; валидация (нет компании, pool+category/ни одного, период и даты), Closing Balance по последнему балансу ≤ даты, MULTI-валюта, окно дат prevDay+recon, изоляция чужого пула. |
 | `tests/functional/UserPreferenceCest.php` | `/user-preference/save` и `/user-preference/get`: сохранение разрешённого ключа, отказ неизвестного ключа. |
+| `tests/functional/SecurityApiCest.php` | Безопасность JSON API: `filters.search_value` обрабатывается как литерал `ilike` (защита от SQL-инъекции); `pool_id` приводится к `int` (метасимволы безопасны); гость не может POST к защищённому API (редирект 302, БД не меняется). |
 
 ## 6. Как добавлять новые тесты
 
@@ -185,3 +193,17 @@ php tests/bin/yii migrate --interactive=0
 ```bash
 vendor/bin/codecept build
 ```
+
+Если функциональный Cest начал падать с `Session cookie parameters cannot be changed after headers have already been sent`, см. раздел 8 — это типично от `use Yii;` в файле без namespace.
+
+## 8. Конвенции и подводные камни
+
+**`use Yii;` в Cest без namespace ломает сессию.** Файлы `tests/functional/*Cest.php` не имеют namespace, и `Yii` уже доступен глобально. PHP при загрузке файла выводит предупреждение «use statement with non-compound name 'Yii' has no effect» в STDOUT, и при первом обращении к сессии (`$I->amLoggedInAs(...)`) получаете «headers already sent». В Cest пишите `\Yii::$app->...` напрямую и **не добавляйте `use Yii;`**. Unit-тесты в namespace-классах добавлять `use Yii;` могут.
+
+**Описания тестов на русском.** Для unit-тестов подключайте трейт `\PrintsTestDescription` (из `tests/_support/PrintsTestDescription.php`) и в конце каждого test-метода вызывайте `$this->stdout('<что делает и что проверено>')`. Описание печатается в STDOUT под именем теста и видно в обычном выводе `vendor/bin/codecept run`. Для функциональных Cest используйте родную конвенцию `$I->wantTo('...')` в начале метода.
+
+**Источники импорта очищаются автоматически.** `SmartMatchTestHelper::resetDatabase()` уже truncate-ит `ph_tds_stmt_hdr/dtl`, `gitb_nostro_extract_custom`, `suspend_posting`, `tds_status` — в merge-тестах не нужна ручная очистка перед каждым кейсом.
+
+**Нагрузочные тесты помечайте `@group slow`.** Кейсы со временем выполнения больше нескольких секунд (например, нагрузочный `runRule` на >5000 пар) — `@group slow` в docblock, чтобы локальный TDD-прогон с `--skip-group slow` оставался быстрым. CI-полный прогон без флага охватит и их.
+
+**Acceptance suite (browser e2e) не настроен.** В `tests/acceptance/*.php` лежат стоковые Yii-кейсы (Home/About/Contact/Login), но `tests/acceptance.suite.yml` и WebDriver/ChromeDriver не сконфигурированы — `vendor/bin/codecept run acceptance` не работает. Перед запуском e2e нужно зарегистрировать suite-конфиг с `WebDriver`, поднять `chromedriver`/Chrome и настроить тестовый vhost на `smartmatch_test`.

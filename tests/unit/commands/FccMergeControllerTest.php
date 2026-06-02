@@ -25,7 +25,6 @@ class FccMergeControllerTest extends \Codeception\Test\Unit
     protected function _before(): void
     {
         \SmartMatchTestHelper::resetDatabase();
-        Yii::$app->db->createCommand()->delete('{{%gitb_nostro_extract_custom}}')->execute();
     }
 
     /**

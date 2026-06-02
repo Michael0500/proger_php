@@ -27,6 +27,10 @@ final class SmartMatchTestHelper
     {
         $db = Yii::$app->db;
         $tables = [
+            // Источники импорта — очищаются, чтобы тесты merge-команд не таскали ручную очистку.
+            'ph_tds_stmt_dtl',
+            'ph_tds_stmt_hdr',
+            'gitb_nostro_extract_custom',
             'tds_status',
             'suspend_posting',
             'user_preferences',

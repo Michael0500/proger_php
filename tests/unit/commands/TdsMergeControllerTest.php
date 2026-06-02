@@ -28,16 +28,13 @@ class TdsMergeControllerTest extends \Codeception\Test\Unit
     /**
      * Подготавливает окружение перед тестом.
      *
-     * resetDatabase() не очищает ph_tds_stmt_hdr/dtl (их нет в списке reset),
-     * поэтому источники очищаем явно.
+     * Источники ph_tds_stmt_hdr/dtl очищаются в SmartMatchTestHelper::resetDatabase().
      *
      * @return void
      */
     protected function _before(): void
     {
         \SmartMatchTestHelper::resetDatabase();
-        Yii::$app->db->createCommand()->delete('{{%ph_tds_stmt_hdr}}')->execute();
-        Yii::$app->db->createCommand()->delete('{{%ph_tds_stmt_dtl}}')->execute();
         $this->poolId = null;
     }
 

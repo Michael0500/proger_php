@@ -129,4 +129,68 @@ class NostroBalanceTest extends \Codeception\Test\Unit
 
         $this->stdout('Последовательность выписок: повтор statement_number на счёте → сообщение «Дублирующийся номер».');
     }
+
+    // ── TC-120 ────────────────────────────────────────────────────────────
+
+    /**
+     * TC-120. statement_number обязателен для ls_type=S и не обязателен для L.
+     *
+     * @return void
+     */
+    public function testStatementNumberRequiredForStatementType(): void
+    {
+        [$company, , $account] = \SmartMatchTestHelper::createCompanyPoolAccount();
+
+        $stmt = new NostroBalance([
+            'company_id' => $company->id, 'account_id' => $account->id,
+            'ls_type' => NostroBalance::LS_STATEMENT,
+            'currency' => 'RUB', 'value_date' => '2026-01-10',
+            'opening_balance' => '0.00', 'opening_dc' => NostroBalance::DC_CREDIT,
+            'closing_balance' => '0.00', 'closing_dc' => NostroBalance::DC_CREDIT,
+            'section' => NostroBalance::SECTION_NRE, 'source' => NostroBalance::SOURCE_MANUAL,
+            'status' => NostroBalance::STATUS_NORMAL,
+        ]);
+        verify($stmt->validate())->false();
+        verify($stmt->errors)->arrayHasKey('statement_number');
+
+        $ledger = new NostroBalance([
+            'company_id' => $company->id, 'account_id' => $account->id,
+            'ls_type' => NostroBalance::LS_LEDGER,
+            'currency' => 'RUB', 'value_date' => '2026-01-10',
+            'opening_balance' => '0.00', 'opening_dc' => NostroBalance::DC_CREDIT,
+            'closing_balance' => '0.00', 'closing_dc' => NostroBalance::DC_CREDIT,
+            'section' => NostroBalance::SECTION_NRE, 'source' => NostroBalance::SOURCE_MANUAL,
+            'status' => NostroBalance::STATUS_NORMAL,
+        ]);
+        verify($ledger->validate())->true();
+
+        $this->stdout('TC-120: statement_number обязателен для ls_type=S (ошибка валидации) и не требуется для ls_type=L.');
+    }
+
+    // ── TC-121 ────────────────────────────────────────────────────────────
+
+    /**
+     * TC-121. opening_dc/closing_dc валидируются как D или C (in range).
+     *
+     * @return void
+     */
+    public function testDcEnumRejectsInvalidValues(): void
+    {
+        $balance = new NostroBalance();
+
+        $balance->opening_dc = 'X';
+        verify($balance->validate(['opening_dc']))->false();
+        $balance->clearErrors();
+
+        $balance->closing_dc = 'Debit';
+        verify($balance->validate(['closing_dc']))->false();
+        $balance->clearErrors();
+
+        $balance->opening_dc = NostroBalance::DC_DEBIT;
+        $balance->closing_dc = NostroBalance::DC_CREDIT;
+        verify($balance->validate(['opening_dc']))->true();
+        verify($balance->validate(['closing_dc']))->true();
+
+        $this->stdout('TC-121: opening_dc/closing_dc принимают только «D»/«C» (in range): «X» и «Debit» — отвергаются.');
+    }
 }
