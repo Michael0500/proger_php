@@ -23,6 +23,7 @@ use yii\db\ActiveRecord;
  * @property string|null $end_to_end_id
  * @property string|null $transaction_id
  * @property string|null $message_id
+ * @property string|null $statement_number
  * @property string|null $other_id
  * @property string|null $comment
  * @property string|null $source
@@ -76,6 +77,7 @@ class NostroEntryArchive extends ActiveRecord
             [['dc'], 'string', 'max' => 6],
             [['currency'], 'string', 'max' => 3],
             [['match_id', 'instruction_id', 'end_to_end_id', 'message_id', 'other_id', 'comment'], 'string', 'max' => 40],
+            [['statement_number'], 'string', 'max' => 35],
             [['transaction_id'], 'string', 'max' => 60],
             [['source'], 'string', 'max' => 20],
         ];
@@ -104,6 +106,7 @@ class NostroEntryArchive extends ActiveRecord
             'end_to_end_id'  => 'EndToEnd ID',
             'transaction_id' => 'Transaction ID',
             'message_id'     => 'Message ID',
+            'statement_number' => 'Номер выписки',
             'other_id'       => 'Other ID',
             'comment'        => 'Комментарий',
             'source'         => 'Источник',
@@ -185,6 +188,7 @@ class NostroEntryArchive extends ActiveRecord
         $archive->end_to_end_id       = $entry->end_to_end_id;
         $archive->transaction_id      = $entry->transaction_id;
         $archive->message_id          = $entry->message_id;
+        $archive->statement_number    = $entry->statement_number;
         $archive->other_id            = $entry->other_id;
         $archive->comment             = $entry->comment;
         $archive->source              = $entry->source;
@@ -227,6 +231,7 @@ class NostroEntryArchive extends ActiveRecord
             'end_to_end_id'  => $this->end_to_end_id,
             'transaction_id' => $this->transaction_id,
             'message_id'     => $this->message_id,
+            'statement_number' => $this->statement_number,
             'other_id'       => $this->other_id,
             'comment'        => $this->comment,
             'source'         => $this->source,

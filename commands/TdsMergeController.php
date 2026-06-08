@@ -209,7 +209,7 @@ class TdsMergeController extends Controller
         $entryColumns = [
             'account_id', 'company_id', 'ls', 'dc', 'amount', 'currency',
             'value_date', 'post_date', 'instruction_id', 'end_to_end_id',
-            'transaction_id', 'message_id', 'other_id', 'source',
+            'transaction_id', 'message_id', 'statement_number', 'other_id', 'source',
             'match_status', 'line_no', 'branch_code',
             'stmt_id', 'edno', 'eddate', 'edauthor',
             'created_at', 'updated_at',
@@ -289,6 +289,9 @@ class TdsMergeController extends Controller
                     $this->stdout("│  Пропуск stmt_id={$stmtId}: пустой account_no\n", Console::FG_YELLOW);
                     $skippedStmtIds[] = $stmtId;
                     continue;
+                }
+                if($type === 'ED211' || $type === 'ED743'){
+                    $accountNo = 'CB_'.$accountNo;
                 }
 
                 if (!array_key_exists($accountNo, $accountCache)) {
@@ -372,7 +375,7 @@ class TdsMergeController extends Controller
      */
     private function buildBalanceRow(array $hdr, string $type, int $accountId, string $now): array
     {
-        $statementNumber = ($type === 'MT950') ? ($hdr['stmt_ref'] ?? null) : null;
+        $statementNumber = $hdr['stmt_ref'] ?? null;
 
         [$edno, $eddate, $edauthor] = $this->edFieldsForBalance($hdr, $type);
 
@@ -414,18 +417,19 @@ class TdsMergeController extends Controller
     {
         // Маппинг общих полей.
         $amount      = $dtl['amount'] ?? null;
-        $currency    = $dtl['currency'] ?? null;
+        $currency    = $dtl['currency'] ?? ($hdr['opening_currency'] ?? null);
         $endToEndId  = $dtl['end_to_end_id'] ?? null;
         $branchCode  = $hdr['edbranch'] ?? null;
         $lineNo      = $dtl['line_no'] ?? null;
         $stmtId      = $dtl['stmt_id'];
+        $statementNumber = $hdr['stmt_ref'] ?? null;
 
         // Поля, специфичные для типа.
         $valueDate     = null;
         $postDate      = null;
         $instructionId = null;
         $transactionId = null;
-        $messageId     = null;
+        $messageId     = isset($hdr['msg_key']) && $hdr['msg_key'] !== '' ? (string)$hdr['msg_key'] : null;
         $otherId       = null;
         $edno          = null;
         $eddate        = null;
@@ -437,7 +441,6 @@ class TdsMergeController extends Controller
                 $postDate      = $hdr['opening_value_dt'] ?? null;
                 $instructionId = $dtl['instr_id'] ?? null;
                 $transactionId = $dtl['tx_id'] ?? null;
-                $messageId     = $dtl['msg_id'] ?? null;
                 break;
 
             case 'MT950':
@@ -473,6 +476,7 @@ class TdsMergeController extends Controller
             $endToEndId,
             $transactionId,
             $messageId,
+            $statementNumber,
             $otherId,
             $hdr['format_type'],
             'U',
@@ -580,11 +584,11 @@ class TdsMergeController extends Controller
     private function writeEntryAuditAfterFlush(int $lastId, array $insertedRows, string $type): void
     {
         // stmt_id и line_no в порядке колонок entryColumns:
-        // 0:account_id ... 15:line_no, 16:branch_code, 17:stmt_id
+        // 0:account_id ... 16:line_no, 17:branch_code, 18:stmt_id
         $stmtIds = [];
         foreach ($insertedRows as $row) {
-            if (isset($row[17])) {
-                $stmtIds[(string)$row[17]] = true;
+            if (isset($row[18])) {
+                $stmtIds[(string)$row[18]] = true;
             }
         }
         if (empty($stmtIds)) {
@@ -595,7 +599,7 @@ class TdsMergeController extends Controller
         $rows = Yii::$app->db->createCommand(
             "SELECT id, account_id, company_id, ls, dc, amount, currency,
                     value_date, post_date, instruction_id, end_to_end_id,
-                    transaction_id, message_id, other_id, comment, source,
+                    transaction_id, message_id, statement_number, other_id, comment, source,
                     match_status, match_id, extract_no, line_no, branch_code,
                     stmt_id, edno, eddate, edauthor, created_at, updated_at
                FROM {{%nostro_entries}}

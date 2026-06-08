@@ -53,6 +53,8 @@ class TdsMergeControllerTest extends \Codeception\Test\Unit
             'stmt_id' => 100,
             'format_type' => 'CAMT053',
             'account_no' => 'CAMT-ACC-1',
+            'msg_key' => 99001001,
+            'stmt_ref' => 'CAMT-STMT-100',
             'opening_currency' => 'USD',
             'opening_value_dt' => '2026-01-10',
             'opening_amount' => '1000.00',
@@ -78,9 +80,12 @@ class TdsMergeControllerTest extends \Codeception\Test\Unit
         $this->assertSame(NostroEntry::LS_STATEMENT, $entries[0]['ls']);
         $this->assertSame('CAMT053', $entries[0]['source']);
         $this->assertSame((int)$account->id, (int)$entries[0]['account_id']);
+        $this->assertSame('CAMT-STMT-100', $entries[0]['statement_number']);
+        $this->assertSame('99001001', (string)$entries[0]['message_id']);
 
         $balance = NostroBalance::findOne(['stmt_id' => 100]);
         $this->assertNotNull($balance);
+        $this->assertSame('CAMT-STMT-100', $balance->statement_number);
         $this->assertSame((int)$account->id, (int)$balance->account_id);
         $this->assertSame(NostroBalance::LS_STATEMENT, $balance->ls_type);
         $this->assertSame(NostroBalance::SECTION_NRE, $balance->section);
@@ -341,6 +346,7 @@ class TdsMergeControllerTest extends \Codeception\Test\Unit
         $this->insertHdr([
             'stmt_id' => 800, 'format_type' => 'MT950', 'account_no' => 'MT-REF-ACC',
             'stmt_ref' => 'STMT-REF-42',
+            'msg_key' => 88008001,
             'opening_currency' => 'USD', 'opening_value_dt' => '2026-03-01',
             'opening_amount' => '0.00', 'opening_dc' => 'C',
             'closing_amount' => '0.00', 'closing_dc' => 'C',
@@ -359,6 +365,8 @@ class TdsMergeControllerTest extends \Codeception\Test\Unit
         $this->assertSame('STMT-REF-42', $balance->statement_number);
 
         $entry = $this->entriesByStmt(800)[0];
+        $this->assertSame('STMT-REF-42', $entry['statement_number']);
+        $this->assertSame('88008001', (string)$entry['message_id']);
         $this->assertSame('NTRF', $entry['other_id']);
         $this->assertSame('2026-03-02', $entry['value_date']);
         $this->assertSame('2026-03-03', $entry['post_date']);
@@ -378,7 +386,7 @@ class TdsMergeControllerTest extends \Codeception\Test\Unit
      */
     public function testEd211WritesEdFields(): void
     {
-        $this->seedAccount('ED-ACC', 'RUB');
+        $this->seedAccount('CB_ED-ACC', 'RUB');
         $this->insertStatus('ED211');
         $this->insertHdr([
             'stmt_id' => 900, 'format_type' => 'ED211', 'account_no' => 'ED-ACC',

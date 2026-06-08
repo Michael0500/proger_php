@@ -77,7 +77,8 @@ class ArchiveController extends BaseController
         $filters = json_decode($r->get('filters', '{}'), true) ?: [];
 
         $sortable = ['id', 'original_id', 'match_id', 'ls', 'dc', 'amount', 'currency',
-            'value_date', 'post_date', 'matched_at', 'archived_at', 'expires_at', 'account_id'];
+            'value_date', 'post_date', 'matched_at', 'archived_at', 'expires_at',
+            'account_id'];
         if (!in_array($sort, $sortable, true)) $sort = 'archived_at';
 
         $q = NostroEntryArchive::find()
@@ -261,7 +262,7 @@ class ArchiveController extends BaseController
         $rows = $db->createCommand("
             SELECT id, account_id, company_id, match_id, ls, dc, amount, currency,
                    value_date, post_date, instruction_id, end_to_end_id,
-                   transaction_id, message_id, other_id, comment, source,
+                   transaction_id, message_id, statement_number, other_id, comment, source,
                    matched_at, created_at, updated_at
             FROM {{%nostro_entries}}
             WHERE company_id   = :cid
@@ -289,7 +290,7 @@ class ArchiveController extends BaseController
         $archiveCols = [
             'original_id','account_id','company_id','match_id',
             'ls','dc','amount','currency','value_date','post_date',
-            'instruction_id','end_to_end_id','transaction_id','message_id','other_id',
+            'instruction_id','end_to_end_id','transaction_id','message_id','statement_number','other_id',
             'comment','source','match_status',
             'matched_at',
             'archived_at','expires_at','archived_by',
@@ -304,7 +305,7 @@ class ArchiveController extends BaseController
                 $r['ls'], $r['dc'], $r['amount'], $r['currency'],
                 $r['value_date'], $r['post_date'],
                 $r['instruction_id'], $r['end_to_end_id'],
-                $r['transaction_id'], $r['message_id'], $r['other_id'],
+                $r['transaction_id'], $r['message_id'], $r['statement_number'], $r['other_id'],
                 $r['comment'], $r['source'],
                 'A',
                 $r['matched_at'],
@@ -500,6 +501,7 @@ class ArchiveController extends BaseController
         $entry->end_to_end_id    = $archived->end_to_end_id;
         $entry->transaction_id   = $archived->transaction_id;
         $entry->message_id       = $archived->message_id;
+        $entry->statement_number = $archived->statement_number;
         $entry->other_id         = $archived->other_id;
         $entry->comment          = $archived->comment;
         $entry->source           = $archived->source;

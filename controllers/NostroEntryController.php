@@ -263,6 +263,9 @@ class NostroEntryController extends BaseController
         $m->end_to_end_id  = ($p['end_to_end_id']      ?? '') ?: null;
         $m->transaction_id = ($p['transaction_id']     ?? '') ?: null;
         $m->message_id     = ($p['message_id']         ?? '') ?: null;
+        if (array_key_exists('statement_number', $p)) {
+            $m->statement_number = ($p['statement_number'] ?? '') ?: null;
+        }
         $m->other_id       = ($p['other_id']           ?? '') ?: null;
         $m->comment        = ($p['comment']            ?? '') ?: null;
 

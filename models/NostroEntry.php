@@ -23,6 +23,7 @@ use yii\db\ActiveRecord;
  * @property string|null $end_to_end_id
  * @property string|null $transaction_id
  * @property string|null $message_id
+ * @property string|null $statement_number
  * @property string|null $other_id
  * @property string|null $comment
  * @property string|null $source
@@ -96,6 +97,7 @@ class NostroEntry extends ActiveRecord
             [['currency'], 'string', 'max' => 3],
             [['match_id'], 'string', 'max' => 255],
             [['instruction_id', 'message_id', 'end_to_end_id', 'other_id'], 'string', 'max' => 40],
+            [['statement_number'], 'string', 'max' => 35],
             [['transaction_id'], 'string', 'max' => 60],
             [['comment'], 'string', 'max' => 40],
             [['source'], 'string', 'max' => 20],
@@ -156,6 +158,7 @@ class NostroEntry extends ActiveRecord
             'end_to_end_id'  => 'EndToEnd ID',
             'transaction_id' => 'Transaction ID',
             'message_id'     => 'Message ID',
+            'statement_number' => 'Номер выписки',
             'other_id'       => 'Other ID',
             'comment'        => 'Комментарий',
             'source'         => 'Источник',
