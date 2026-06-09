@@ -191,6 +191,60 @@ class NostroBalanceApiCest
     }
 
     /**
+     * Выполняет тестовый сценарий: обновление поздней выписки с меньшим номером помечает баланс ошибкой.
+     *
+     * @return void
+     */
+    public function updateMarksLaterStatementWithLowerNumberAsError(\FunctionalTester $I): void
+    {
+        $I->wantTo('Балансы: обновление поздней выписки с меньшим номером дает ошибку последовательности');
+
+        SmartMatchTestHelper::createBalance([
+            'company_id' => $this->company->id,
+            'account_id' => $this->account->id,
+            'ls_type' => NostroBalance::LS_STATEMENT,
+            'statement_number' => '2',
+            'value_date' => '2026-05-22',
+            'opening_balance' => '0.00',
+            'opening_dc' => NostroBalance::DC_CREDIT,
+            'closing_balance' => '100.00',
+            'closing_dc' => NostroBalance::DC_CREDIT,
+        ]);
+
+        $later = SmartMatchTestHelper::createBalance([
+            'company_id' => $this->company->id,
+            'account_id' => $this->account->id,
+            'ls_type' => NostroBalance::LS_STATEMENT,
+            'statement_number' => '3',
+            'value_date' => '2026-05-23',
+            'opening_balance' => '100.00',
+            'opening_dc' => NostroBalance::DC_CREDIT,
+            'closing_balance' => '200.00',
+            'closing_dc' => NostroBalance::DC_CREDIT,
+        ]);
+
+        $I->sendAjaxPostRequest(\yii\helpers\Url::to(['/nostro-balance/update']), [
+            'id' => $later->id,
+            'account_id' => $this->account->id,
+            'ls_type' => NostroBalance::LS_STATEMENT,
+            'statement_number' => '1',
+            'currency' => 'RUB',
+            'value_date' => '2026-05-23',
+            'opening_balance' => '100.00',
+            'opening_dc' => NostroBalance::DC_CREDIT,
+            'closing_balance' => '200.00',
+            'closing_dc' => NostroBalance::DC_CREDIT,
+            'section' => NostroBalance::SECTION_NRE,
+        ]);
+        $response = $this->grabJson($I);
+
+        Assert::assertTrue($response['success']);
+        Assert::assertSame(NostroBalance::STATUS_ERROR, $response['data']['status']);
+        Assert::assertStringContainsString('Проверка не пройдена. Порядковый номер', $response['data']['comment']);
+        Assert::assertStringContainsString('должен быть "3"', $response['data']['comment']);
+    }
+
+    /**
      * Выполняет тестовый сценарий: подтверждение требует причину и пишет аудит.
      *
      * @return void

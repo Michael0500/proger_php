@@ -347,6 +347,7 @@ class NostroBalance extends ActiveRecord
 
         $prev = static::find()
             ->where([
+                'company_id' => $this->company_id,
                 'account_id' => $this->account_id,
                 'currency'   => $this->currency,
                 'section'    => $this->section,
@@ -378,10 +379,12 @@ class NostroBalance extends ActiveRecord
     }
 
     /**
-     * Проверяет уникальность номера Statement-выписки.
+     * Проверяет последовательность номера Statement-выписки.
      *
-     * Проверка выполняется внутри одного счёта, валюты и раздела. Метод пока
-     * фиксирует только дубликаты номера, без проверки числовой последовательности.
+     * Для текущей выписки ищет предыдущую Statement-запись по тому же счёту,
+     * валюте и разделу. Если у номера есть числовой хвост, ожидаемый номер
+     * строится как номер предыдущей выписки + 1 с сохранением префикса.
+     * Дополнительно ловит дубликаты, когда предыдущую запись определить нельзя.
      *
      * @return string|null Текст ошибки или `null`, если номер допустим.
      */
@@ -391,9 +394,40 @@ class NostroBalance extends ActiveRecord
             return null;
         }
 
-        // Проверка на дубликат номера
+        $prev = static::find()
+            ->where([
+                'company_id' => $this->company_id,
+                'account_id' => $this->account_id,
+                'currency'   => $this->currency,
+                'section'    => $this->section,
+                'ls_type'    => self::LS_STATEMENT,
+            ])
+            ->andWhere(['<', 'value_date', $this->value_date])
+            ->andWhere(['!=', 'id', $this->id ?? 0])
+            ->orderBy(['value_date' => SORT_DESC, 'id' => SORT_DESC])
+            ->one();
+
+        if ($prev && $prev->statement_number) {
+            $prevParts = $this->statementOrdinalParts((string)$prev->statement_number);
+            if ($prevParts !== null) {
+                [$prefix, $number] = $prevParts;
+                $expected = $prefix . $this->incrementNumericString($number);
+                if (trim((string)$this->statement_number) !== $expected) {
+                    return sprintf(
+                        'Проверка не пройдена. Порядковый номер "%s" должен быть "%s" после предыдущей выписки "%s" за %s',
+                        $this->statement_number,
+                        $expected,
+                        $prev->statement_number,
+                        $prev->getValueDateFormatted()
+                    );
+                }
+            }
+        }
+
+        // Дубликат тоже считается нарушением последовательности.
         $dup = static::find()
             ->where([
+                'company_id'       => $this->company_id,
                 'account_id'       => $this->account_id,
                 'currency'         => $this->currency,
                 'section'          => $this->section,
@@ -404,7 +438,7 @@ class NostroBalance extends ActiveRecord
             ->exists();
 
         if ($dup) {
-            return "Дублирующийся номер выписки: {$this->statement_number}";
+            return "Проверка не пройдена. Порядковый номер \"{$this->statement_number}\" уже существует";
         }
 
         return null;
@@ -460,5 +494,50 @@ class NostroBalance extends ActiveRecord
     private function signedAmount(float $amount, string $dc): float
     {
         return $dc === self::DC_DEBIT ? -$amount : $amount;
+    }
+
+    /**
+     * Разбирает номер выписки на префикс и числовую порядковую часть.
+     *
+     * @param string $statementNumber Номер выписки.
+     * @return array|null `[prefix, numericPart]` или `null`, если номера нет.
+     */
+    private function statementOrdinalParts(string $statementNumber): ?array
+    {
+        if (!preg_match('/^(.*?)(\d+)$/u', trim($statementNumber), $m)) {
+            return null;
+        }
+
+        return [$m[1], $m[2]];
+    }
+
+    /**
+     * Увеличивает произвольно длинную числовую строку на единицу.
+     *
+     * @param string $number Числовая строка.
+     * @return string Следующее число с сохранением ведущих нулей, если длина не выросла.
+     */
+    private function incrementNumericString(string $number): string
+    {
+        $chars = str_split($number);
+        $carry = 1;
+
+        for ($i = count($chars) - 1; $i >= 0; $i--) {
+            $digit = (int)$chars[$i] + $carry;
+            if ($digit === 10) {
+                $chars[$i] = '0';
+                $carry = 1;
+            } else {
+                $chars[$i] = (string)$digit;
+                $carry = 0;
+                break;
+            }
+        }
+
+        if ($carry) {
+            array_unshift($chars, '1');
+        }
+
+        return implode('', $chars);
     }
 }
