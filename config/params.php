@@ -36,7 +36,7 @@ return [
 
         // Формирование текстового файла.
         'exportDir'    => '@runtime/pcr',
-        'filePrefix'   => 'PCRFIHIST',   // PCRFIHIST_YYYYMMDD_His.txt
+        'filePrefix'   => 'PCRFIHIST',   // PCRFIHIST_YYYYMMDD_His_<correlation_id>.txt
         'fileEncoding' => 'UTF-8',
 
         // Перекладка файла по FTP.

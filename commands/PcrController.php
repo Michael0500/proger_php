@@ -5,6 +5,7 @@ namespace app\commands;
 use Yii;
 use yii\console\Controller;
 use yii\console\ExitCode;
+use yii\db\Expression;
 use yii\helpers\Console;
 
 /**
@@ -15,7 +16,7 @@ use yii\helpers\Console;
  *      В ответ 200 приходит correlationId + operationId (запрос принят в работу).
  *   2. Позже СЦР дёргает наш callback (PcrCallbackController) и наполняет
  *      pcr_wallet_info / pcr_operation.
- *   3. pcr/export — сборка единого текстового файла строго заданного формата.
+ *   3. pcr/export — сборка отдельного файла строго заданного формата на каждый correlationId.
  *   4. pcr/upload — перекладка файла по FTP.
  *   5. pcr/run — export + upload (для cron к 07:00).
  *
@@ -61,10 +62,12 @@ class PcrController extends Controller
     public ?string $correlationId = null;
     /** --date=YYYY-MM-DD: выбор по from_date_time (для export) */
     public ?string $date = null;
-    /** --out: путь выходного файла (для export) */
+    /** --out: путь выходного файла/каталога (для export) */
     public ?string $out = null;
     /** --file: путь файла для аплоада (для upload) */
     public ?string $file = null;
+    /** Файлы, созданные последним actionExport() в рамках текущего процесса. */
+    private array $lastExportedFiles = [];
 
     /**
      * Описание опций командной строки.
@@ -246,7 +249,7 @@ class PcrController extends Controller
     // =====================================================================
 
     /**
-     * Строит единый текстовый файл PCRFIHIST из pcr_wallet_info + pcr_operation.
+     * Строит отдельный текстовый файл PCRFIHIST для каждого неэкспортированного correlation_id.
      *
      * @return int Код завершения консольной команды.
      */
@@ -254,62 +257,107 @@ class PcrController extends Controller
     {
         $db  = Yii::$app->db;
         $cfg = $this->cfg();
+        $this->lastExportedFiles = [];
 
         $this->stdout("=== PCR export: " . date('Y-m-d H:i:s') . " ===\n", Console::BOLD);
 
         // Выбор reports.
-        $where  = '';
+        $where = [
+            "wi.correlation_id IS NOT NULL",
+            "wi.correlation_id <> ''",
+            "EXISTS (
+                SELECT 1
+                  FROM {{%pcr_request}} pr
+                 WHERE pr.correlation_id = wi.correlation_id
+                   AND pr.status = 'accepted'
+                   AND COALESCE(pr.is_exported, false) = false
+            )",
+        ];
         $params = [];
         if ($this->correlationId !== null) {
-            $where = 'WHERE correlation_id = :c';
+            $where[] = 'wi.correlation_id = :c';
             $params[':c'] = $this->correlationId;
         } elseif ($this->date !== null) {
-            $where = 'WHERE from_date_time::date = :d';
+            $where[] = 'wi.from_date_time::date = :d';
             $params[':d'] = $this->date;
         }
 
         $reports = $db->createCommand(
-            "SELECT * FROM {{%pcr_wallet_info}} {$where} ORDER BY id",
+            "SELECT wi.* FROM {{%pcr_wallet_info}} wi WHERE " . implode(' AND ', $where) . " ORDER BY wi.correlation_id, wi.id",
             $params
         )->queryAll();
 
         if (empty($reports)) {
-            $this->stdout("Нет данных для экспорта.\n", Console::FG_GREY);
+            $this->stdout("Нет неэкспортированных данных для экспорта.\n", Console::FG_GREY);
             return ExitCode::OK;
         }
 
-        $lines      = [];
-        $opCount    = 0;
         $account    = (string)($cfg['nostroAccount'] ?? '');
         $dcIn       = (string)($cfg['dcIn'] ?? 'D');
         $dcOut      = (string)($cfg['dcOut'] ?? 'D');
+        $groups     = $this->groupReportsByCorrelationId($reports);
+        $totalReports = 0;
+        $totalOps = 0;
 
-        foreach ($reports as $r) {
-            $lines[] = $this->buildBalanceLine($r, $account, $dcIn, $dcOut);
+        foreach ($groups as $correlationId => $groupReports) {
+            $lines   = [];
+            $opCount = 0;
 
-            $ops = $db->createCommand(
-                "SELECT * FROM {{%pcr_operation}} WHERE wallet_info_id = :w ORDER BY id",
-                [':w' => $r['id']]
-            )->queryAll();
+            foreach ($groupReports as $r) {
+                $lines[] = $this->buildBalanceLine($r, $account, $dcIn, $dcOut);
 
-            foreach ($ops as $op) {
-                $lines[] = $this->buildOperationLine($op);
-                $opCount++;
+                $ops = $db->createCommand(
+                    "SELECT * FROM {{%pcr_operation}} WHERE wallet_info_id = :w ORDER BY id",
+                    [':w' => $r['id']]
+                )->queryAll();
+
+                foreach ($ops as $op) {
+                    $lines[] = $this->buildOperationLine($op);
+                    $opCount++;
+                }
             }
+
+            $path    = $this->resolveOutPath($cfg, $correlationId);
+            $content = implode("\r\n", $lines) . "\r\n";
+            $content = $this->encode($content, $cfg);
+
+            if (@file_put_contents($path, $content) === false) {
+                $this->stderr("Не удалось записать файл: {$path}\n", Console::FG_RED);
+                return ExitCode::IOERR;
+            }
+
+            $db->createCommand()->update('{{%pcr_request}}', [
+                'is_exported' => true,
+                'exported_at' => new Expression('CURRENT_TIMESTAMP'),
+                'export_file' => $path,
+            ], ['correlation_id' => $correlationId])->execute();
+
+            $this->lastExportedFiles[] = $path;
+            $totalReports += count($groupReports);
+            $totalOps += $opCount;
+
+            $this->stdout("correlationId={$correlationId}: балансов " . count($groupReports) . ", операций {$opCount}\n", Console::FG_GREEN);
+            $this->stdout("Файл: {$path}\n", Console::FG_GREEN);
         }
 
-        $path    = $this->resolveOutPath($cfg);
-        $content = implode("\r\n", $lines) . "\r\n";
-        $content = $this->encode($content, $cfg);
-
-        if (@file_put_contents($path, $content) === false) {
-            $this->stderr("Не удалось записать файл: {$path}\n", Console::FG_RED);
-            return ExitCode::IOERR;
-        }
-
-        $this->stdout("Записей баланса: " . count($reports) . ", операций: {$opCount}\n", Console::FG_GREEN);
-        $this->stdout("Файл: {$path}\n", Console::FG_GREEN);
+        $this->stdout("Итого файлов: " . count($groups) . ", балансов: {$totalReports}, операций: {$totalOps}\n", Console::FG_GREEN);
         return ExitCode::OK;
+    }
+
+    /**
+     * Группирует reports по correlation_id.
+     *
+     * @param array $reports Строки pcr_wallet_info.
+     * @return array<string,array<int,array>>
+     */
+    private function groupReportsByCorrelationId(array $reports): array
+    {
+        $groups = [];
+        foreach ($reports as $report) {
+            $correlationId = (string)($report['correlation_id'] ?? '');
+            $groups[$correlationId][] = $report;
+        }
+        return $groups;
     }
 
     /**
@@ -362,17 +410,51 @@ class PcrController extends Controller
      * @param array $cfg Блок конфигурации pcr.
      * @return string
      */
-    private function resolveOutPath(array $cfg): string
+    private function resolveOutPath(array $cfg, string $correlationId): string
     {
+        $safeCorrelationId = $this->safeFilePart($correlationId);
+        $prefix = (string)($cfg['filePrefix'] ?? 'PCRFIHIST');
+
         if ($this->out !== null) {
-            return Yii::getAlias($this->out);
+            $out = Yii::getAlias($this->out);
+            if (is_dir($out) || pathinfo($out, PATHINFO_EXTENSION) === '') {
+                if (!is_dir($out)) {
+                    @mkdir($out, 0775, true);
+                }
+                return rtrim($out, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR
+                    . $prefix . '_' . date('Ymd_His') . '_' . $safeCorrelationId . '.txt';
+            }
+
+            $dir = dirname($out);
+            if (!is_dir($dir)) {
+                @mkdir($dir, 0775, true);
+            }
+            $ext = pathinfo($out, PATHINFO_EXTENSION);
+            $name = pathinfo($out, PATHINFO_FILENAME);
+            return $dir . DIRECTORY_SEPARATOR . $name . '_' . $safeCorrelationId . ($ext !== '' ? '.' . $ext : '');
         }
+
         $dir = Yii::getAlias((string)($cfg['exportDir'] ?? '@runtime/pcr'));
         if (!is_dir($dir)) {
             @mkdir($dir, 0775, true);
         }
-        $prefix = (string)($cfg['filePrefix'] ?? 'PCRFIHIST');
-        return $dir . DIRECTORY_SEPARATOR . $prefix . '_' . date('Ymd_His') . '.txt';
+        return $dir . DIRECTORY_SEPARATOR . $prefix . '_' . date('Ymd_His') . '_' . $safeCorrelationId . '.txt';
+    }
+
+    /**
+     * Делает значение correlation_id безопасным фрагментом имени файла.
+     *
+     * @param string $value Исходное значение.
+     * @return string
+     */
+    private function safeFilePart(string $value): string
+    {
+        $safe = preg_replace('/[^A-Za-z0-9._-]+/', '_', trim($value));
+        $safe = trim((string)$safe, '._-');
+        if ($safe === '') {
+            return 'no-correlation';
+        }
+        return substr($safe, 0, 120);
     }
 
     /**
@@ -482,7 +564,19 @@ class PcrController extends Controller
         if ($rc !== ExitCode::OK) {
             return $rc;
         }
-        return $this->actionUpload();
+        if (empty($this->lastExportedFiles)) {
+            return ExitCode::OK;
+        }
+
+        foreach ($this->lastExportedFiles as $path) {
+            $this->file = $path;
+            $rc = $this->actionUpload();
+            if ($rc !== ExitCode::OK) {
+                return $rc;
+            }
+        }
+
+        return ExitCode::OK;
     }
 
     // =====================================================================

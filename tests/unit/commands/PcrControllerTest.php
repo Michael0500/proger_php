@@ -12,7 +12,8 @@ use yii\console\ExitCode;
  *
  * Покрывает формат строк 60/61: фиксированные ширины и паддинг, разделитель |,
  * RUB→RUR, дату баланса dd/MM/YYYY, суммы с разделителем «.», operationId без дефисов,
- * Debit→D / Credit→C, а также фильтры --correlation-id / --date и пустой случай.
+ * Debit→D / Credit→C, отдельные файлы по correlation_id,
+ * а также фильтры --correlation-id / --date и пустой случай.
  */
 class PcrControllerTest extends \Codeception\Test\Unit
 {
@@ -33,7 +34,7 @@ class PcrControllerTest extends \Codeception\Test\Unit
     {
         \SmartMatchTestHelper::resetDatabase();
         $db = Yii::$app->db;
-        $db->createCommand('TRUNCATE pcr_operation, pcr_wallet_info, pcr_callback RESTART IDENTITY CASCADE')->execute();
+        $db->createCommand('TRUNCATE pcr_operation, pcr_wallet_info, pcr_callback, pcr_request RESTART IDENTITY CASCADE')->execute();
 
         Yii::$app->params['pcr']['nostroAccount'] = 'ACC123';
         Yii::$app->params['pcr']['dcIn']          = 'D';
@@ -132,7 +133,7 @@ class PcrControllerTest extends \Codeception\Test\Unit
     // ── TC-002 ────────────────────────────────────────────────────────────
 
     /**
-     * TC-002. Несколько reports → один общий файл: блоки идут подряд,
+     * TC-002. Несколько reports с одним correlation_id → один файл: блоки идут подряд,
      * для каждого баланса сначала строка 60, затем его строки 61.
      *
      * @return void
@@ -152,7 +153,7 @@ class PcrControllerTest extends \Codeception\Test\Unit
         $tags = array_map(fn($l) => substr($l, 0, 2), $lines);
         $this->assertSame(['60', '61', '60', '61', '61'], $tags);
 
-        $this->stdout('TC-002: несколько reports собраны в один файл — на каждый баланс строка 60, затем его строки 61.');
+        $this->stdout('TC-002: несколько reports одного correlation_id собраны в один файл — на каждый баланс строка 60, затем его строки 61.');
     }
 
     // ── TC-003 ────────────────────────────────────────────────────────────
@@ -201,6 +202,57 @@ class PcrControllerTest extends \Codeception\Test\Unit
         $this->stdout('TC-004: пустая выборка → ExitCode::OK, файл не создаётся.');
     }
 
+    // ── TC-005 ────────────────────────────────────────────────────────────
+
+    /**
+     * TC-005. Экспорт создаёт отдельный файл на каждый correlation_id,
+     * добавляет correlation_id в имя и повторно не экспортирует уже отмеченные запросы.
+     *
+     * @return void
+     */
+    public function testCreatesSeparateFilesPerCorrelationAndSkipsExported(): void
+    {
+        $wiA = $this->seedWalletInfo(['correlation_id' => 'corr-a', 'from_date_time' => '2025-05-27 10:00:00']);
+        $this->seedOperation($wiA, ['operation_id' => 'op-a']);
+        $wiB = $this->seedWalletInfo(['correlation_id' => 'corr-b', 'from_date_time' => '2025-05-27 11:00:00']);
+        $this->seedOperation($wiB, ['operation_id' => 'op-b']);
+
+        $files = $this->runExportFiles([]);
+
+        $this->assertCount(2, $files);
+        $names = array_map('basename', array_keys($files));
+        sort($names);
+        $this->assertStringContainsString('corr-a', $names[0]);
+        $this->assertStringContainsString('corr-b', $names[1]);
+
+        foreach ($files as $lines) {
+            $this->assertCount(2, $lines); // 1 баланс + 1 операция в каждом файле
+            $this->assertSame(['60', '61'], array_map(fn($l) => substr($l, 0, 2), $lines));
+        }
+
+        $exported = Yii::$app->db->createCommand(
+            "SELECT correlation_id, is_exported, export_file
+               FROM {{%pcr_request}}
+              ORDER BY correlation_id"
+        )->queryAll();
+        $this->assertCount(2, $exported);
+        $this->assertSame('corr-a', $exported[0]['correlation_id']);
+        $this->assertTrue((bool)$exported[0]['is_exported']);
+        $this->assertStringContainsString('corr-a', $exported[0]['export_file']);
+        $this->assertSame('corr-b', $exported[1]['correlation_id']);
+        $this->assertTrue((bool)$exported[1]['is_exported']);
+        $this->assertStringContainsString('corr-b', $exported[1]['export_file']);
+
+        $basePath = Yii::getAlias('@runtime') . '/pcr_test_repeat_' . uniqid() . '.txt';
+        $c = new PcrController('pcr', Yii::$app);
+        $c->out = $basePath;
+        $rc = $c->actionExport();
+        $this->assertSame(ExitCode::OK, $rc);
+        $this->assertSame([], glob(dirname($basePath) . DIRECTORY_SEPARATOR . pathinfo($basePath, PATHINFO_FILENAME) . '_*.txt') ?: []);
+
+        $this->stdout('TC-005: два correlation_id → два файла с correlation_id в имени; pcr_request помечены is_exported=true; повторный экспорт файлов не создаёт.');
+    }
+
     // ── Хелперы ───────────────────────────────────────────────────────────
 
     /**
@@ -211,8 +263,20 @@ class PcrControllerTest extends \Codeception\Test\Unit
      */
     private function runExport(array $options): array
     {
+        $files = $this->runExportFiles($options);
+        $this->assertCount(1, $files);
+        return reset($files);
+    }
+
+    /**
+     * Запускает pcr/export с заданными опциями и возвращает строки всех созданных файлов.
+     *
+     * @param array $options Опции контроллера (correlationId|date).
+     * @return array<string,array> Карта путь файла → непустые строки файла без CRLF.
+     */
+    private function runExportFiles(array $options): array
+    {
         $path = Yii::getAlias('@runtime') . '/pcr_test_' . uniqid() . '.txt';
-        $this->tmpFiles[] = $path;
 
         $c = new PcrController('pcr', Yii::$app);
         $c->out = $path;
@@ -221,10 +285,20 @@ class PcrControllerTest extends \Codeception\Test\Unit
         }
         $rc = $c->actionExport();
         $this->assertSame(ExitCode::OK, $rc);
-        $this->assertFileExists($path);
 
-        $content = file_get_contents($path);
-        return array_values(array_filter(explode("\r\n", $content), fn($l) => $l !== ''));
+        $pattern = dirname($path) . DIRECTORY_SEPARATOR . pathinfo($path, PATHINFO_FILENAME) . '_*.txt';
+        $files = glob($pattern) ?: [];
+        sort($files);
+        $this->assertNotEmpty($files);
+
+        $result = [];
+        foreach ($files as $file) {
+            $this->tmpFiles[] = $file;
+            $content = file_get_contents($file);
+            $result[$file] = array_values(array_filter(explode("\r\n", $content), fn($l) => $l !== ''));
+        }
+
+        return $result;
     }
 
     /**
@@ -236,8 +310,11 @@ class PcrControllerTest extends \Codeception\Test\Unit
     private function seedWalletInfo(array $attributes): int
     {
         $db = Yii::$app->db;
+        $correlationId = $attributes['correlation_id'] ?? 'corr';
+        $this->seedAcceptedRequest($correlationId);
+
         $db->createCommand()->insert('{{%pcr_callback}}', [
-            'correlation_id' => $attributes['correlation_id'] ?? 'corr',
+            'correlation_id' => $correlationId,
             'operation_id'   => 'op-' . bin2hex(random_bytes(3)),
             'part_no'        => 1,
             'part_quantity'  => 1,
@@ -283,5 +360,36 @@ class PcrControllerTest extends \Codeception\Test\Unit
             'settlement_date_time'   => '2025-05-27 10:00:00',
             'other_details'          => null,
         ], $attributes))->execute();
+    }
+
+    /**
+     * Вставляет принятый pcr_request, если такого correlation_id ещё нет.
+     *
+     * @param string $correlationId correlation_id запроса.
+     * @return void
+     */
+    private function seedAcceptedRequest(string $correlationId): void
+    {
+        $db = Yii::$app->db;
+        $exists = $db->createCommand(
+            "SELECT 1 FROM {{%pcr_request}} WHERE correlation_id = :c LIMIT 1",
+            [':c' => $correlationId]
+        )->queryScalar();
+        if ($exists !== false) {
+            return;
+        }
+
+        $db->createCommand()->insert('{{%pcr_request}}', [
+            'request_type'   => 'operationHistory',
+            'wallet_id_list' => '[]',
+            'date_from'      => '2025-05-27 00:00:00',
+            'date_to'        => '2025-05-28 00:00:00',
+            'correlation_id' => $correlationId,
+            'operation_id'   => 'request-op-' . bin2hex(random_bytes(3)),
+            'http_status'    => 200,
+            'response_raw'   => '{}',
+            'status'         => 'accepted',
+            'is_exported'    => false,
+        ])->execute();
     }
 }
