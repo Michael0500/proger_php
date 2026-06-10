@@ -351,7 +351,6 @@ class PcrController extends Controller
             $this->padRight($this->ccy($op['amount_ccy'] ?? ''), self::W_CCY),
             $this->padLeft($this->fmtAmount($op['amount'] ?? null), self::W_AMOUNT),
             $this->padRight($this->dc($op['credit_debit_indicator'] ?? ''), self::W_DC),
-            $this->padRight($this->fmtDate($op['settlement_date_time'] ?? null), self::W_DATE),
             $this->padRight((string)($op['type'] ?? ''), self::W_OP_TYPE),
         ];
         return implode(self::SEP, $fields);

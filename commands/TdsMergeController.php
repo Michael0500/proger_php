@@ -429,8 +429,9 @@ class TdsMergeController extends Controller
         $postDate      = null;
         $instructionId = null;
         $transactionId = null;
-        $messageId     = isset($hdr['msg_key']) && $hdr['msg_key'] !== '' ? (string)$hdr['msg_key'] : null;
+        $messageId     = null;
         $otherId       = null;
+        $otherId = $this->nonEmptyValue($dtl['other_id'] ?? null);
         $edno          = null;
         $eddate        = null;
         $edauthor      = null;
@@ -441,6 +442,7 @@ class TdsMergeController extends Controller
                 $postDate      = $hdr['opening_value_dt'] ?? null;
                 $instructionId = $dtl['instr_id'] ?? null;
                 $transactionId = $dtl['tx_id'] ?? null;
+                $messageId = $dtl['msg_id'] ?? null;
                 break;
 
             case 'MT950':
@@ -448,7 +450,7 @@ class TdsMergeController extends Controller
                 $postDate      = $dtl['entry_dt'] ?? null;
                 $instructionId = $dtl['instr_id'] ?? null;
                 $transactionId = $dtl['tx_id'] ?? null;
-                $otherId       = $dtl['op_type'] ?? null;
+                $otherId       = $this->nonEmptyValue($dtl['op_type'] ?? null);
                 break;
 
             case 'ED211':
@@ -489,6 +491,22 @@ class TdsMergeController extends Controller
             $now,
             $now,
         ];
+    }
+
+    /**
+     * Возвращает строковое значение, если источник не пустой.
+     *
+     * @param mixed $value Значение из таблицы-источника.
+     * @return string|null
+     */
+    private function nonEmptyValue($value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $value = trim((string)$value);
+        return $value === '' ? null : $value;
     }
 
     /**

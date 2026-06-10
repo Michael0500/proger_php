@@ -78,7 +78,7 @@ class ArchiveController extends BaseController
 
         $sortable = ['id', 'original_id', 'match_id', 'ls', 'dc', 'amount', 'currency',
             'value_date', 'post_date', 'matched_at', 'archived_at', 'expires_at',
-            'account_id'];
+            'account_id', 'comment'];
         if (!in_array($sort, $sortable, true)) $sort = 'archived_at';
 
         $q = NostroEntryArchive::find()

@@ -18,6 +18,10 @@ use yii\web\Response;
  */
 class PcrCallbackController extends Controller
 {
+    private const UNKNOWN_CALLBACK_LOG_DIR = '@runtime/pcr-callback';
+    private const UNKNOWN_CALLBACK_LOG_PREFIX = 'unknown-correlation-';
+    private const UNKNOWN_CALLBACK_LOG_KEEP_FILES = 2;
+
     /**
      * Отключает CSRF для API-эндпоинта.
      *
@@ -59,7 +63,13 @@ class PcrCallbackController extends Controller
 
         $operationId = $payload['operationId'] ?? null;
         $partId      = $payload['partId'] ?? null;
+        $correlationId = $payload['correlationId'] ?? null;
         $db          = Yii::$app->db;
+
+        if (!$this->isKnownCorrelationId($correlationId)) {
+            $this->logUnknownCorrelationId($correlationId, $operationId, $partId);
+            return ['status' => 'ignored', 'reason' => 'unknown_correlation_id'];
+        }
 
         // Идемпотентность: тот же (operationId, partId) уже обработан.
         $exists = $db->createCommand(
@@ -77,7 +87,7 @@ class PcrCallbackController extends Controller
         $tx = $db->beginTransaction();
         try {
             $db->createCommand()->insert('{{%pcr_callback}}', [
-                'correlation_id'             => $payload['correlationId'] ?? null,
+                'correlation_id'             => $correlationId,
                 'operation_id'               => $operationId,
                 'part_no'                    => isset($payload['partNo']) ? (int)$payload['partNo'] : null,
                 'part_quantity'              => isset($payload['partQuantity']) ? (int)$payload['partQuantity'] : null,
@@ -99,7 +109,7 @@ class PcrCallbackController extends Controller
 
                 $db->createCommand()->insert('{{%pcr_wallet_info}}', [
                     'callback_id'              => $callbackId,
-                    'correlation_id'           => $payload['correlationId'] ?? null,
+                    'correlation_id'           => $correlationId,
                     'operation_id'             => $operationId,
                     'fi_wallet_id'             => $rep['fiWalletId'] ?? null,
                     'dc_account_number'        => $rep['dcAccountNumber'] ?? null,
@@ -151,6 +161,81 @@ class PcrCallbackController extends Controller
             Yii::error('PCR callback error: ' . $e->getMessage(), __METHOD__);
             Yii::$app->response->statusCode = 500;
             return ['status' => 'error', 'message' => 'Internal error'];
+        }
+    }
+
+    /**
+     * Проверяет, что correlationId ранее получен и сохранён успешной командой
+     * `pcr/request`.
+     *
+     * @param mixed $correlationId Значение из входящего payload.
+     * @return bool
+     */
+    private function isKnownCorrelationId($correlationId): bool
+    {
+        if (!is_string($correlationId) || trim($correlationId) === '') {
+            return false;
+        }
+
+        return Yii::$app->db->createCommand(
+            "SELECT 1 FROM {{%pcr_request}}
+              WHERE correlation_id = :correlation_id
+                AND status = 'accepted'
+              LIMIT 1",
+            [':correlation_id' => $correlationId]
+        )->queryScalar() !== false;
+    }
+
+    /**
+     * Пишет отдельный недельный лог для callback с неизвестным correlationId.
+     * В runtime удерживаются только два последних недельных файла.
+     *
+     * @param mixed $correlationId Значение correlationId из payload.
+     * @param mixed $operationId Значение operationId из payload.
+     * @param mixed $partId Значение partId из payload.
+     * @return void
+     */
+    private function logUnknownCorrelationId($correlationId, $operationId, $partId): void
+    {
+        $dir = Yii::getAlias(self::UNKNOWN_CALLBACK_LOG_DIR);
+        if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) {
+            return;
+        }
+
+        $now = new \DateTimeImmutable('now', new \DateTimeZone(Yii::$app->timeZone ?: date_default_timezone_get()));
+        $weekStart = $now->modify('monday this week')->format('Y-m-d');
+        $path = $dir . DIRECTORY_SEPARATOR . self::UNKNOWN_CALLBACK_LOG_PREFIX . $weekStart . '.log';
+
+        $record = [
+            'ts'             => $now->format('Y-m-d H:i:s'),
+            'event'          => 'unknown_correlation_id',
+            'correlation_id' => $correlationId,
+            'operation_id'   => $operationId,
+            'part_id'        => $partId,
+        ];
+
+        $line = json_encode($record, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL;
+        @file_put_contents($path, $line, FILE_APPEND | LOCK_EX);
+        $this->pruneUnknownCorrelationLogs($dir);
+    }
+
+    /**
+     * Удаляет старые недельные логи, оставляя только два последних файла.
+     *
+     * @param string $dir Каталог логов.
+     * @return void
+     */
+    private function pruneUnknownCorrelationLogs(string $dir): void
+    {
+        $files = glob($dir . DIRECTORY_SEPARATOR . self::UNKNOWN_CALLBACK_LOG_PREFIX . '*.log') ?: [];
+        usort($files, static function (string $a, string $b): int {
+            return strcmp(basename($b), basename($a));
+        });
+
+        foreach (array_slice($files, self::UNKNOWN_CALLBACK_LOG_KEEP_FILES) as $oldFile) {
+            if (is_file($oldFile)) {
+                @unlink($oldFile);
+            }
         }
     }
 

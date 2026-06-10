@@ -54,7 +54,7 @@ class AppAsset extends AssetBundle
         'js/app/mixins/matching.js?v14',
         'js/app/mixins/balance.js?v14',
         'js/app/mixins/balance-archive.js?v4',
-        'js/app/mixins/archive.js?v11',
+        'js/app/mixins/archive.js?v12',
         'js/app/mixins/state-persistence.js?v2',
         // 9. Стартеры Vue — каждый активируется по наличию своего корневого элемента
         'js/app/page-entries.js?v2',

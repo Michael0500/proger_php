@@ -90,6 +90,7 @@ var ArchiveMixin = {
                 { key: 'end_to_end_id',  label: 'E2E ID',       visible: true,  width: 110 },
                 { key: 'transaction_id', label: 'Txn ID',       visible: true,  width: 110 },
                 { key: 'message_id',     label: 'Msg ID',       visible: true,  width: 110 },
+                { key: 'comment',        label: 'Комментарий',  visible: false, width: 140 },
                 { key: 'archived_at',    label: 'Архивирован',  visible: true,  width: 115 },
                 { key: 'expires_at',     label: 'Хранить до',   visible: true,  width: 115 },
             ],

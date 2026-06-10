@@ -22,7 +22,8 @@ class PcrCallbackControllerTest extends \Codeception\Test\Unit
     protected function _before(): void
     {
         \SmartMatchTestHelper::resetDatabase();
-        Yii::$app->db->createCommand('TRUNCATE pcr_operation, pcr_wallet_info, pcr_callback RESTART IDENTITY CASCADE')->execute();
+        Yii::$app->db->createCommand('TRUNCATE pcr_operation, pcr_wallet_info, pcr_callback, pcr_request RESTART IDENTITY CASCADE')->execute();
+        $this->clearUnknownCallbackLogs();
         // По умолчанию проверка Basic Auth выключена (enabled=false).
         Yii::$app->params['pcr']['callbackAuth'] = ['enabled' => false, 'username' => '', 'password' => ''];
         $_SERVER['REQUEST_METHOD'] = 'POST';
@@ -38,6 +39,7 @@ class PcrCallbackControllerTest extends \Codeception\Test\Unit
     {
         unset($_SERVER['PHP_AUTH_USER'], $_SERVER['PHP_AUTH_PW']);
         $_SERVER['REQUEST_METHOD'] = 'GET';
+        $this->clearUnknownCallbackLogs();
     }
 
     // ── TC-001 ────────────────────────────────────────────────────────────
@@ -49,7 +51,10 @@ class PcrCallbackControllerTest extends \Codeception\Test\Unit
      */
     public function testNormalizesWalletInfoAndOperations(): void
     {
-        $result = $this->postCallback($this->samplePayload());
+        $payload = $this->samplePayload();
+        $this->seedAcceptedRequest($payload['correlationId']);
+
+        $result = $this->postCallback($payload);
 
         $this->assertSame('accepted', $result['status']);
         $this->assertSame(1, $result['reports']);
@@ -87,6 +92,8 @@ class PcrCallbackControllerTest extends \Codeception\Test\Unit
     public function testDuplicateCallbackIsIdempotent(): void
     {
         $payload = $this->samplePayload();
+        $this->seedAcceptedRequest($payload['correlationId']);
+
         $first  = $this->postCallback($payload);
         $second = $this->postCallback($payload);
 
@@ -113,27 +120,134 @@ class PcrCallbackControllerTest extends \Codeception\Test\Unit
     public function testBasicAuthGuardsEndpoint(): void
     {
         Yii::$app->params['pcr']['callbackAuth'] = ['enabled' => true, 'username' => 'scr', 'password' => 'secret'];
+        $payload = $this->samplePayload();
+        $this->seedAcceptedRequest($payload['correlationId']);
 
         // Без реквизитов → 401.
-        $res = $this->postCallback($this->samplePayload(), null, null, false);
+        $res = $this->postCallback($payload, null, null, false);
         $this->assertSame('error', $res['status']);
         $this->assertSame(401, Yii::$app->response->statusCode);
         $this->assertSame(0, (int)Yii::$app->db->createCommand('SELECT COUNT(*) FROM {{%pcr_callback}}')->queryScalar());
 
         // Неверный пароль → 401.
-        $res = $this->postCallback($this->samplePayload(), 'scr', 'wrong', false);
+        $res = $this->postCallback($payload, 'scr', 'wrong', false);
         $this->assertSame('error', $res['status']);
         $this->assertSame(401, Yii::$app->response->statusCode);
 
         // Верные реквизиты → accepted.
-        $res = $this->postCallback($this->samplePayload(), 'scr', 'secret', false);
+        $res = $this->postCallback($payload, 'scr', 'secret', false);
         $this->assertSame('accepted', $res['status']);
         $this->assertSame(1, (int)Yii::$app->db->createCommand('SELECT COUNT(*) FROM {{%pcr_callback}}')->queryScalar());
 
         $this->stdout('TC-003: Basic Auth — без/с неверными реквизитами 401 и запись не создаётся; с верными — accepted.');
     }
 
+    // ── TC-004 ────────────────────────────────────────────────────────────
+
+    /**
+     * TC-004. Callback с correlationId, которого нет среди успешных pcr/request,
+     * игнорируется и не пишет строки в pcr_*.
+     *
+     * @return void
+     */
+    public function testUnknownCorrelationIdIsIgnored(): void
+    {
+        $dir = $this->unknownCallbackLogDir();
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0775, true);
+        }
+        $currentLog = $this->unknownCallbackLogPath(0);
+        $previousLog = $this->unknownCallbackLogPath(-1);
+        $oldLog = $this->unknownCallbackLogPath(-2);
+        file_put_contents($previousLog, "previous week\n");
+        file_put_contents($oldLog, "old week\n");
+
+        $result = $this->postCallback($this->samplePayload());
+
+        $this->assertSame('ignored', $result['status']);
+        $this->assertSame('unknown_correlation_id', $result['reason']);
+
+        $db = Yii::$app->db;
+        $this->assertSame(0, (int)$db->createCommand('SELECT COUNT(*) FROM {{%pcr_callback}}')->queryScalar());
+        $this->assertSame(0, (int)$db->createCommand('SELECT COUNT(*) FROM {{%pcr_wallet_info}}')->queryScalar());
+        $this->assertSame(0, (int)$db->createCommand('SELECT COUNT(*) FROM {{%pcr_operation}}')->queryScalar());
+
+        $logFiles = glob($dir . DIRECTORY_SEPARATOR . 'unknown-correlation-*.log') ?: [];
+        $this->assertCount(2, $logFiles);
+        $this->assertFileExists($currentLog);
+        $this->assertFileExists($previousLog);
+        $this->assertFileDoesNotExist($oldLog);
+        $content = file_get_contents($currentLog);
+        $this->assertStringContainsString('"event":"unknown_correlation_id"', $content);
+        $this->assertStringContainsString('"correlation_id":"ef71d287-995f-4582-b5ec-d8585beecf45"', $content);
+
+        $this->stdout('TC-004: callback с неизвестным correlationId проигнорирован, строки pcr_* не созданы; недельный runtime-лог записан, третий файл удалён.');
+    }
+
     // ── Хелперы ───────────────────────────────────────────────────────────
+
+    /**
+     * Удаляет тестовые недельные логи неизвестных correlationId.
+     *
+     * @return void
+     */
+    private function clearUnknownCallbackLogs(): void
+    {
+        foreach (glob($this->unknownCallbackLogDir() . DIRECTORY_SEPARATOR . 'unknown-correlation-*.log') ?: [] as $file) {
+            if (is_file($file)) {
+                @unlink($file);
+            }
+        }
+    }
+
+    /**
+     * Возвращает каталог недельных логов callback с неизвестным correlationId.
+     *
+     * @return string
+     */
+    private function unknownCallbackLogDir(): string
+    {
+        return Yii::getAlias('@runtime/pcr-callback');
+    }
+
+    /**
+     * Возвращает путь недельного лог-файла относительно текущей недели.
+     *
+     * @param int $weekOffset Смещение в неделях: 0 — текущая, -1 — прошлая.
+     * @return string
+     */
+    private function unknownCallbackLogPath(int $weekOffset): string
+    {
+        $tz = new \DateTimeZone(Yii::$app->timeZone ?: date_default_timezone_get());
+        $date = (new \DateTimeImmutable('now', $tz))
+            ->modify('monday this week')
+            ->modify($weekOffset . ' weeks')
+            ->format('Y-m-d');
+
+        return $this->unknownCallbackLogDir() . DIRECTORY_SEPARATOR . 'unknown-correlation-' . $date . '.log';
+    }
+
+    /**
+     * Добавляет успешный исходящий pcr/request с correlationId, который callback
+     * вправе обработать.
+     *
+     * @param string $correlationId correlationId из ответа СЦР.
+     * @return void
+     */
+    private function seedAcceptedRequest(string $correlationId): void
+    {
+        Yii::$app->db->createCommand()->insert('{{%pcr_request}}', [
+            'request_type'   => 'operationHistory',
+            'wallet_id_list' => '[]',
+            'date_from'      => '2025-02-14 00:00:00',
+            'date_to'        => '2025-02-15 00:00:00',
+            'correlation_id' => $correlationId,
+            'operation_id'   => 'request-op',
+            'http_status'    => 200,
+            'response_raw'   => '{}',
+            'status'         => 'accepted',
+        ])->execute();
+    }
 
     /**
      * Имитирует POST callback и возвращает результат actionWalletInfo.

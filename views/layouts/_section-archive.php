@@ -335,6 +335,11 @@
                             <span>Msg ID</span>
                             <div class="col-resize-handle" @mousedown.stop.prevent="startArchiveColResize($event, archiveColByKey('message_id'))" @click.stop></div>
                         </th>
+                        <th v-show="archiveColVisible('comment')" class="th-sort th-resizable" @click="sortArchive('comment')"
+                            :style="{width: archiveColByKey('comment').width+'px', minWidth: archiveColByKey('comment').width+'px'}">
+                            <span>Комментарий</span> <i :class="archiveSortIcon('comment')"></i>
+                            <div class="col-resize-handle" @mousedown.stop.prevent="startArchiveColResize($event, archiveColByKey('comment'))" @click.stop></div>
+                        </th>
                         <th v-show="archiveColVisible('archived_at')" class="th-sort th-resizable" @click="sortArchive('archived_at')"
                             :style="{width: archiveColByKey('archived_at').width+'px', minWidth: archiveColByKey('archived_at').width+'px'}">
                             <span>Архивирован</span> <i :class="archiveSortIcon('archived_at')"></i>
@@ -392,6 +397,9 @@
                         </td>
                         <td v-show="archiveColVisible('message_id')" class="td-mono-truncate" :title="row.message_id">
                             {{ row.message_id||'—' }}
+                        </td>
+                        <td v-show="archiveColVisible('comment')" class="td-mono-truncate" :title="row.comment">
+                            {{ row.comment||'—' }}
                         </td>
                         <td v-show="archiveColVisible('archived_at')" style="white-space:nowrap;font-size:11px;color:#6b7280">
                             {{ row.archived_at_fmt||'—' }}

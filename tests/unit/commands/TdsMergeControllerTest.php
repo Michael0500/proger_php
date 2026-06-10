@@ -647,6 +647,36 @@ class TdsMergeControllerTest extends \Codeception\Test\Unit
         $this->stdout('TC-016: набор из 1200 деталей (> INSERT_CHUNK 1000) перенесён полностью несколькими батчами, аудит создан на каждую строку.');
     }
 
+    // ── TC-017 ────────────────────────────────────────────────────────────
+
+    /**
+     * TC-017. Непустой ph_tds_stmt_dtl.other_id переносится в nostro_entries.other_id.
+     *
+     * @return void
+     */
+    public function testDtlOtherIdCopiedToNostroEntry(): void
+    {
+        $this->seedAccount('OTHER-ID-ACC', 'USD');
+        $this->insertStatus('CAMT053');
+        $this->insertHdr([
+            'stmt_id' => 1700, 'format_type' => 'CAMT053', 'account_no' => 'OTHER-ID-ACC',
+            'opening_currency' => 'USD', 'opening_value_dt' => '2026-01-10',
+            'opening_amount' => '0.00', 'opening_dc' => 'C',
+            'closing_amount' => '0.00', 'closing_dc' => 'D',
+        ]);
+        $this->insertDtl([
+            'stmt_id' => 1700, 'line_no' => 1, 'dc_mark' => 'DBIT',
+            'amount' => '5.00', 'currency' => 'USD', 'other_id' => 'OTHER-1700',
+        ]);
+
+        $this->assertSame(ExitCode::OK, $this->runTdsMerge('CAMT053'));
+
+        $entry = $this->entriesByStmt(1700)[0];
+        $this->assertSame('OTHER-1700', $entry['other_id']);
+
+        $this->stdout('TC-017: непустой ph_tds_stmt_dtl.other_id перенесён в nostro_entries.other_id.');
+    }
+
     // ── Хелперы ─────────────────────────────────────────────────────────────
 
     /**
@@ -743,6 +773,7 @@ class TdsMergeControllerTest extends \Codeception\Test\Unit
             'value_dt' => null,
             'entry_dt' => null,
             'op_type' => null,
+            'other_id' => null,
             'dc_mark' => null,
             'amount' => null,
             'currency' => null,

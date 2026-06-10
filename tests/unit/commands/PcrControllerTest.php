@@ -11,7 +11,7 @@ use yii\console\ExitCode;
  * из pcr_wallet_info / pcr_operation (команда pcr/export).
  *
  * Покрывает формат строк 60/61: фиксированные ширины и паддинг, разделитель |,
- * RUB→RUR, дату dd/MM/YYYY, суммы с разделителем «.», operationId без дефисов,
+ * RUB→RUR, дату баланса dd/MM/YYYY, суммы с разделителем «.», operationId без дефисов,
  * Debit→D / Credit→C, а также фильтры --correlation-id / --date и пустой случай.
  */
 class PcrControllerTest extends \Codeception\Test\Unit
@@ -110,7 +110,7 @@ class PcrControllerTest extends \Codeception\Test\Unit
 
         // ── Строка операции 1 (61) — Debit→D ──
         $op1 = explode('|', $lines[1]);
-        $this->assertCount(7, $op1);
+        $this->assertCount(6, $op1);
         $this->assertSame('61', $op1[0]);
         $this->assertSame('d4e63a38841e43809e5aa59f4e4007fd', trim($op1[1])); // без дефисов
         $this->assertSame(40, mb_strlen($op1[1]));      // паддинг operationId справа до 40
@@ -118,16 +118,15 @@ class PcrControllerTest extends \Codeception\Test\Unit
         $this->assertSame('132.33', trim($op1[3]));
         $this->assertSame(25, mb_strlen($op1[3]));
         $this->assertSame('D', $op1[4]);
-        $this->assertSame('04/08/2022', $op1[5]);
-        $this->assertSame('FIBuyingDC', trim($op1[6]));
-        $this->assertSame(35, mb_strlen($op1[6]));      // паддинг type справа до 35
+        $this->assertSame('FIBuyingDC', trim($op1[5]));
+        $this->assertSame(35, mb_strlen($op1[5]));      // паддинг type справа до 35
 
         // ── Строка операции 2 (61) — Credit→C ──
         $op2 = explode('|', $lines[2]);
         $this->assertSame('C', $op2[4]);
-        $this->assertSame('FIRefundDC', trim($op2[6]));
+        $this->assertSame('FIRefundDC', trim($op2[5]));
 
-        $this->stdout('TC-001: строки 60/61 по маппингу — ширины/паддинг, RUB→RUR, дата dd/MM/YYYY, Debit→D/Credit→C, operationId без дефисов.');
+        $this->stdout('TC-001: строки 60/61 по маппингу — ширины/паддинг, RUB→RUR, дата баланса dd/MM/YYYY, Debit→D/Credit→C, operationId без дефисов.');
     }
 
     // ── TC-002 ────────────────────────────────────────────────────────────
