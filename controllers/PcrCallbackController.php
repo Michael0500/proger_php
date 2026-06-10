@@ -67,7 +67,7 @@ class PcrCallbackController extends Controller
         $db          = Yii::$app->db;
 
         if (!$this->isKnownCorrelationId($correlationId)) {
-            $this->logUnknownCorrelationId($correlationId, $operationId, $partId);
+            $this->logUnknownCorrelationId($correlationId, $operationId, $partId, $payload);
             return ['status' => 'ignored', 'reason' => 'unknown_correlation_id'];
         }
 
@@ -193,9 +193,10 @@ class PcrCallbackController extends Controller
      * @param mixed $correlationId Значение correlationId из payload.
      * @param mixed $operationId Значение operationId из payload.
      * @param mixed $partId Значение partId из payload.
+     * @param array $payload Полное тело callback.
      * @return void
      */
-    private function logUnknownCorrelationId($correlationId, $operationId, $partId): void
+    private function logUnknownCorrelationId($correlationId, $operationId, $partId, array $payload): void
     {
         $dir = Yii::getAlias(self::UNKNOWN_CALLBACK_LOG_DIR);
         if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) {
@@ -212,6 +213,7 @@ class PcrCallbackController extends Controller
             'correlation_id' => $correlationId,
             'operation_id'   => $operationId,
             'part_id'        => $partId,
+            'payload'        => $payload,
         ];
 
         $line = json_encode($record, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL;

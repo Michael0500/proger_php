@@ -180,6 +180,9 @@ class PcrCallbackControllerTest extends \Codeception\Test\Unit
         $content = file_get_contents($currentLog);
         $this->assertStringContainsString('"event":"unknown_correlation_id"', $content);
         $this->assertStringContainsString('"correlation_id":"ef71d287-995f-4582-b5ec-d8585beecf45"', $content);
+        $this->assertStringContainsString('"payload":{', $content);
+        $this->assertStringContainsString('"dcAccountNumber":"11112222333344445555"', $content);
+        $this->assertStringContainsString('"operationsInformation":[', $content);
 
         $this->stdout('TC-004: callback с неизвестным correlationId проигнорирован, строки pcr_* не созданы; недельный runtime-лог записан, третий файл удалён.');
     }
