@@ -8,6 +8,10 @@
  * транзакционно.
  */
 var ArchiveMixin = {
+    created: function () {
+        StateStorage.remove('archive_filters');
+    },
+
     /**
      * Начальное состояние страницы архива.
      *
@@ -26,7 +30,7 @@ var ArchiveMixin = {
             archiveSortCol: 'archived_at',
             archiveSortDir: 'desc',
 
-            archiveFilters:     StateStorage.get('archive_filters', {}),
+            archiveFilters:     {},
             archiveFiltersOpen: false,
 
             // Список счетов для фильтра
@@ -249,8 +253,8 @@ var ArchiveMixin = {
         /**
          * Применяет фильтр архива и перезагружает таблицу.
          *
-         * Пустое значение удаляет фильтр. Состояние фильтров сохраняется в
-         * `StateStorage`, чтобы пользователь вернулся к тому же набору условий.
+         * Пустое значение удаляет фильтр. Фильтры живут только в текущем
+         * экземпляре страницы и сбрасываются при переходе на другой раздел.
          *
          * @param {string} field Имя фильтра, ожидаемое API.
          * @param {*} value Значение фильтра.
@@ -339,12 +343,15 @@ var ArchiveMixin = {
         },
 
         /**
-         * Сохраняет фильтры архива в пользовательское localStorage-хранилище.
+         * Удаляет старое сохранённое состояние фильтров архива.
+         *
+         * Фильтры не должны переживать переходы между страницами, поэтому метод
+         * оставлен только как точка очистки legacy-ключа.
          *
          * @returns {void}
          */
         saveArchiveFilterState: function () {
-            StateStorage.set('archive_filters', this.archiveFilters || {});
+            StateStorage.remove('archive_filters');
         },
 
         /**

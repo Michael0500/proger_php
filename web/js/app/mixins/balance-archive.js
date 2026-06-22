@@ -6,6 +6,10 @@
  * пользовательскими настройками колонок.
  */
 var BalanceArchiveMixin = {
+    created: function () {
+        StateStorage.remove('balance_archive_filters');
+    },
+
     data: function () {
         return {
             balanceArchiveRows:        [],
@@ -18,13 +22,18 @@ var BalanceArchiveMixin = {
             balanceArchiveSortCol: 'archived_at',
             balanceArchiveSortDir: 'desc',
 
-            balanceArchiveFilters:     StateStorage.get('balance_archive_filters', {}),
+            balanceArchiveFilters:     {},
             balanceArchiveFiltersOpen: false,
             balanceArchiveAccounts:    [],
             balanceArchivePools:       [],
 
             balanceArchiveStats: null,
             balanceArchiveSettings: {
+                archive_after_days:   90,
+                retention_years:       5,
+                auto_archive_enabled:  true,
+            },
+            balanceArchiveSavedSettings: {
                 archive_after_days:   90,
                 retention_years:       5,
                 auto_archive_enabled:  true,
@@ -226,7 +235,7 @@ var BalanceArchiveMixin = {
         },
 
         saveBalanceArchiveFilterState: function () {
-            StateStorage.set('balance_archive_filters', this.balanceArchiveFilters || {});
+            StateStorage.remove('balance_archive_filters');
         },
 
         toggleBalanceArchiveFilters: function () {
@@ -363,7 +372,8 @@ var BalanceArchiveMixin = {
             SmartMatchApi.get(AppRoutes.balanceArchiveStats, {}).then(function (r) {
                 if (r.data && r.data.success) {
                     self.balanceArchiveStats = r.data.data;
-                    self.balanceArchiveSettings = r.data.data.settings;
+                    self.balanceArchiveSavedSettings = self.cloneBalanceArchiveSettings(r.data.data.settings);
+                    self.balanceArchiveSettings = self.cloneBalanceArchiveSettings(self.balanceArchiveSavedSettings);
                 }
             });
         },
@@ -563,11 +573,33 @@ var BalanceArchiveMixin = {
             this.balanceArchiveHistoryOpen = false;
         },
 
+        cloneBalanceArchiveSettings: function (settings) {
+            settings = settings || {};
+            var hasAutoArchive = Object.prototype.hasOwnProperty.call(settings, 'auto_archive_enabled');
+            return {
+                archive_after_days: Number(settings.archive_after_days || 90),
+                retention_years: Number(settings.retention_years || 5),
+                auto_archive_enabled: hasAutoArchive ? !!settings.auto_archive_enabled : true,
+            };
+        },
+
+        openBalanceArchiveSettings: function () {
+            this.balanceArchiveSettings = this.cloneBalanceArchiveSettings(this.balanceArchiveSavedSettings);
+            this.balanceArchiveSettingsOpen = true;
+        },
+
+        closeBalanceArchiveSettings: function () {
+            this.balanceArchiveSettings = this.cloneBalanceArchiveSettings(this.balanceArchiveSavedSettings);
+            this.balanceArchiveSettingsOpen = false;
+        },
+
         saveBalanceArchiveSettings: function () {
             var self = this;
             self.balanceArchiveSettingsSaving = true;
             SmartMatchApi.post(AppRoutes.balanceArchiveSaveSettings, self.balanceArchiveSettings).then(function (d) {
                 if (d.success) {
+                    self.balanceArchiveSavedSettings = self.cloneBalanceArchiveSettings(d.data || self.balanceArchiveSettings);
+                    self.balanceArchiveSettings = self.cloneBalanceArchiveSettings(self.balanceArchiveSavedSettings);
                     Swal.fire({ title: 'Сохранено', icon: 'success', timer: 1400, showConfirmButton: false });
                     self.balanceArchiveSettingsOpen = false;
                     self.loadBalanceArchiveStats();

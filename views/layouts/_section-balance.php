@@ -68,14 +68,22 @@ $currencySelectId = $currencySelectId ?? 'balance-filter-currency-select2';
         </div>
 
         <?php if ($showPoolFilter): ?>
-        <!-- ФИЛЬТР ПО НОСТРО-БАНКУ (Select2) -->
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-            <label style="font-size:12px;font-weight:600;color:#6b7280;white-space:nowrap">
-                <i class="fas fa-landmark me-1" style="color:#4f46e5"></i>Ностро-банк:
-            </label>
-            <select id="balancePoolSelect" class="form-select" style="width:300px">
-                <option value="">— Все ностро-банки —</option>
-            </select>
+        <!-- ФИЛЬТРЫ ПО НОСТРО-БАНКУ И СЧЁТУ (Select2) -->
+        <div style="display:flex;align-items:flex-end;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+            <div>
+                <label style="font-size:12px;font-weight:600;color:#6b7280;white-space:nowrap;display:block;margin-bottom:4px">
+                    <i class="fas fa-landmark me-1" style="color:#4f46e5"></i>Ностро-банк
+                </label>
+                <select id="balancePoolSelect" class="form-select" style="width:300px">
+                    <option value="">— Все ностро-банки —</option>
+                </select>
+            </div>
+            <div>
+                <label style="font-size:12px;font-weight:600;color:#6b7280;white-space:nowrap;display:block;margin-bottom:4px">
+                    <i class="fas fa-wallet me-1" style="color:#4f46e5"></i>Ностро-счёт
+                </label>
+                <select id="balanceAccountSelect" class="form-select" style="width:320px"></select>
+            </div>
         </div>
         <?php endif; ?>
 
@@ -622,10 +630,7 @@ $currencySelectId = $currencySelectId ?? 'balance-filter-currency-select2';
                 <div class="modal-card-body">
                     <div style="margin-bottom:12px">
                         <label class="filter-label">Счёт *</label>
-                        <select class="filter-input" v-model.number="importAccountId" style="width:100%">
-                            <option :value="null">— выберите счёт —</option>
-                            <option v-for="a in balanceAccounts" :key="a.id" :value="a.id">{{ a.name }}</option>
-                        </select>
+                        <select id="balance-import-account-select2" style="width:100%"></select>
                     </div>
                     <div style="margin-bottom:12px">
                         <label class="filter-label">Раздел</label>
@@ -640,7 +645,7 @@ $currencySelectId = $currencySelectId ?? 'balance-filter-currency-select2';
                     </div>
                     <div style="margin-bottom:12px">
                         <label class="filter-label">Файл * <span style="color:#9ca3af;font-weight:400">{{ importType==='bnd'?'(.xml)':'(.txt, .csv)' }}</span></label>
-                        <input type="file" class="filter-input"
+                        <input id="balance-import-file-input" type="file" class="filter-input"
                                :accept="importType==='bnd'?'.xml':'.txt,.csv'"
                                @change="onImportFileChange" style="width:100%;padding:5px">
                     </div>

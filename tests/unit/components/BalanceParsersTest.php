@@ -5,6 +5,7 @@ namespace tests\unit\components;
 use app\components\parsers\AsbTextParser;
 use app\components\parsers\BndCamtParser;
 use app\models\NostroBalance;
+use app\models\NostroEntry;
 
 /**
  * Проверяет парсеры файлов балансов BND/CAMT и ASB.
@@ -39,11 +40,11 @@ class BalanceParsersTest extends \Codeception\Test\Unit
     public function testBndCamtParserParsesStatementWithNamespace(): void
     {
         $path = $this->tempFile('xml', '<?xml version="1.0" encoding="UTF-8"?>
-<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02">
-  <BkToCstmrStmt>
-    <Stmt>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.052.001.08">
+  <BkToCstmrAcctRpt>
+    <Rpt>
       <Id>STMT-001</Id>
-      <Acct><Id><IBAN>BY00TESTACCOUNT</IBAN></Id></Acct>
+      <Acct><Id><Othr><Id>BY00TESTACCOUNT</Id></Othr></Id></Acct>
       <Bal>
         <Tp><CdOrPrtry><Cd>OPBD</Cd></CdOrPrtry></Tp>
         <Amt Ccy="USD">1000.25</Amt>
@@ -56,8 +57,21 @@ class BalanceParsersTest extends \Codeception\Test\Unit
         <CdtDbtInd>DBIT</CdtDbtInd>
         <Dt><Dt>2026-01-10</Dt></Dt>
       </Bal>
-    </Stmt>
-  </BkToCstmrStmt>
+      <Ntry>
+        <Amt Ccy="USD">150.75</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-01-09</Dt></BookgDt>
+        <ValDt><Dt>2026-01-10</Dt></ValDt>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="USD">25.00</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <Sts>PDNG</Sts>
+        <ValDt><Dt>2026-01-10</Dt></ValDt>
+      </Ntry>
+    </Rpt>
+  </BkToCstmrAcctRpt>
 </Document>');
 
         $parser = new BndCamtParser();
@@ -76,7 +90,20 @@ class BalanceParsersTest extends \Codeception\Test\Unit
         $this->assertSame(NostroBalance::DC_DEBIT, $rows[0]['closing_dc']);
         $this->assertSame(NostroBalance::SOURCE_BND, $rows[0]['source']);
 
-        $this->stdout('BND/CAMT парсер: разбирает CAMT053 XML с namespace — opening/closing balance, валюта, дата, D/C (CRDT/DBIT) и source=BND.');
+        $entryRows = $parser->getEntryRows();
+        $this->assertCount(1, $entryRows);
+        $this->assertSame(15, $entryRows[0]['account_id']);
+        $this->assertSame(NostroEntry::LS_STATEMENT, $entryRows[0]['ls']);
+        $this->assertSame(NostroEntry::DC_DEBIT, $entryRows[0]['dc']);
+        $this->assertSame('150.75', $entryRows[0]['amount']);
+        $this->assertSame('USD', $entryRows[0]['currency']);
+        $this->assertSame('2026-01-10', $entryRows[0]['value_date']);
+        $this->assertSame('2026-01-09', $entryRows[0]['post_date']);
+        $this->assertSame('STMT-001', $entryRows[0]['statement_number']);
+        $this->assertSame(NostroBalance::SOURCE_BND, $entryRows[0]['source']);
+        $this->assertSame(NostroEntry::STATUS_UNMATCHED, $entryRows[0]['match_status']);
+
+        $this->stdout('BND/CAMT парсер: разбирает CAMT052 Rpt с namespace — баланс OPBD/CLBD и только BOOK-записи выверки.');
     }
 
     /**
@@ -88,7 +115,7 @@ class BalanceParsersTest extends \Codeception\Test\Unit
     {
         $path = $this->tempFile('xml', '<?xml version="1.0" encoding="UTF-8"?>
 <Document>
-  <Stmt>
+  <Rpt>
     <Id>STMT-002</Id>
     <Bal>
       <Tp><CdOrPrtry><Cd>OPBD</Cd></CdOrPrtry></Tp>
@@ -96,16 +123,16 @@ class BalanceParsersTest extends \Codeception\Test\Unit
       <CdtDbtInd>CRDT</CdtDbtInd>
       <Dt><Dt>2026-01-11</Dt></Dt>
     </Bal>
-  </Stmt>
+  </Rpt>
 </Document>');
 
         $parser = new BndCamtParser();
         $rows = $parser->parse($path, 10, NostroBalance::SECTION_NRE);
 
         $this->assertSame([], $rows);
-        $this->assertContains('Stmt STMT-002: не найден баланс CLBD', $parser->getErrors());
+        $this->assertContains('Rpt STMT-002: не найден баланс CLBD', $parser->getErrors());
 
-        $this->stdout('BND/CAMT парсер: при отсутствии closing balance (CLBD) строки не возвращаются и фиксируется ошибка «не найден баланс CLBD».');
+        $this->stdout('BND/CAMT парсер: при отсутствии closing balance (CLBD) в Rpt строки не возвращаются и фиксируется ошибка «не найден баланс CLBD».');
     }
 
     /**
@@ -141,6 +168,18 @@ class BalanceParsersTest extends \Codeception\Test\Unit
         $this->assertSame(NostroBalance::DC_CREDIT, $rows[0]['closing_dc']);
         $this->assertSame(NostroBalance::SOURCE_ASB, $rows[0]['source']);
         $this->assertSame(NostroBalance::SECTION_INV, $rows[0]['section']);
+
+        $entryRows = $parser->getEntryRows();
+        $this->assertCount(1, $entryRows);
+        $this->assertSame(22, $entryRows[0]['account_id']);
+        $this->assertSame('S', $entryRows[0]['ls']);
+        $this->assertSame('Credit', $entryRows[0]['dc']);
+        $this->assertSame('10.00', $entryRows[0]['amount']);
+        $this->assertSame('RUB', $entryRows[0]['currency']);
+        $this->assertSame('2026-01-10', $entryRows[0]['value_date']);
+        $this->assertSame('ASB-001', $entryRows[0]['statement_number']);
+        $this->assertSame(NostroBalance::SOURCE_ASB, $entryRows[0]['source']);
+        $this->assertSame('U', $entryRows[0]['match_status']);
 
         $this->stdout('ASB парсер: разбирает Windows-1251 файл (числа с запятой и пробелами), валюта RUB, дата dd.mm.yyyy→ISO, source=ASB, секция INV.');
     }

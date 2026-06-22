@@ -34,6 +34,7 @@ var BalanceMixin = {
             balanceAccounts: [],
             balancePools:    [],
             balancePoolId:   '',  // фильтр по ностро-банку (Select2)
+            balanceFilterAccountId: '', // фильтр по ностро-счёту (Select2)
 
             /**
              * Форма создания/редактирования записи `nostro_balance`.
@@ -196,6 +197,9 @@ var BalanceMixin = {
             } else if (self.selectedPool && self.selectedPool.id) {
                 filters.pool_id = self.selectedPool.id;
             }
+            if (self.balanceFilterAccountId) {
+                filters.account_id = self.balanceFilterAccountId;
+            }
 
             SmartMatchApi.get(AppRoutes.balanceList, {
                 page:    self.balancesPage,
@@ -244,7 +248,13 @@ var BalanceMixin = {
                     self.balanceAccounts = r.data.data;
                     if (r.data.pools) {
                         self.balancePools = r.data.pools;
-                        self.$nextTick(function () { self.initBalancePoolSelect(); });
+                        self.$nextTick(function () {
+                            self.initBalancePoolSelect();
+                            self.initBalanceAccountSelect();
+                        });
+                    }
+                    if (self.importModalOpen) {
+                        self.$nextTick(function () { self.initImportAccountSelect2(); });
                     }
                 }
             });
@@ -296,6 +306,16 @@ var BalanceMixin = {
             var $c = jQuery('#' + elId);
             if ($c.length && $c.data('select2')) {
                 $c.val(null).trigger('change.select2');
+            }
+            this.balancePoolId = '';
+            this.balanceFilterAccountId = '';
+            var $pool = jQuery('#balancePoolSelect');
+            if ($pool.length && $pool.data('select2')) {
+                $pool.val(null).trigger('change.select2');
+            }
+            var $account = jQuery('#balanceAccountSelect');
+            if ($account.length && $account.data('select2')) {
+                $account.val(null).trigger('change.select2');
             }
             this.onBalanceFilterChange();
         },
@@ -351,6 +371,7 @@ var BalanceMixin = {
          * @returns {void}
          */
         onBalancePoolChange: function () {
+            this.initBalanceAccountSelect();
             this.loadBalances(true);
         },
 
@@ -552,6 +573,14 @@ var BalanceMixin = {
                 });
                 self.editingBalance.account_id   = parseInt(e.params.data.id);
                 self.editingBalance.account_name = found ? found.name : e.params.data.text;
+                if (found && found.pool_id && String(found.pool_id) !== String(self.editingBalancePoolId || '')) {
+                    self.editingBalancePoolId = String(found.pool_id);
+                    var $pool = $('#balance-form-pool-select2');
+                    if ($pool.length && $pool.data('select2')) {
+                        $pool.val(self.editingBalancePoolId).trigger('change.select2');
+                    }
+                    self.initBalanceFormAccountSelect2(self.editingBalancePoolId);
+                }
             });
             $el.on('select2:clear', function () {
                 self.editingBalance.account_id   = null;
@@ -758,13 +787,13 @@ var BalanceMixin = {
          * @returns {void}
          */
         openImportModal: function (type) {
-            var section = (window.AppConfig && window.AppConfig.companySection) || 'NRE';
-            this.importType      = type || 'bnd';
-            this.importAccountId = null;
-            this.importSection   = section;   // ← дефолт из компании
-            this.importFile      = null;
-            this.importResult    = null;
+            this.resetImportModalState(type || 'bnd');
             this.importModalOpen = true;
+
+            var self = this;
+            this.$nextTick(function () {
+                self.initImportAccountSelect2();
+            });
         },
 
         /**
@@ -773,7 +802,96 @@ var BalanceMixin = {
          * @returns {void}
          */
         closeImportModal: function () {
+            this.destroyImportAccountSelect2();
             this.importModalOpen = false;
+            this.resetImportModalState(this.importType);
+        },
+
+        /**
+         * Сбрасывает состояние модалки импорта и очищает DOM file input.
+         *
+         * @param {string=} type Тип импорта, который нужно оставить выбранным.
+         * @returns {void}
+         */
+        resetImportModalState: function (type) {
+            var section = (window.AppConfig && window.AppConfig.companySection) || 'NRE';
+            this.importType      = type || this.importType || 'bnd';
+            this.importAccountId = null;
+            this.importSection   = section;
+            this.importFile      = null;
+            this.importResult    = null;
+            this.importLoading   = false;
+
+            var fileInput = document.getElementById('balance-import-file-input');
+            if (fileInput) {
+                fileInput.value = '';
+            }
+
+            var $account = $('#balance-import-account-select2');
+            if ($account.length && $account.data('select2')) {
+                $account.val(null).trigger('change.select2');
+            }
+        },
+
+        /**
+         * Инициализирует Select2 выбора счёта в модалке импорта BND/ASB.
+         *
+         * Использует загруженный список `balanceAccounts` и записывает выбранный
+         * `account_id` в `importAccountId`.
+         *
+         * @returns {void}
+         */
+        initImportAccountSelect2: function () {
+            var self = this;
+            var $el = $('#balance-import-account-select2');
+            if (!$el.length) return;
+
+            if ($el.data('select2')) {
+                $el.off('select2:select select2:clear');
+                $el.select2('destroy');
+                $el.empty();
+            }
+
+            var accountData = (self.balanceAccounts || []).map(function (a) {
+                return { id: String(a.id), text: a.name };
+            });
+
+            $el.select2({
+                dropdownParent: $(document.body),
+                theme:          'bootstrap-5',
+                placeholder:    'Выберите счёт...',
+                allowClear:     true,
+                width:          '100%',
+                data:           accountData,
+                language: { noResults: function () { return 'Нет счетов'; } }
+            });
+
+            if (self.importAccountId) {
+                $el.val(String(self.importAccountId)).trigger('change.select2');
+            } else {
+                $el.val(null).trigger('change.select2');
+            }
+
+            $el.on('select2:select', function (e) {
+                self.importAccountId = parseInt(e.params.data.id, 10);
+            });
+            $el.on('select2:clear', function () {
+                self.importAccountId = null;
+            });
+        },
+
+        /**
+         * Уничтожает Select2 выбора счёта в модалке импорта.
+         *
+         * @returns {void}
+         */
+        destroyImportAccountSelect2: function () {
+            var $el = $('#balance-import-account-select2');
+            if ($el.length && $el.data('select2')) {
+                $el.off('select2:select select2:clear');
+                $el.select2('destroy');
+                $el.empty();
+            }
         },
 
         /**
@@ -953,8 +1071,13 @@ var BalanceMixin = {
             var $el = jQuery('#balancePoolSelect');
             if (!$el.length) return;
 
+            if ($el.data('select2')) {
+                $el.off('change.balancePool');
+                $el.select2('destroy');
+            }
+
             // Заполняем options
-            $el.find('option:gt(0)').remove();
+            $el.empty().append(new Option('— Все ностро-банки —', '', false, false));
             self.balancePools.forEach(function (p) {
                 $el.append(new Option(p.name, p.id, false, false));
             });
@@ -969,11 +1092,88 @@ var BalanceMixin = {
             // Установить текущее значение
             if (self.balancePoolId) {
                 $el.val(self.balancePoolId).trigger('change.select2');
+            } else {
+                $el.val(null).trigger('change.select2');
             }
 
             $el.off('change.balancePool').on('change.balancePool', function () {
-                self.balancePoolId = jQuery(this).val() || '';
+                var nextPoolId = jQuery(this).val() || '';
+                if (nextPoolId !== self.balancePoolId) {
+                    self.balanceFilterAccountId = '';
+                }
+                self.balancePoolId = nextPoolId;
                 self.onBalancePoolChange();
+            });
+        },
+
+        /**
+         * Инициализирует Select2 фильтра ностро-счёта на странице балансов.
+         *
+         * Если выбран ностро-банк, список ограничивается его счетами. Если
+         * выбран счёт без банка, связанный банк автоматически подставляется.
+         *
+         * @returns {void}
+         */
+        initBalanceAccountSelect: function () {
+            var self = this;
+            var $el = jQuery('#balanceAccountSelect');
+            if (!$el.length) return;
+
+            if ($el.data('select2')) {
+                $el.off('change.balanceAccount');
+                $el.select2('destroy');
+            }
+
+            var accounts = (self.balanceAccounts || []).filter(function (a) {
+                return !self.balancePoolId || String(a.pool_id) === String(self.balancePoolId);
+            });
+
+            $el.empty().append(new Option('', '', false, false));
+            accounts.forEach(function (a) {
+                $el.append(new Option(a.name, a.id, false, false));
+            });
+
+            $el.select2({
+                theme: 'bootstrap-5',
+                allowClear: true,
+                placeholder: self.balancePoolId ? '— Счёт ностро-банка —' : '— Все ностро-счета —',
+                width: '320px',
+                language: { noResults: function () { return 'Нет счетов'; } }
+            });
+
+            if (self.balanceFilterAccountId) {
+                var currentExists = accounts.some(function (a) {
+                    return String(a.id) === String(self.balanceFilterAccountId);
+                });
+                if (currentExists) {
+                    $el.val(String(self.balanceFilterAccountId)).trigger('change.select2');
+                } else {
+                    self.balanceFilterAccountId = '';
+                    $el.val(null).trigger('change.select2');
+                }
+            } else {
+                $el.val(null).trigger('change.select2');
+            }
+
+            $el.off('change.balanceAccount').on('change.balanceAccount', function () {
+                var accountId = jQuery(this).val() || '';
+                self.balanceFilterAccountId = accountId;
+
+                if (accountId) {
+                    var account = (self.balanceAccounts || []).find(function (a) {
+                        return String(a.id) === String(accountId);
+                    });
+                    if (account && account.pool_id && String(account.pool_id) !== String(self.balancePoolId)) {
+                        self.balancePoolId = String(account.pool_id);
+                        var $pool = jQuery('#balancePoolSelect');
+                        if ($pool.length && $pool.data('select2')) {
+                            $pool.val(self.balancePoolId).trigger('change.select2');
+                        }
+                        self.initBalanceAccountSelect();
+                    }
+                }
+
+                self.loadBalances(true);
             });
         },
 

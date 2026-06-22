@@ -45,8 +45,9 @@ var PoolsMixin = {
         /**
          * Выбирает ностро-банк и запускает загрузку записей выверки.
          *
-         * Изменяет `selectedPool` и `selectedCategory`, сохраняет выбранные ID
-         * в `StateStorage`, затем вызывает `loadEntries(true)` из EntriesMixin.
+         * Изменяет `selectedPool` и `selectedCategory`, затем вызывает
+         * `loadEntries(true)` из EntriesMixin. Выбор не сохраняется между
+         * страницами, чтобы фильтр сбрасывался после возврата.
          *
          * @param {Object|null} pool Ностро-банк из выбранной категории.
          * @param {Object|null} category Категория, к которой привязан банк.
@@ -56,8 +57,8 @@ var PoolsMixin = {
             this.selectedPool     = pool;
             this.selectedCategory = category;
 
-            StateStorage.set('selectedPoolId',     pool     ? pool.id     : null);
-            StateStorage.set('selectedCategoryId', category ? category.id : null);
+            StateStorage.remove('selectedPoolId');
+            StateStorage.remove('selectedCategoryId');
 
             this.loadEntries(true);
         },

@@ -7,6 +7,8 @@ use yii\web\Response;
 use yii\web\UploadedFile;
 use app\models\NostroBalance;
 use app\models\NostroBalanceAudit;
+use app\models\NostroEntry;
+use app\models\NostroEntryAudit;
 use app\models\Account;
 use app\components\parsers\BndCamtParser;
 use app\components\parsers\AsbTextParser;
@@ -387,7 +389,7 @@ class NostroBalanceController extends BaseController
         $rows   = $parser->parse($tmpPath, $accountId, $section);
         @unlink($tmpPath);
 
-        return $this->saveImportRows($rows, $parser->getErrors(), $cid);
+        return $this->saveImportRows($rows, $parser->getErrors(), $cid, $parser->getEntryRows());
     }
 
     /**
@@ -426,7 +428,7 @@ class NostroBalanceController extends BaseController
         $rows   = $parser->parse($tmpPath, $accountId, $section);
         @unlink($tmpPath);
 
-        return $this->saveImportRows($rows, $parser->getErrors(), $cid);
+        return $this->saveImportRows($rows, $parser->getErrors(), $cid, $parser->getEntryRows());
     }
 
     /**
@@ -562,51 +564,109 @@ class NostroBalanceController extends BaseController
      * Для каждой строки создаётся `NostroBalance`, запускаются проверки
      * качества, сохраняется запись и пишется аудит `import`.
      *
-     * @param array $rows Нормализованные строки парсера.
+     * @param array $rows Нормализованные строки балансов парсера.
      * @param array $parseErrors Ошибки парсинга, которые нужно вернуть в UI.
      * @param int $cid ID компании.
+     * @param array $entryRows Нормализованные строки выверки парсера.
      * @return array JSON-совместимый итог импорта.
      */
-    private function saveImportRows(array $rows, array $parseErrors, int $cid): array
+    private function saveImportRows(array $rows, array $parseErrors, int $cid, array $entryRows = []): array
     {
         $settings = $this->getValidationSettings();
-        $saved    = 0;
-        $errors   = 0;
-        $dbErrors = [];
+        $saved       = 0;
+        $entrySaved  = 0;
+        $errors      = 0;
+        $dbErrors    = [];
+        $transaction = Yii::$app->db->beginTransaction();
 
-        foreach ($rows as $rowData) {
-            $m             = new NostroBalance();
-            $m->company_id = $cid;
+        try {
+            foreach ($rows as $rowData) {
+                $m             = new NostroBalance();
+                $m->company_id = $cid;
 
-            // Убираем служебное поле
-            unset($rowData['_acct_string']);
+                // Убираем служебное поле
+                unset($rowData['_acct_string']);
 
-            foreach ($rowData as $key => $val) {
-                if ($m->hasAttribute($key)) {
-                    $m->$key = $val;
+                foreach ($rowData as $key => $val) {
+                    if ($m->hasAttribute($key)) {
+                        $m->$key = $val;
+                    }
+                }
+
+                $m->runValidations($settings);
+
+                if ($m->save(false)) {
+                    NostroBalanceAudit::log($m->id, NostroBalanceAudit::ACTION_IMPORT, null, $m->toApiArray(), 'Импорт из файла');
+                    $saved++;
+                    if ($m->status === NostroBalance::STATUS_ERROR) {
+                        $errors++;
+                    }
+                } else {
+                    $dbErrors[] = ['balance' => $m->errors];
                 }
             }
 
-            $m->runValidations($settings);
+            foreach ($entryRows as $rowData) {
+                $entry             = new NostroEntry();
+                $entry->company_id = $cid;
+                $entry->skipAudit  = true;
 
-            if ($m->save(false)) {
-                NostroBalanceAudit::log($m->id, NostroBalanceAudit::ACTION_IMPORT, null, $m->toApiArray(), 'Импорт из файла');
-                $saved++;
-                if ($m->status === NostroBalance::STATUS_ERROR) {
-                    $errors++;
+                foreach ($rowData as $key => $val) {
+                    if ($entry->hasAttribute($key)) {
+                        $entry->$key = $val;
+                    }
                 }
-            } else {
-                $dbErrors[] = $m->errors;
+
+                if (!$entry->validate()) {
+                    $dbErrors[] = ['entry' => $entry->errors];
+                    continue;
+                }
+
+                if ($entry->save(false)) {
+                    NostroEntryAudit::log(
+                        $entry->id,
+                        NostroEntryAudit::ACTION_CREATE,
+                        null,
+                        $entry->getAttributes(),
+                        null,
+                        null,
+                        'Импорт из файла'
+                    );
+                    $entrySaved++;
+                } else {
+                    $dbErrors[] = ['entry' => $entry->errors];
+                }
             }
+
+            $transaction->commit();
+        } catch (\Throwable $e) {
+            $transaction->rollBack();
+            Yii::error('Balance file import failed: ' . $e->getMessage(), __METHOD__);
+
+            return [
+                'success'      => false,
+                'saved'        => 0,
+                'entries_saved' => 0,
+                'errors'       => 0,
+                'parse_errors' => $parseErrors,
+                'db_errors'    => [['exception' => $e->getMessage()]],
+                'message'      => 'Ошибка импорта файла',
+            ];
+        }
+
+        $message = "Импортировано: {$saved}, с ошибками валидации: {$errors}";
+        if (!empty($entryRows)) {
+            $message = "Импортировано балансов: {$saved}, строк выверки: {$entrySaved}, балансов с ошибками валидации: {$errors}";
         }
 
         return [
             'success'      => true,
             'saved'        => $saved,
+            'entries_saved' => $entrySaved,
             'errors'       => $errors,
             'parse_errors' => $parseErrors,
             'db_errors'    => $dbErrors,
-            'message'      => "Импортировано: {$saved}, с ошибками валидации: {$errors}",
+            'message'      => $message,
         ];
     }
 

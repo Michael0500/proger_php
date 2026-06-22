@@ -3,7 +3,7 @@
  *
  * Категории являются верхним уровнем навигации сайдбара и группируют
  * ностро-банки (`AccountPool`) через `pool.category_id`. Mixin загружает дерево
- * категорий, восстанавливает выбранный контекст пользователя и выполняет CRUD
+ * категорий, восстанавливает раскрытые блоки сайдбара и выполняет CRUD
  * через API, где данные ограничиваются `company_id`.
  */
 var CategoriesMixin = {
@@ -12,9 +12,9 @@ var CategoriesMixin = {
         /**
          * Загружает дерево категорий и ностро-банков для сайдбара.
          *
-         * Читает `categoriesExpanded`, `selectedCategoryId` и `selectedPoolId`
-         * из `StateStorage`, сортирует ностро-банки по русской локали и при
-         * восстановленном банке запускает загрузку записей выверки.
+         * Читает `categoriesExpanded` из `StateStorage` и сортирует
+         * ностро-банки по русской локали. Выбранный ностро-банк не
+         * восстанавливается, чтобы фильтр страницы сбрасывался при переходах.
          *
          * @returns {void}
          */
@@ -25,8 +25,8 @@ var CategoriesMixin = {
                 .then(function (response) {
                     if (response.data.success) {
                         var savedExpanded   = StateStorage.get('categoriesExpanded', {});
-                        var savedCategoryId = StateStorage.get('selectedCategoryId', null);
-                        var savedPoolId     = StateStorage.get('selectedPoolId', null);
+                        StateStorage.remove('selectedCategoryId');
+                        StateStorage.remove('selectedPoolId');
 
                         self.categories = response.data.data.map(function (category) {
                             var isExpanded = !!savedExpanded[category.id];
@@ -35,25 +35,6 @@ var CategoriesMixin = {
                             });
                             return Object.assign({}, category, { pools: sortedPools, expanded: isExpanded });
                         });
-
-                        if (savedCategoryId) {
-                            var foundCategory = self.categories.find(function (c) {
-                                return c.id === parseInt(savedCategoryId, 10);
-                            });
-                            if (foundCategory) {
-                                self.selectedCategory = foundCategory;
-
-                                if (savedPoolId && foundCategory.pools) {
-                                    var foundPool = foundCategory.pools.find(function (p) {
-                                        return p.id === parseInt(savedPoolId, 10);
-                                    });
-                                    if (foundPool) {
-                                        self.selectedPool = foundPool;
-                                        self.loadEntries && self.loadEntries(true);
-                                    }
-                                }
-                            }
-                        }
 
                     } else {
                         Swal.fire('Ошибка', response.data.message || 'Не удалось загрузить категории', 'error');
@@ -71,8 +52,9 @@ var CategoriesMixin = {
          * Выбирает или сворачивает категорию в сайдбаре.
          *
          * Изменяет `selectedCategory`, при смене категории сбрасывает
-         * `selectedPool`, сохраняет раскрытые категории и выбранные ID в
-         * `StateStorage`. Загрузку записей выполняет выбор конкретного банка.
+         * `selectedPool` и сохраняет только раскрытые категории. Выбранная
+         * категория не сохраняется между страницами, чтобы не восстанавливать
+         * фильтр после возврата.
          *
          * @param {Object} category Категория из `categories`.
          * @returns {void}
@@ -91,8 +73,8 @@ var CategoriesMixin = {
             var expandedMap = {};
             self.categories.forEach(function (c) { expandedMap[c.id] = !!c.expanded; });
             StateStorage.set('categoriesExpanded', expandedMap);
-            StateStorage.set('selectedCategoryId', self.selectedCategory ? self.selectedCategory.id : null);
-            if (!self.selectedPool) StateStorage.set('selectedPoolId', null);
+            StateStorage.remove('selectedCategoryId');
+            StateStorage.remove('selectedPoolId');
         },
 
         /**

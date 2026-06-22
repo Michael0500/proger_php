@@ -3,6 +3,7 @@
 namespace app\components\parsers;
 
 use app\models\NostroBalance;
+use app\models\NostroEntry;
 
 /**
  * Парсер Банк-клиент АСБ (текстовый формат, КОИ8-R / Windows-1251).
@@ -17,14 +18,20 @@ use app\models\NostroBalance;
  *   opening_dc       = если ВсегоПоступило > 0 → C; иначе D
  *   closing_balance  = КонечныйОстаток=
  *   closing_dc       = аналогично
+ *   entries          = агрегированные строки по ВсегоПоступило/ВсегоСписано
  */
 class AsbTextParser
 {
     /** @var string[] Ошибки последнего парсинга */
     private array $errors = [];
 
+    /** @var array[] Строки выверки последнего парсинга */
+    private array $entryRows = [];
+
     /**
      * Парсит текстовый файл АСБ и возвращает строки для `NostroBalance`.
+     *
+     * Строки выверки для `NostroEntry` доступны через `getEntryRows()`.
      *
      * Поддерживает UTF-8, Windows-1251 и KOI8-R. Многосекционные файлы
      * разбиваются на отдельные выписки.
@@ -37,6 +44,7 @@ class AsbTextParser
     public function parse(string $filePath, int $accountId, string $section): array
     {
         $this->errors = [];
+        $this->entryRows = [];
 
         $raw = @file_get_contents($filePath);
         if ($raw === false) {
@@ -72,6 +80,16 @@ class AsbTextParser
     public function getErrors(): array
     {
         return $this->errors;
+    }
+
+    /**
+     * Возвращает строки выверки, собранные при последнем парсинге.
+     *
+     * @return array[] Строки для `NostroEntry`.
+     */
+    public function getEntryRows(): array
+    {
+        return $this->entryRows;
     }
 
     // ─── Приватные ────────────────────────────────────────────────
@@ -115,6 +133,11 @@ class AsbTextParser
         $openingDc = $incoming > 0 ? NostroBalance::DC_CREDIT : NostroBalance::DC_DEBIT;
         $closingDc = $outgoing > 0 ? NostroBalance::DC_DEBIT  : NostroBalance::DC_CREDIT;
 
+        $this->entryRows = array_merge(
+            $this->entryRows,
+            $this->buildEntryRows($accountId, $stmtNumber, $valueDate, $incoming, $outgoing)
+        );
+
         return [
             'account_id'       => $accountId,
             'ls_type'          => NostroBalance::LS_STATEMENT,
@@ -144,7 +167,7 @@ class AsbTextParser
         $lines = preg_split('/\r?\n/', $text);
         foreach ($lines as $line) {
             $line = trim($line);
-            if (str_contains($line, '=')) {
+            if (strpos($line, '=') !== false) {
                 [$key, $val] = explode('=', $line, 2);
                 $key = trim($key);
                 $val = trim($val);
@@ -154,6 +177,57 @@ class AsbTextParser
             }
         }
         return $fields;
+    }
+
+    /**
+     * Строит агрегированные строки выверки по оборотам выписки.
+     *
+     * @param int $accountId ID счёта.
+     * @param string|null $stmtNumber Номер выписки.
+     * @param string $valueDate Дата валютирования.
+     * @param float $incoming Сумма поступлений.
+     * @param float $outgoing Сумма списаний.
+     * @return array[] Строки для `NostroEntry`.
+     */
+    private function buildEntryRows(int $accountId, ?string $stmtNumber, string $valueDate, float $incoming, float $outgoing): array
+    {
+        $rows = [];
+
+        if ($incoming > 0) {
+            $rows[] = $this->buildEntryRow($accountId, $stmtNumber, $valueDate, NostroEntry::DC_CREDIT, $incoming);
+        }
+
+        if ($outgoing > 0) {
+            $rows[] = $this->buildEntryRow($accountId, $stmtNumber, $valueDate, NostroEntry::DC_DEBIT, $outgoing);
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Строит одну строку выверки ASB.
+     *
+     * @param int $accountId ID счёта.
+     * @param string|null $stmtNumber Номер выписки.
+     * @param string $valueDate Дата валютирования.
+     * @param string $dc Направление Debit/Credit.
+     * @param float $amount Сумма операции.
+     * @return array Строка для `NostroEntry`.
+     */
+    private function buildEntryRow(int $accountId, ?string $stmtNumber, string $valueDate, string $dc, float $amount): array
+    {
+        return [
+            'account_id'       => $accountId,
+            'ls'               => NostroEntry::LS_STATEMENT,
+            'dc'               => $dc,
+            'amount'           => number_format($amount, 2, '.', ''),
+            'currency'         => 'RUB',
+            'value_date'       => $valueDate,
+            'post_date'        => null,
+            'statement_number' => $stmtNumber ?: null,
+            'source'           => NostroBalance::SOURCE_ASB,
+            'match_status'     => NostroEntry::STATUS_UNMATCHED,
+        ];
     }
 
     /**

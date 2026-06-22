@@ -18,7 +18,7 @@
                     {{ activeBalanceArchiveFilterCount() }}
                 </span>
             </button>
-            <button type="button" class="toolbar-btn outline" @click.prevent="balanceArchiveSettingsOpen=true">
+            <button type="button" class="toolbar-btn outline" @click.prevent="openBalanceArchiveSettings">
                 <i class="fas fa-cog"></i>Настройки
             </button>
             <button type="button" class="toolbar-btn outline" @click.prevent="purgeExpiredBalanceArchive" :disabled="balanceArchivePurging">
@@ -355,11 +355,11 @@
         </div>
     </div>
 
-    <div v-show="balanceArchiveSettingsOpen" class="modal-backdrop-custom" @click.self="balanceArchiveSettingsOpen=false">
+    <div v-show="balanceArchiveSettingsOpen" class="modal-backdrop-custom" @click.self="closeBalanceArchiveSettings">
         <div class="modal-card" style="max-width:440px">
             <div class="modal-card-header">
                 <span><i class="fas fa-cog me-2"></i>Настройки архивирования балансов</span>
-                <button type="button" class="btn-close" @click.prevent="balanceArchiveSettingsOpen=false"></button>
+                <button type="button" class="btn-close" @click.prevent="closeBalanceArchiveSettings"></button>
             </div>
             <div class="modal-card-body">
                 <div class="row g-3">
@@ -396,7 +396,7 @@
                 </div>
             </div>
             <div class="modal-card-footer" style="display:flex;justify-content:flex-end;gap:8px">
-                <button type="button" class="toolbar-btn outline" @click.prevent="balanceArchiveSettingsOpen=false">Отмена</button>
+                <button type="button" class="toolbar-btn outline" @click.prevent="closeBalanceArchiveSettings">Отмена</button>
                 <button type="button" class="toolbar-btn primary" @click.prevent="saveBalanceArchiveSettings" :disabled="balanceArchiveSettingsSaving">
                     <i :class="balanceArchiveSettingsSaving?'fas fa-spinner fa-spin':'fas fa-save'"></i>
                     {{ balanceArchiveSettingsSaving ? 'Сохранение...' : 'Сохранить' }}

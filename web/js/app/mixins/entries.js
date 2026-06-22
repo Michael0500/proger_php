@@ -321,6 +321,12 @@ var EntriesMixin = {
                     this.$delete(this.filters, field);
                 } else {
                     this.$set(this.filters, field, v);
+                    if (field === 'amount_min') {
+                        var amountMax = this.filters.amount_max;
+                        if (amountMax === null || amountMax === undefined || String(amountMax).trim() === '') {
+                            this.$set(this.filters, 'amount_max', v);
+                        }
+                    }
                 }
             }
             this.loadEntries(true);
