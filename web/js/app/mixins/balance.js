@@ -947,6 +947,7 @@ var BalanceMixin = {
                 if (r.data.success) {
                     self._balanceNotify(r.data.message, r.data.errors > 0 ? 'warning' : 'success');
                     self.loadBalances(true);
+                    self.closeImportModal();
                 } else {
                     Swal.fire('Ошибка импорта', r.data.message || 'Неизвестная ошибка', 'error');
                 }

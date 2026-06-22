@@ -10,8 +10,8 @@ use app\models\NostroEntry;
  *
  * Маппинг:
  *   ls_type          = 'S' (константа)
- *   statement_number = //Stmt/Id
- *   account          = //Stmt/Acct/Id/IBAN или //Othr/Id
+ *   statement_number = //Rpt/Id
+ *   account          = //Rpt/Acct/Id/IBAN или //Rpt/Acct/Id/Othr/Id
  *   currency         = //Bal[Tp/CdOrPrtry/Cd='OPBD']/Amt/@Ccy
  *   value_date       = //Bal[.../Cd='OPBD']/Dt/Dt  → YYYY-MM-DD
  *   opening_balance  = //Bal[.../Cd='OPBD']/Amt
@@ -50,16 +50,8 @@ class BndCamtParser
             return [];
         }
 
-        // Регистрируем пространства имён camt
-        $ns = $xml->getNamespaces(true);
-        // Поддержка camt.052 и camt.053
-        $defaultNs = $ns[''] ?? null;
-        if ($defaultNs) {
-            $xml->registerXPathNamespace('camt', $defaultNs);
-        }
-
         // БНД по требованиям передаёт camt.052: BkToCstmrAcctRpt/Rpt.
-        $blocks = $this->xpathSafe($xml, '//camt:Rpt') ?: $this->xpathSafe($xml, '//Rpt');
+        $blocks = $this->xpathSafe($xml, '//*[local-name()="Rpt"]');
 
         if (empty($blocks)) {
             $this->errors[] = 'Не найдены блоки <Rpt> в файле';

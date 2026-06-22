@@ -40,9 +40,14 @@ class BalanceParsersTest extends \Codeception\Test\Unit
     public function testBndCamtParserParsesStatementWithNamespace(): void
     {
         $path = $this->tempFile('xml', '<?xml version="1.0" encoding="UTF-8"?>
-<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.052.001.08">
-  <BkToCstmrAcctRpt>
-    <Rpt>
+<PaymentMessages>
+  <AppHdr>
+    <BizMsgIdr>9869799</BizMsgIdr>
+    <MsgDefIdr>camt.052.001.06</MsgDefIdr>
+  </AppHdr>
+  <Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.052.001.06.cm521">
+    <BkToCstmrAcctRpt>
+      <Rpt>
       <Id>STMT-001</Id>
       <Acct><Id><Othr><Id>BY00TESTACCOUNT</Id></Othr></Id></Acct>
       <Bal>
@@ -70,9 +75,10 @@ class BalanceParsersTest extends \Codeception\Test\Unit
         <Sts>PDNG</Sts>
         <ValDt><Dt>2026-01-10</Dt></ValDt>
       </Ntry>
-    </Rpt>
-  </BkToCstmrAcctRpt>
-</Document>');
+      </Rpt>
+    </BkToCstmrAcctRpt>
+  </Document>
+</PaymentMessages>');
 
         $parser = new BndCamtParser();
         $rows = $parser->parse($path, 15, NostroBalance::SECTION_NRE);
