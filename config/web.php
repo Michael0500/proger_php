@@ -95,6 +95,10 @@ $config = [
                 'references'             => 'reference/index',
                 'reference/<action>'     => 'reference/<action>',
 
+                // ── Импорт выписок / откат пачек ─────────────────
+                'imports'                => 'import-batch/index',
+                'import-batch/<action>'  => 'import-batch/<action>',
+
                 // ── Callback СЦР (Цифровой рубль) ────────────────
                 'POST api/v4/fi/callback/wallet/FIWalletInfo' => 'pcr-callback/wallet-info',
             ],

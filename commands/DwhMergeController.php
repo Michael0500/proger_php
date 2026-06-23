@@ -40,6 +40,9 @@ class DwhMergeController extends Controller
     /** --delete-source: удалять успешно обработанные строки suspend_posting */
     public bool $deleteSource = false;
 
+    /** ID текущей пачки tds_status — проставляется в batch_id вставляемых строк. */
+    private int $currentBatchId = 0;
+
     /**
      * Описание опций командной строки.
      *
@@ -99,6 +102,7 @@ class DwhMergeController extends Controller
 
             $tx = $db->beginTransaction();
             try {
+                $this->currentBatchId = $statusId;
                 $summary = $this->mergePending($this->deleteSource);
 
                 if ($summary['source_rows'] === 0) {
@@ -108,7 +112,12 @@ class DwhMergeController extends Controller
                 $allOk = $summary['skipped_rows'] === 0;
                 if ($allOk) {
                     $db->createCommand()
-                        ->update('{{%tds_status}}', ['is_merged' => true], ['id' => $statusId])
+                        ->update('{{%tds_status}}', [
+                            'is_merged'      => true,
+                            'company_id'     => self::COMPANY_ID,
+                            'entries_count'  => $summary['entries'],
+                            'balances_count' => $summary['balances'],
+                        ], ['id' => $statusId])
                         ->execute();
                 }
 
@@ -352,6 +361,7 @@ class DwhMergeController extends Controller
                 'company_id', 'account_id', 'ls_type', 'currency', 'value_date',
                 'opening_balance', 'opening_dc', 'closing_balance', 'closing_dc',
                 'section', 'source', 'status', 'branch_code', 'created_at', 'updated_at',
+                'batch_id',
             ], $balanceRows)->execute();
 
             $this->writeBalanceAuditAfterFlush($lastId);
@@ -394,6 +404,7 @@ class DwhMergeController extends Controller
                 $row['abs_branch_code'] ?? null,
                 $now,
                 $now,
+                $this->currentBatchId,
             ];
 
             foreach ($group['source_ids'] as $sourceId) {
@@ -447,7 +458,7 @@ class DwhMergeController extends Controller
                 'value_date', 'post_date', 'instruction_id', 'end_to_end_id',
                 'transaction_id', 'message_id', 'other_id', 'source',
                 'match_status', 'branch_code', 'created_at', 'updated_at',
-                'updated_by', 'posting_id',
+                'updated_by', 'posting_id', 'batch_id',
             ], $entryRows)->execute();
 
             $this->writeEntryAuditByPostingIds($postingIds);
@@ -492,6 +503,7 @@ class DwhMergeController extends Controller
                 $now,
                 null,
                 $row['posting_id'],
+                $this->currentBatchId,
             ];
             $handledIds[$sourceId] = true;
 

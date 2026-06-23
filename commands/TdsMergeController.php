@@ -140,7 +140,7 @@ class TdsMergeController extends Controller
 
             $tx = $db->beginTransaction();
             try {
-                [$balances, $entries, $processedStmtIds, $skippedHdrs] = $this->mergeType($type);
+                [$balances, $entries, $processedStmtIds, $skippedHdrs] = $this->mergeType($type, $statusId);
 
                 if ($balances === 0 && $entries === 0 && empty($skippedHdrs)) {
                     $this->stdout("│  Нет заголовков типа {$type} в ph_tds_stmt_hdr — нечего переносить.\n", Console::FG_GREY);
@@ -160,7 +160,12 @@ class TdsMergeController extends Controller
                     }
 
                     $db->createCommand()
-                        ->update('{{%tds_status}}', ['is_merged' => true], ['id' => $statusId])
+                        ->update('{{%tds_status}}', [
+                            'is_merged'      => true,
+                            'company_id'     => self::COMPANY_ID,
+                            'entries_count'  => $entries,
+                            'balances_count' => $balances,
+                        ], ['id' => $statusId])
                         ->execute();
                 }
 
@@ -200,9 +205,10 @@ class TdsMergeController extends Controller
      * соответствующие ph_tds_stmt_dtl и формирует batch для вставки.
      *
      * @param string $type Один из {CAMT053, MT950, ED211, ED743}.
+     * @param int $batchId ID пачки `tds_status` для трассировки/отката.
      * @return array `[balancesInserted, entriesInserted, processedStmtIds, skippedStmtIds]`.
      */
-    private function mergeType(string $type): array
+    private function mergeType(string $type, int $batchId): array
     {
         $db = Yii::$app->db;
 
@@ -212,14 +218,14 @@ class TdsMergeController extends Controller
             'transaction_id', 'message_id', 'statement_number', 'other_id', 'source',
             'match_status', 'line_no', 'branch_code',
             'stmt_id', 'edno', 'eddate', 'edauthor',
-            'created_at', 'updated_at',
+            'created_at', 'updated_at', 'batch_id',
         ];
         $balanceColumns = [
             'company_id', 'account_id', 'ls_type', 'statement_number', 'currency',
             'value_date', 'opening_balance', 'opening_dc', 'closing_balance', 'closing_dc',
             'section', 'source', 'status', 'branch_code',
             'stmt_id', 'edno', 'eddate', 'edauthor',
-            'created_at', 'updated_at',
+            'created_at', 'updated_at', 'batch_id',
         ];
 
         $accountCache = [];
@@ -311,7 +317,7 @@ class TdsMergeController extends Controller
                     continue;
                 }
 
-                $balanceBuf[] = $this->buildBalanceRow($hdr, $type, $accountId, $now);
+                $balanceBuf[] = $this->buildBalanceRow($hdr, $type, $accountId, $now, $batchId);
                 if (count($balanceBuf) >= self::INSERT_CHUNK) {
                     $flushBalances();
                 }
@@ -337,7 +343,7 @@ class TdsMergeController extends Controller
                     }
 
                     foreach ($dtlRows as $dtl) {
-                        $entryBuf[] = $this->buildEntryRow($hdr, $dtl, $type, $accountId, $now);
+                        $entryBuf[] = $this->buildEntryRow($hdr, $dtl, $type, $accountId, $now, $batchId);
                         $lastLineNo = (int)$dtl['line_no'];
 
                         if (count($entryBuf) >= self::INSERT_CHUNK) {
@@ -371,9 +377,10 @@ class TdsMergeController extends Controller
      * @param string $type Тип источника.
      * @param int $accountId Найденный account_id.
      * @param string $now Метка времени created_at/updated_at.
+     * @param int $batchId ID пачки tds_status.
      * @return array Строка для batchInsert в порядке `$balanceColumns`.
      */
-    private function buildBalanceRow(array $hdr, string $type, int $accountId, string $now): array
+    private function buildBalanceRow(array $hdr, string $type, int $accountId, string $now, int $batchId): array
     {
         $statementNumber = $hdr['stmt_ref'] ?? null;
 
@@ -400,6 +407,7 @@ class TdsMergeController extends Controller
             $edauthor,
             $now,
             $now,
+            $batchId,
         ];
     }
 
@@ -411,9 +419,10 @@ class TdsMergeController extends Controller
      * @param string $type Тип источника.
      * @param int $accountId Найденный account_id.
      * @param string $now Метка времени created_at/updated_at.
+     * @param int $batchId ID пачки tds_status.
      * @return array Строка для batchInsert в порядке `$entryColumns`.
      */
-    private function buildEntryRow(array $hdr, array $dtl, string $type, int $accountId, string $now): array
+    private function buildEntryRow(array $hdr, array $dtl, string $type, int $accountId, string $now, int $batchId): array
     {
         // Маппинг общих полей.
         $amount      = $dtl['amount'] ?? null;
@@ -490,6 +499,7 @@ class TdsMergeController extends Controller
             $edauthor,
             $now,
             $now,
+            $batchId,
         ];
     }
 

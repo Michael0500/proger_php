@@ -84,7 +84,7 @@ class FccMergeController extends Controller
 
             $tx = $db->beginTransaction();
             try {
-                [$balances, $entries, $skipped] = $this->mergeExtract($extractNo);
+                [$balances, $entries, $skipped] = $this->mergeExtract($extractNo, $statusId);
 
                 if (!$this->keepSource) {
                     if (empty($skipped)) {
@@ -104,7 +104,12 @@ class FccMergeController extends Controller
 
                 if (empty($skipped) && !$this->keepSource) {
                     $db->createCommand()
-                        ->update('{{%tds_status}}', ['is_merged' => true], ['id' => $statusId])
+                        ->update('{{%tds_status}}', [
+                            'is_merged'      => true,
+                            'company_id'     => self::COMPANY_ID,
+                            'entries_count'  => $entries,
+                            'balances_count' => $balances,
+                        ], ['id' => $statusId])
                         ->execute();
                 }
 
@@ -145,9 +150,10 @@ class FccMergeController extends Controller
      * возвращает как skipped, чтобы пакет можно было повторить.
      *
      * @param int $extractNo Номер FCC12-выгрузки.
+     * @param int $batchId ID пачки `tds_status` для трассировки/отката.
      * @return array `[balancesInserted, entriesInserted, skippedLineNos]`.
      */
-    private function mergeExtract(int $extractNo): array
+    private function mergeExtract(int $extractNo, int $batchId): array
     {
         $db = Yii::$app->db;
 
@@ -155,13 +161,13 @@ class FccMergeController extends Controller
             'account_id', 'company_id', 'ls', 'dc', 'amount', 'currency',
             'value_date', 'post_date', 'instruction_id', 'end_to_end_id',
             'transaction_id', 'source', 'match_status', 'extract_no', 'line_no',
-            'branch_code', 'created_at', 'updated_at',
+            'branch_code', 'created_at', 'updated_at', 'batch_id',
         ];
         $balanceColumns = [
             'company_id', 'account_id', 'ls_type', 'currency', 'value_date',
             'opening_balance', 'opening_dc', 'closing_balance', 'closing_dc',
             'section', 'source', 'status', 'extract_no', 'line_no',
-            'branch_code', 'created_at', 'updated_at',
+            'branch_code', 'created_at', 'updated_at', 'batch_id',
         ];
 
         // Кэш account_id по cbr_cc_no (accounts.name) — чтобы не искать в цикле.
@@ -273,6 +279,7 @@ class FccMergeController extends Controller
                         $r['branch_code'] ?? null,
                         $now,
                         $now,
+                        $batchId,
                     ];
                     if (count($entryBuf) >= self::INSERT_CHUNK) {
                         $flushEntries();
@@ -296,6 +303,7 @@ class FccMergeController extends Controller
                         $r['branch_code'] ?? null,
                         $now,
                         $now,
+                        $batchId,
                     ];
                     if (count($balanceBuf) >= self::INSERT_CHUNK) {
                         $flushBalances();

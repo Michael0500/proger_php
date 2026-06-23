@@ -106,6 +106,7 @@ class ArchiveController extends Controller
                 'matched_at',
                 'archived_at', 'expires_at', 'archived_by',
                 'original_created_at', 'original_updated_at',
+                'batch_id',
             ];
 
             foreach ($baseQuery->batch($batchSize) as $batch) {
@@ -124,6 +125,7 @@ class ArchiveController extends Controller
                         $entry->matched_at,
                         $archivedAt, $expiresAt, null,
                         $entry->created_at, $entry->updated_at,
+                        $entry->batch_id,
                     ];
                     $ids[] = $entry->id;
                 }

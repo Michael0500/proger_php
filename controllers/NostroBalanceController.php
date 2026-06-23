@@ -389,7 +389,11 @@ class NostroBalanceController extends BaseController
         $rows   = $parser->parse($tmpPath, $accountId, $section);
         @unlink($tmpPath);
 
-        return $this->saveImportRows($rows, $parser->getErrors(), $cid, $parser->getEntryRows());
+        return $this->saveImportRows($rows, $parser->getErrors(), $cid, $parser->getEntryRows(), [
+            'type'       => NostroBalance::SOURCE_BND,
+            'account_id' => $accountId,
+            'file_name'  => $file->name,
+        ]);
     }
 
     /**
@@ -428,7 +432,11 @@ class NostroBalanceController extends BaseController
         $rows   = $parser->parse($tmpPath, $accountId, $section);
         @unlink($tmpPath);
 
-        return $this->saveImportRows($rows, $parser->getErrors(), $cid, $parser->getEntryRows());
+        return $this->saveImportRows($rows, $parser->getErrors(), $cid, $parser->getEntryRows(), [
+            'type'       => NostroBalance::SOURCE_ASB,
+            'account_id' => $accountId,
+            'file_name'  => $file->name,
+        ]);
     }
 
     /**
@@ -570,7 +578,7 @@ class NostroBalanceController extends BaseController
      * @param array $entryRows Нормализованные строки выверки парсера.
      * @return array JSON-совместимый итог импорта.
      */
-    private function saveImportRows(array $rows, array $parseErrors, int $cid, array $entryRows = []): array
+    private function saveImportRows(array $rows, array $parseErrors, int $cid, array $entryRows = [], ?array $batchMeta = null): array
     {
         $settings = $this->getValidationSettings();
         $saved       = 0;
@@ -580,6 +588,10 @@ class NostroBalanceController extends BaseController
         $transaction = Yii::$app->db->beginTransaction();
 
         try {
+            // Заводим пачку импорта в tds_status, чтобы загрузку можно было откатить
+            // из интерфейса. batch_id проставляется во все вставленные строки.
+            $batchId = $this->createImportBatch($cid, $batchMeta);
+
             foreach ($rows as $rowData) {
                 $m             = new NostroBalance();
                 $m->company_id = $cid;
@@ -591,6 +603,9 @@ class NostroBalanceController extends BaseController
                     if ($m->hasAttribute($key)) {
                         $m->$key = $val;
                     }
+                }
+                if ($batchId) {
+                    $m->batch_id = $batchId;
                 }
 
                 $m->runValidations($settings);
@@ -616,6 +631,9 @@ class NostroBalanceController extends BaseController
                         $entry->$key = $val;
                     }
                 }
+                if ($batchId) {
+                    $entry->batch_id = $batchId;
+                }
 
                 if (!$entry->validate()) {
                     $dbErrors[] = ['entry' => $entry->errors];
@@ -636,6 +654,15 @@ class NostroBalanceController extends BaseController
                 } else {
                     $dbErrors[] = ['entry' => $entry->errors];
                 }
+            }
+
+            if ($batchId) {
+                Yii::$app->db->createCommand()
+                    ->update('{{%tds_status}}', [
+                        'entries_count'  => $entrySaved,
+                        'balances_count' => $saved,
+                    ], ['id' => $batchId])
+                    ->execute();
             }
 
             $transaction->commit();
@@ -668,6 +695,36 @@ class NostroBalanceController extends BaseController
             'db_errors'    => $dbErrors,
             'message'      => $message,
         ];
+    }
+
+    /**
+     * Создаёт строку-пачку tds_status для ручной загрузки файла.
+     *
+     * Пачка сразу помечается `is_merged=true` (данные уже в целевых таблицах),
+     * хранит компанию, счёт и имя файла. По её id строится откат из интерфейса.
+     *
+     * @param int $cid ID компании.
+     * @param array|null $batchMeta `['type'=>'ASB'|'BND','account_id'=>int,'file_name'=>string]`.
+     * @return int|null ID созданной пачки или `null`, если метаданные не переданы.
+     */
+    private function createImportBatch(int $cid, ?array $batchMeta): ?int
+    {
+        if (empty($batchMeta) || empty($batchMeta['type'])) {
+            return null;
+        }
+
+        $db = Yii::$app->db;
+        $db->createCommand()->insert('{{%tds_status}}', [
+            'type'         => $batchMeta['type'],
+            'is_merged'    => true,
+            'company_id'   => $cid,
+            'account_id'   => $batchMeta['account_id'] ?? null,
+            'source_label' => isset($batchMeta['file_name'])
+                ? mb_substr((string)$batchMeta['file_name'], 0, 255)
+                : null,
+        ])->execute();
+
+        return (int)$db->getLastInsertID('tds_status_id_seq');
     }
 
     /**

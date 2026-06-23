@@ -263,7 +263,7 @@ class ArchiveController extends BaseController
             SELECT id, account_id, company_id, match_id, ls, dc, amount, currency,
                    value_date, post_date, instruction_id, end_to_end_id,
                    transaction_id, message_id, statement_number, other_id, comment, source,
-                   matched_at, created_at, updated_at
+                   matched_at, created_at, updated_at, batch_id
             FROM {{%nostro_entries}}
             WHERE company_id   = :cid
               AND match_status = 'M'
@@ -295,6 +295,7 @@ class ArchiveController extends BaseController
             'matched_at',
             'archived_at','expires_at','archived_by',
             'original_created_at','original_updated_at',
+            'batch_id',
         ];
 
         $insertRows = [];
@@ -311,6 +312,7 @@ class ArchiveController extends BaseController
                 $r['matched_at'],
                 $archivedAt, $expiresAt, $userId,
                 $r['created_at'], $r['updated_at'],
+                $r['batch_id'],
             ];
             $ids[] = (int)$r['id'];
         }
@@ -507,6 +509,7 @@ class ArchiveController extends BaseController
         $entry->source           = $archived->source;
         $entry->match_status     = NostroEntry::STATUS_MATCHED;
         $entry->matched_at       = $archived->matched_at;
+        $entry->batch_id         = $archived->batch_id;
         $entry->skipAudit        = true;
 
         return $entry;

@@ -132,6 +132,7 @@ vendor/bin/codecept run --coverage --coverage-html
 | `tests/unit/models/UserPreferenceTest.php` | Upsert JSON-настроек UI и чтение старого double-encoded JSON. |
 | `tests/unit/models/UserTest.php` | Поиск активных пользователей, исключение удалённых и внутренний cookie/session login найденного пользователя. |
 | `tests/unit/services/MatchingServiceTest.php` | Ручное квитование NRE/INV (в т.ч. набор >2, только Ledger, регистр валюты), отказ при дисбалансе NRE/INV, разные валюты/банки, уже сквитованная запись в наборе, одиночная нулевая/ненулевая, откат транзакции при ошибке БД, расквитование группы и scope по компании, summary с tenant-фильтром. |
+| `tests/unit/services/ImportRollbackServiceTest.php` | Откат пачек импорта: удаление `nostro_entries`/`nostro_balance` пачки и их аудита, сохранение `is_merged` и выставление `is_rolled_back`; блокировки при наличии сквитованной записи, при заархивированной записи пачки и при повторном откате. |
 | `tests/unit/services/AutoMatchingServiceTest.php` | Автоквитование: пары LS/LL/SS, реверс D/C, дедупликация (1 L на 2 S), match по amount+value_date, scope `limitAccountIds` и `accountId`, изоляция по пулам, порядок правил по priority, устойчивость к ошибке правила, отказ без активных правил, `autoMatchStep` неизвестный/завершённый job, `resolveScopeAccounts` и пустой scope, формат/уникальность `match_id`, обработка >5000 пар. |
 | `tests/unit/widgets/AlertTest.php` | Рендер системных flash-уведомлений Yii. |
 

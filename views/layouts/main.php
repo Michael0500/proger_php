@@ -43,6 +43,7 @@ $isBalancePage      = $isBankBalancePage || $isAllBalancePage;
 $isArchivePage      = ($currentRoute === 'archive/page');
 $isBalanceArchivePage = ($currentRoute === 'balance-archive/page');
 $isReferencePage    = ($currentRoute === 'reference/index');
+$isImportsPage      = ($currentRoute === 'import-batch/index');
 
 $hasOwnSidebar = $isEntriesPage || $isBankBalancePage;
 
@@ -147,6 +148,13 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
                         'url'         => ['/references'],
                         'active'      => $isReferencePage,
                         'linkOptions' => ['class' => 'dropdown-item' . ($isReferencePage ? ' active' : '')],
+                ];
+                $userMenuItems[] = [
+                        'label'       => '<i class="fas fa-file-import me-1"></i>Импорт выписок',
+                        'encode'      => false,
+                        'url'         => ['/imports'],
+                        'active'      => $isImportsPage,
+                        'linkOptions' => ['class' => 'dropdown-item' . ($isImportsPage ? ' active' : '')],
                 ];
             }
 
