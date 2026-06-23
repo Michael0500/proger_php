@@ -72,6 +72,12 @@
                 this.loadBalanceTableColumnsPrefs();
                 this.loadBalanceAccounts();
                 this.loadBalances(true);
+
+                // Панель фильтров открыта программно (переход с номером пакета) —
+                // поднимаем Select2 валют, как это делает toggleBalanceFilters.
+                if (this.balanceFiltersOpen) {
+                    this.$nextTick(function () { self.initBalanceCurrencySelect2(); });
+                }
             },
 
             methods: {

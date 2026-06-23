@@ -71,6 +71,11 @@
                 self.$nextTick(function () {
                     self.initAllNostroPoolsSelect2();
                     self.initAllNostroAccountSelect2();
+                    // Панель фильтров открыта программно (переход с номером пакета) —
+                    // поднимаем Select2 валют, как это делает toggleFiltersPanel.
+                    if (self.filtersOpen) {
+                        self.initFilterCurrencySelect2();
+                    }
                 });
 
                 document.addEventListener('click', function () { self.openRowMenu = null; });
