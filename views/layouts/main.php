@@ -150,7 +150,7 @@ $currentComp = ($currentUser && $currentUser->company_id) ? $currentUser->compan
                         'linkOptions' => ['class' => 'dropdown-item' . ($isReferencePage ? ' active' : '')],
                 ];
                 $userMenuItems[] = [
-                        'label'       => '<i class="fas fa-file-import me-1"></i>Импорт выписок',
+                        'label'       => '<i class="fas fa-undo me-1"></i>Откат загруженных данных',
                         'encode'      => false,
                         'url'         => ['/imports'],
                         'active'      => $isImportsPage,

@@ -2,6 +2,7 @@
 
 namespace app\commands;
 
+use app\commands\concerns\ImportProcessingLock;
 use Yii;
 use yii\console\Controller;
 use yii\console\ExitCode;
@@ -12,10 +13,12 @@ use yii\helpers\Console;
  * ph_tds_stmt_hdr + ph_tds_stmt_dtl в nostro_balance / nostro_entries.
  *
  * Алгоритм:
- *   1. В tds_status ищем is_merged = false и type ∈ {CAMT053, MT950, ED211, ED743}.
+ *   1. В tds_status ищем is_merged = false и type = 'PH_TDS' (один пакет на загрузку,
+ *      внутри которого приходят все format_type разом).
  *   2. Для каждой такой записи открываем транзакцию.
- *   3. По type находим в ph_tds_stmt_hdr все заголовки с format_type = type
- *      (связь с tds_status только по типу — stmt_id из tds_status не используется).
+ *   3. Для каждого format_type ∈ {CAMT053, MT950, ED211, ED743} находим в
+ *      ph_tds_stmt_hdr все заголовки с этим format_type (связь с tds_status —
+ *      только по типу пакета; stmt_id из tds_status не используется).
  *   4. Для каждого hdr:
  *      - находим счёт по accounts.name = hdr.account_no (company_id = 1);
  *        если не нашли — пропускаем этот hdr (пакет помечается частично-обработанным
@@ -34,10 +37,19 @@ use yii\helpers\Console;
  */
 class TdsMergeController extends Controller
 {
+    use ImportProcessingLock;
+
+    /** Подавлять консольный вывод (true при вызове processOne из web-контекста). */
+    public bool $quiet = false;
+
     const COMPANY_ID    = 1;
     const SECTION       = 'NRE';
     const LS_STATEMENT  = 'S';
 
+    /** Тип пачки в tds_status. Один пакет содержит все format_type сразу. */
+    const STATUS_TYPE   = 'PH_TDS';
+
+    /** Допустимые format_type внутри ph_tds_stmt_hdr. */
     const SUPPORTED_TYPES = ['CAMT053', 'MT950', 'ED211', 'ED743'];
 
     /** Сколько строк-источников тянуть за один SELECT. */
@@ -92,33 +104,26 @@ class TdsMergeController extends Controller
 
         $this->stdout("=== TDS merge: " . date('Y-m-d H:i:s') . $modeStr . " ===\n", Console::BOLD);
 
-        $types = self::SUPPORTED_TYPES;
+        $formatTypes = self::SUPPORTED_TYPES;
         if ($this->type !== null) {
             $t = strtoupper($this->type);
             if (!in_array($t, self::SUPPORTED_TYPES, true)) {
                 $this->stderr("Неизвестный тип: '{$this->type}'. Допустимы: " . implode(', ', self::SUPPORTED_TYPES) . "\n", Console::FG_RED);
                 return ExitCode::USAGE;
             }
-            $types = [$t];
+            $formatTypes = [$t];
         }
 
         $db = Yii::$app->db;
 
-        $placeholders = [];
-        $params = [];
-        foreach ($types as $i => $t) {
-            $key = ':t' . $i;
-            $placeholders[] = $key;
-            $params[$key] = $t;
-        }
-
+        // Один пакет tds_status (type=PH_TDS) содержит все format_type разом.
         $pending = $db->createCommand(
             "SELECT id, type
                FROM {{%tds_status}}
               WHERE is_merged = FALSE
-                AND type IN (" . implode(',', $placeholders) . ")
+                AND type = :type
               ORDER BY id",
-            $params
+            [':type' => self::STATUS_TYPE]
         )->queryAll();
 
         if (empty($pending)) {
@@ -126,7 +131,7 @@ class TdsMergeController extends Controller
             return ExitCode::OK;
         }
 
-        $this->stdout("К обработке: " . count($pending) . "\n");
+        $this->stdout("К обработке пакетов: " . count($pending) . "\n");
 
         $totalBalances = 0;
         $totalEntries  = 0;
@@ -134,58 +139,31 @@ class TdsMergeController extends Controller
 
         foreach ($pending as $row) {
             $statusId = (int)$row['id'];
-            $type     = $row['type'];
 
-            $this->stdout("\n┌─ tds_status.id={$statusId}, type={$type}\n", Console::FG_CYAN);
+            $this->stdout("\n┌─ tds_status.id={$statusId}, type={$row['type']}\n", Console::FG_CYAN);
 
-            $tx = $db->beginTransaction();
-            try {
-                [$balances, $entries, $processedStmtIds, $skippedHdrs] = $this->mergeType($type, $statusId);
+            $res = $this->processOne($statusId, 'background');
 
-                if ($balances === 0 && $entries === 0 && empty($skippedHdrs)) {
-                    $this->stdout("│  Нет заголовков типа {$type} в ph_tds_stmt_hdr — нечего переносить.\n", Console::FG_GREY);
-                }
-
-                $allOk = empty($skippedHdrs);
-
-                if ($allOk) {
-                    if ($this->deleteSource && !empty($processedStmtIds)) {
-                        $idsList = implode(',', array_map('strval', $processedStmtIds));
-                        $db->createCommand(
-                            "DELETE FROM {{%ph_tds_stmt_dtl}} WHERE stmt_id IN ({$idsList})"
-                        )->execute();
-                        $db->createCommand(
-                            "DELETE FROM {{%ph_tds_stmt_hdr}} WHERE stmt_id IN ({$idsList})"
-                        )->execute();
-                    }
-
-                    $db->createCommand()
-                        ->update('{{%tds_status}}', [
-                            'is_merged'      => true,
-                            'company_id'     => self::COMPANY_ID,
-                            'entries_count'  => $entries,
-                            'balances_count' => $balances,
-                        ], ['id' => $statusId])
-                        ->execute();
-                }
-
-                $tx->commit();
-
-                $totalBalances += $balances;
-                $totalEntries  += $entries;
-
-                if ($allOk) {
-                    $this->stdout("│  Балансов: {$balances}, записей: {$entries}\n", Console::FG_GREEN);
-                    $this->stdout("└─ OK\n");
-                } else {
-                    $this->stdout("│  Балансов: {$balances}, записей: {$entries}, пропущено hdr: " . count($skippedHdrs) . " (счёт не найден)\n", Console::FG_YELLOW);
-                    $this->stdout("└─ PARTIAL (не помечен merged, будет повторён)\n", Console::FG_YELLOW);
-                }
-            } catch (\Throwable $e) {
-                $tx->rollBack();
+            if ($res['busy']) {
+                $this->stdout("└─ SKIP (пачка уже обрабатывается другим процессом)\n", Console::FG_GREY);
+                continue;
+            }
+            if ($res['error'] !== null) {
                 $errors++;
-                $this->stderr("│  Ошибка: " . $e->getMessage() . "\n", Console::FG_RED);
+                $this->stderr("│  Ошибка: " . $res['error'] . "\n", Console::FG_RED);
                 $this->stdout("└─ ROLLBACK\n", Console::FG_RED);
+                continue;
+            }
+
+            $totalBalances += $res['balances'];
+            $totalEntries  += $res['entries'];
+
+            if ($res['ok']) {
+                $this->stdout("│  Итого по пакету: балансов {$res['balances']}, записей {$res['entries']}\n", Console::FG_GREEN);
+                $this->stdout("└─ OK\n");
+            } else {
+                $this->stdout("│  Итого по пакету: балансов {$res['balances']}, записей {$res['entries']}, пропущено hdr: {$res['skipped']} (счёт не найден)\n", Console::FG_YELLOW);
+                $this->stdout("└─ PARTIAL (не помечен merged, будет повторён)\n", Console::FG_YELLOW);
             }
         }
 
@@ -196,6 +174,101 @@ class TdsMergeController extends Controller
         $this->stdout(" ===\n");
 
         return $errors > 0 ? ExitCode::SOFTWARE : ExitCode::OK;
+    }
+
+    /**
+     * Обрабатывает один пакет PH_TDS под блокировкой.
+     *
+     * Захватывает строку tds_status (взаимоисключение ручного и фонового
+     * процессов), в одной транзакции переносит все `format_type` в `nostro_*`,
+     * помечает пакет merged и снимает блокировку. Используется и фоновым
+     * `actionRun`, и ручным запуском из интерфейса (web). При `$quiet=true`
+     * консольный вывод деталей подавляется.
+     *
+     * @param int $statusId ID строки tds_status (type=PH_TDS).
+     * @param string $owner Кто запустил: 'manual' или 'background'.
+     * @return array `['busy'=>bool,'ok'=>bool,'balances'=>int,'entries'=>int,'skipped'=>int,'error'=>?string]`.
+     */
+    public function processOne(int $statusId, string $owner = 'background'): array
+    {
+        if (!$this->acquireProcessingLock($statusId, $owner)) {
+            return ['busy' => true, 'ok' => false, 'balances' => 0, 'entries' => 0, 'skipped' => 0, 'error' => null];
+        }
+
+        $db = Yii::$app->db;
+
+        $formatTypes = self::SUPPORTED_TYPES;
+        if ($this->type !== null) {
+            $t = strtoupper($this->type);
+            if (in_array($t, self::SUPPORTED_TYPES, true)) {
+                $formatTypes = [$t];
+            }
+        }
+
+        try {
+            $tx = $db->beginTransaction();
+            try {
+                $batchBalances       = 0;
+                $batchEntries        = 0;
+                $allProcessedStmtIds = [];
+                $allSkippedHdrs      = [];
+
+                // Все format_type обрабатываются в рамках одного пакета (batch_id = statusId).
+                foreach ($formatTypes as $formatType) {
+                    [$balances, $entries, $processedStmtIds, $skippedHdrs] = $this->mergeType($formatType, $statusId);
+
+                    $batchBalances      += $balances;
+                    $batchEntries       += $entries;
+                    $allProcessedStmtIds = array_merge($allProcessedStmtIds, $processedStmtIds);
+                    $allSkippedHdrs      = array_merge($allSkippedHdrs, $skippedHdrs);
+
+                    if ($balances > 0 || $entries > 0 || !empty($skippedHdrs)) {
+                        $line = "│  {$formatType}: балансов {$balances}, записей {$entries}";
+                        if (!empty($skippedHdrs)) {
+                            $line .= ", пропущено hdr " . count($skippedHdrs);
+                        }
+                        $this->out($line . "\n", empty($skippedHdrs) ? Console::FG_GREEN : Console::FG_YELLOW);
+                    }
+                }
+
+                if ($batchBalances === 0 && $batchEntries === 0 && empty($allSkippedHdrs)) {
+                    $this->out("│  Нет заголовков PH_TDS в ph_tds_stmt_hdr — нечего переносить.\n", Console::FG_GREY);
+                }
+
+                $allOk = empty($allSkippedHdrs);
+
+                if ($allOk) {
+                    if ($this->deleteSource && !empty($allProcessedStmtIds)) {
+                        $idsList = implode(',', array_map('strval', $allProcessedStmtIds));
+                        $db->createCommand("DELETE FROM {{%ph_tds_stmt_dtl}} WHERE stmt_id IN ({$idsList})")->execute();
+                        $db->createCommand("DELETE FROM {{%ph_tds_stmt_hdr}} WHERE stmt_id IN ({$idsList})")->execute();
+                    }
+
+                    $db->createCommand()->update('{{%tds_status}}', [
+                        'is_merged'      => true,
+                        'company_id'     => self::COMPANY_ID,
+                        'entries_count'  => $batchEntries,
+                        'balances_count' => $batchBalances,
+                    ], ['id' => $statusId])->execute();
+                }
+
+                $tx->commit();
+
+                return [
+                    'busy'     => false,
+                    'ok'       => $allOk,
+                    'balances' => $batchBalances,
+                    'entries'  => $batchEntries,
+                    'skipped'  => count($allSkippedHdrs),
+                    'error'    => null,
+                ];
+            } catch (\Throwable $e) {
+                $tx->rollBack();
+                return ['busy' => false, 'ok' => false, 'balances' => 0, 'entries' => 0, 'skipped' => 0, 'error' => $e->getMessage()];
+            }
+        } finally {
+            $this->releaseProcessingLock($statusId);
+        }
     }
 
     /**
@@ -292,7 +365,7 @@ class TdsMergeController extends Controller
 
                 $accountNo = trim((string)($hdr['account_no'] ?? ''));
                 if ($accountNo === '') {
-                    $this->stdout("│  Пропуск stmt_id={$stmtId}: пустой account_no\n", Console::FG_YELLOW);
+                    $this->out("│  Пропуск stmt_id={$stmtId}: пустой account_no\n", Console::FG_YELLOW);
                     $skippedStmtIds[] = $stmtId;
                     continue;
                 }
@@ -312,7 +385,7 @@ class TdsMergeController extends Controller
 
                 $accountId = $accountCache[$accountNo];
                 if (!$accountId) {
-                    $this->stdout("│  Пропуск stmt_id={$stmtId}: счёт не найден для account_no='{$accountNo}'\n", Console::FG_YELLOW);
+                    $this->out("│  Пропуск stmt_id={$stmtId}: счёт не найден для account_no='{$accountNo}'\n", Console::FG_YELLOW);
                     $skippedStmtIds[] = $stmtId;
                     continue;
                 }

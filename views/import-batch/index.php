@@ -4,7 +4,7 @@
 
 use yii\helpers\Url;
 
-$this->title = 'Импорт выписок — SmartMatch';
+$this->title = 'Откат загруженных данных — SmartMatch';
 $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
 ?>
 
@@ -17,7 +17,7 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                 <i class="fas fa-file-import" style="color:#fff;font-size:16px"></i>
             </div>
             <div>
-                <div style="font-size:18px;font-weight:800;color:#1a1f36;letter-spacing:-.3px">Импорт выписок</div>
+                <div style="font-size:18px;font-weight:800;color:#1a1f36;letter-spacing:-.3px">Откат загруженных данных</div>
                 <div style="font-size:11px;color:#9ca3af;font-weight:500">Пачки загрузок и откат</div>
             </div>
         </div>
@@ -31,13 +31,14 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
         <table class="imp-table">
             <thead>
             <tr>
-                <th style="width:60px">ID</th>
+                <th style="width:80px">Пакет №</th>
                 <th>Тип</th>
                 <th>Дата</th>
                 <th>Счёт / файл</th>
                 <th style="text-align:center">Записей</th>
                 <th style="text-align:center">Балансов</th>
                 <th style="text-align:center">Статус</th>
+                <th style="width:150px;text-align:center">Перейти</th>
                 <th style="width:140px"></th>
             </tr>
             </thead>
@@ -58,7 +59,13 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                     <span :title="'В системе сейчас: ' + b.live_balances">{{ displayCount(b.imported_balances, b.live_balances) }}</span>
                 </td>
                 <td style="text-align:center">
-                    <span v-if="b.is_rolled_back" class="imp-status imp-status-rolled" :title="'Откатано: ' + fmtDateTime(b.rolled_back_at)">
+                    <span v-if="b.is_processing" class="imp-status imp-status-proc">
+                        <i class="fas fa-spinner fa-spin"></i> Выполняется ({{ b.processing_owner === 'manual' ? 'вручную' : 'фоном' }})
+                    </span>
+                    <span v-else-if="!b.is_merged" class="imp-status imp-status-pending">
+                        <i class="fas fa-clock"></i> Ожидает загрузки
+                    </span>
+                    <span v-else-if="b.is_rolled_back" class="imp-status imp-status-rolled" :title="'Откатано: ' + fmtDateTime(b.rolled_back_at)">
                         <i class="fas fa-undo"></i> Откатано
                     </span>
                     <span v-else-if="b.matched > 0" class="imp-status imp-status-locked">
@@ -71,16 +78,28 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                         <i class="fas fa-check"></i> Импортировано
                     </span>
                 </td>
+                <td style="text-align:center;white-space:nowrap">
+                    <a class="imp-link" :href="entriesUrl(b.id)" title="Открыть записи пакета в выверке по всем банкам">
+                        <i class="fas fa-list-ul"></i> Выверка
+                    </a>
+                    <a class="imp-link" :href="balanceUrl(b.id)" title="Открыть балансы пакета в балансе по всем банкам">
+                        <i class="fas fa-balance-scale"></i> Баланс
+                    </a>
+                </td>
                 <td style="text-align:right">
-                    <button v-if="b.can_rollback" class="btn-action btn-danger-soft" @click="confirmRollback(b)" :disabled="rollingId === b.id">
+                    <button v-if="b.can_load" class="btn-action btn-load" @click="confirmLoad(b)" :disabled="loadingId === b.id">
+                        <i class="fas" :class="loadingId === b.id ? 'fa-spinner fa-spin' : 'fa-play'"></i>
+                        <span class="ms-1">Запустить загрузку</span>
+                    </button>
+                    <button v-else-if="b.can_rollback" class="btn-action btn-danger-soft" @click="confirmRollback(b)" :disabled="rollingId === b.id">
                         <i class="fas" :class="rollingId === b.id ? 'fa-spinner fa-spin' : 'fa-undo'"></i>
                         <span class="ms-1">Откатить</span>
                     </button>
-                    <span v-else style="font-size:11px;color:#9ca3af" :title="b.reason">{{ b.reason || '—' }}</span>
+                    <span v-else style="font-size:11px;color:#9ca3af">{{ (!b.is_merged ? b.load_reason : b.reason) || '—' }}</span>
                 </td>
             </tr>
             <tr v-if="!batches.length">
-                <td colspan="8" style="text-align:center;color:#9ca3af;padding:30px">Пачек импорта пока нет</td>
+                <td colspan="9" style="text-align:center;color:#9ca3af;padding:30px">Пачек импорта пока нет</td>
             </tr>
             </tbody>
         </table>
@@ -102,13 +121,23 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
     background:#e0e7ff; color:#3730a3; font-family:monospace; }
 
 .imp-status { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; padding:2px 9px; border-radius:10px; }
-.imp-status-ok     { background:#dcfce7; color:#166534; }
-.imp-status-locked { background:#fef3c7; color:#92400e; }
-.imp-status-rolled { background:#f3f4f6; color:#6b7280; }
+.imp-status-ok      { background:#dcfce7; color:#166534; }
+.imp-status-locked  { background:#fef3c7; color:#92400e; }
+.imp-status-rolled  { background:#f3f4f6; color:#6b7280; }
+.imp-status-pending { background:#e0e7ff; color:#3730a3; }
+.imp-status-proc    { background:#dbeafe; color:#1d4ed8; }
+
+.btn-load { background:#eef2ff; color:#4338ca; border:none; border-radius:8px; padding:5px 12px; font-size:12px; font-weight:600; cursor:pointer; }
+.btn-load:hover { background:#e0e7ff; }
+.btn-load:disabled { opacity:.6; cursor:default; }
 
 .btn-danger-soft { background:#fee2e2; color:#b91c1c; border:none; border-radius:8px; padding:5px 12px; font-size:12px; font-weight:600; cursor:pointer; }
 .btn-danger-soft:hover { background:#fecaca; }
 .btn-danger-soft:disabled { opacity:.6; cursor:default; }
+
+.imp-link { display:inline-block; font-size:11px; font-weight:600; color:#4f46e5; text-decoration:none; padding:2px 6px; border-radius:6px; white-space:nowrap; }
+.imp-link:hover { background:#eef2ff; text-decoration:none; }
+.imp-link + .imp-link { margin-left:2px; }
 </style>
 
 <script>
@@ -124,10 +153,17 @@ document.addEventListener('DOMContentLoaded', function () {
                 batches:   _init.batches || [],
                 loading:   false,
                 rollingId: null,
+                loadingId: null,
             };
         },
 
         methods: {
+            entriesUrl: function (id) {
+                return '<?= Url::to(['/all-nostro']) ?>?batch_id=' + id;
+            },
+            balanceUrl: function (id) {
+                return '<?= Url::to(['/all-balance']) ?>?batch_id=' + id;
+            },
             fmtDateTime: function (v) {
                 if (!v) return '—';
                 var d = new Date(v.replace(' ', 'T'));
@@ -146,6 +182,41 @@ document.addEventListener('DOMContentLoaded', function () {
                 axios.get('<?= Url::to(['/import-batch/list']) ?>').then(function (r) {
                     if (r.data.success) self.batches = r.data.data;
                 }).finally(function () { self.loading = false; });
+            },
+            confirmLoad: function (b) {
+                var self = this;
+                Swal.fire({
+                    title: 'Запустить загрузку?',
+                    html: 'Пачка <b>#' + b.id + ' (' + b.type_label + ')</b> будет загружена в систему. '
+                        + 'Процесс выполнится синхронно и может занять время на больших объёмах.',
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonText: 'Запустить',
+                    cancelButtonText: 'Отмена',
+                    confirmButtonColor: '#4f46e5',
+                }).then(function (r) {
+                    if (!r.isConfirmed) return;
+                    self.loadingId = b.id;
+                    axios.post('<?= Url::to(['/import-batch/load']) ?>', { id: b.id }).then(function (res) {
+                        if (res.data.success) {
+                            if (res.data.data) self.batches = res.data.data;
+                            Swal.fire({
+                                icon: res.data.ok ? 'success' : 'warning',
+                                title: res.data.ok ? 'Загружено' : 'Загружено частично',
+                                text: res.data.message,
+                                timer: res.data.ok ? 2500 : undefined,
+                                showConfirmButton: !res.data.ok,
+                            });
+                        } else {
+                            Swal.fire({ icon: 'error', title: 'Не выполнено', text: res.data.message });
+                        }
+                    }).catch(function () {
+                        Swal.fire({ icon: 'error', title: 'Ошибка', text: 'Сетевая ошибка' });
+                    }).finally(function () {
+                        self.loadingId = null;
+                        self.reload();
+                    });
+                });
             },
             confirmRollback: function (b) {
                 var self = this;

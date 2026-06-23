@@ -7,6 +7,7 @@ use yii\helpers\Url;
 
 $showPoolFilter   = $showPoolFilter   ?? true;
 $showSidebarTitle = $showSidebarTitle ?? false;
+$showBatchFilter  = $showBatchFilter  ?? false;
 $currencySelectId = $currencySelectId ?? 'balance-filter-currency-select2';
 ?>
 
@@ -155,6 +156,14 @@ $currencySelectId = $currencySelectId ?? 'balance-filter-currency-select2';
                         <option value="BARS_GL">BARS GL</option><option value="MANUAL">Ручной</option>
                     </select>
                 </div>
+<?php if ($showBatchFilter): ?>
+                <div class="filter-field">
+                    <label class="filter-label">Номер пакета</label>
+                    <input type="number" class="filter-input" placeholder="ID пакета"
+                           v-model="balanceFilters.batch_id"
+                           @change="onBalanceFilterChange()" style="width:140px">
+                </div>
+<?php endif; ?>
                 <div class="filter-field" style="align-self:end">
                     <button type="button" class="toolbar-btn outline" @click.prevent="resetBalanceFilters()">
                         <i class="fas fa-times"></i>Сброс

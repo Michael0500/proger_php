@@ -2,6 +2,7 @@
 
 namespace app\commands;
 
+use app\commands\concerns\ImportProcessingLock;
 use Yii;
 use yii\console\Controller;
 use yii\console\ExitCode;
@@ -27,6 +28,11 @@ use yii\helpers\Console;
  */
 class FccMergeController extends Controller
 {
+    use ImportProcessingLock;
+
+    /** Подавлять консольный вывод (true при вызове processOne из web-контекста). */
+    public bool $quiet = false;
+
     const COMPANY_ID = 1;
     const SOURCE     = 'FCC12';
     const SECTION    = 'NRE';
@@ -82,54 +88,28 @@ class FccMergeController extends Controller
 
             $this->stdout("\n┌─ tds_status.id={$statusId}, extract_no={$extractNo}\n", Console::FG_CYAN);
 
-            $tx = $db->beginTransaction();
-            try {
-                [$balances, $entries, $skipped] = $this->mergeExtract($extractNo, $statusId);
+            $res = $this->processOne($statusId, 'background');
 
-                if (!$this->keepSource) {
-                    if (empty($skipped)) {
-                        $db->createCommand()
-                            ->delete('{{%gitb_nostro_extract_custom}}', ['extract_no' => $extractNo])
-                            ->execute();
-                    } else {
-                        // Удаляем только успешно обработанные строки; пропущенные остаются для повторной попытки
-                        $skippedStr = implode(',', array_map('intval', $skipped));
-                        $db->createCommand(
-                            "DELETE FROM {{%gitb_nostro_extract_custom}}
-                              WHERE extract_no = :ext AND line_no NOT IN ({$skippedStr})",
-                            [':ext' => $extractNo]
-                        )->execute();
-                    }
-                }
-
-                if (empty($skipped) && !$this->keepSource) {
-                    $db->createCommand()
-                        ->update('{{%tds_status}}', [
-                            'is_merged'      => true,
-                            'company_id'     => self::COMPANY_ID,
-                            'entries_count'  => $entries,
-                            'balances_count' => $balances,
-                        ], ['id' => $statusId])
-                        ->execute();
-                }
-
-                $tx->commit();
-
-                $totalBalances += $balances;
-                $totalEntries  += $entries;
-
-                if (empty($skipped)) {
-                    $this->stdout("│  Балансов: {$balances}, записей: {$entries}\n", Console::FG_GREEN);
-                    $this->stdout("└─ OK\n");
-                } else {
-                    $this->stdout("│  Балансов: {$balances}, записей: {$entries}, пропущено строк: " . count($skipped) . " (счёт не найден)\n", Console::FG_YELLOW);
-                    $this->stdout("└─ PARTIAL (не помечен merged, будет повторён)\n", Console::FG_YELLOW);
-                }
-            } catch (\Throwable $e) {
-                $tx->rollBack();
+            if ($res['busy']) {
+                $this->stdout("└─ SKIP (пачка уже обрабатывается другим процессом)\n", Console::FG_GREY);
+                continue;
+            }
+            if ($res['error'] !== null) {
                 $errors++;
-                $this->stderr("│  Ошибка: " . $e->getMessage() . "\n", Console::FG_RED);
+                $this->stderr("│  Ошибка: " . $res['error'] . "\n", Console::FG_RED);
                 $this->stdout("└─ ROLLBACK\n", Console::FG_RED);
+                continue;
+            }
+
+            $totalBalances += $res['balances'];
+            $totalEntries  += $res['entries'];
+
+            if ($res['ok']) {
+                $this->stdout("│  Балансов: {$res['balances']}, записей: {$res['entries']}\n", Console::FG_GREEN);
+                $this->stdout("└─ OK\n");
+            } else {
+                $this->stdout("│  Балансов: {$res['balances']}, записей: {$res['entries']}, пропущено строк: {$res['skipped']} (счёт не найден)\n", Console::FG_YELLOW);
+                $this->stdout("└─ PARTIAL (не помечен merged, будет повторён)\n", Console::FG_YELLOW);
             }
         }
 
@@ -140,6 +120,80 @@ class FccMergeController extends Controller
         $this->stdout(" ===\n");
 
         return $errors > 0 ? ExitCode::SOFTWARE : ExitCode::OK;
+    }
+
+    /**
+     * Обрабатывает один пакет FCC12 под блокировкой.
+     *
+     * Захватывает строку tds_status (взаимоисключение ручного и фонового
+     * процессов), переносит строки `gitb_nostro_extract_custom` с этим
+     * `extract_no` в `nostro_*`, удаляет обработанный источник (если не
+     * `keepSource`), помечает пакет merged и снимает блокировку. Используется
+     * и фоновым `actionRun`, и ручным запуском из интерфейса (web).
+     *
+     * @param int $statusId ID строки tds_status (type=FCC12).
+     * @param string $owner Кто запустил: 'manual' или 'background'.
+     * @return array `['busy'=>bool,'ok'=>bool,'balances'=>int,'entries'=>int,'skipped'=>int,'error'=>?string]`.
+     */
+    public function processOne(int $statusId, string $owner = 'background'): array
+    {
+        if (!$this->acquireProcessingLock($statusId, $owner)) {
+            return ['busy' => true, 'ok' => false, 'balances' => 0, 'entries' => 0, 'skipped' => 0, 'error' => null];
+        }
+
+        $db = Yii::$app->db;
+
+        try {
+            $extractNo = (int)$db->createCommand(
+                "SELECT fcc_extract_no FROM {{%tds_status}} WHERE id = :id",
+                [':id' => $statusId]
+            )->queryScalar();
+
+            $tx = $db->beginTransaction();
+            try {
+                [$balances, $entries, $skipped] = $this->mergeExtract($extractNo, $statusId);
+
+                if (!$this->keepSource) {
+                    if (empty($skipped)) {
+                        $db->createCommand()
+                            ->delete('{{%gitb_nostro_extract_custom}}', ['extract_no' => $extractNo])
+                            ->execute();
+                    } else {
+                        $skippedStr = implode(',', array_map('intval', $skipped));
+                        $db->createCommand(
+                            "DELETE FROM {{%gitb_nostro_extract_custom}}
+                              WHERE extract_no = :ext AND line_no NOT IN ({$skippedStr})",
+                            [':ext' => $extractNo]
+                        )->execute();
+                    }
+                }
+
+                if (empty($skipped) && !$this->keepSource) {
+                    $db->createCommand()->update('{{%tds_status}}', [
+                        'is_merged'      => true,
+                        'company_id'     => self::COMPANY_ID,
+                        'entries_count'  => $entries,
+                        'balances_count' => $balances,
+                    ], ['id' => $statusId])->execute();
+                }
+
+                $tx->commit();
+
+                return [
+                    'busy'     => false,
+                    'ok'       => empty($skipped),
+                    'balances' => $balances,
+                    'entries'  => $entries,
+                    'skipped'  => count($skipped),
+                    'error'    => null,
+                ];
+            } catch (\Throwable $e) {
+                $tx->rollBack();
+                return ['busy' => false, 'ok' => false, 'balances' => 0, 'entries' => 0, 'skipped' => 0, 'error' => $e->getMessage()];
+            }
+        } finally {
+            $this->releaseProcessingLock($statusId);
+        }
     }
 
     /**
@@ -253,7 +307,7 @@ class FccMergeController extends Controller
 
                 $accountId = $accountCache[$cbrCcNo];
                 if (!$accountId) {
-                    $this->stdout("│  Пропуск line_no={$r['line_no']}: счёт не найден для cbr_cc_no='{$cbrCcNo}'\n", Console::FG_YELLOW);
+                    $this->out("│  Пропуск line_no={$r['line_no']}: счёт не найден для cbr_cc_no='{$cbrCcNo}'\n", Console::FG_YELLOW);
                     $skippedLineNos[] = (int)$r['line_no'];
                     $lastLineNo = (int)$r['line_no'];
                     continue;

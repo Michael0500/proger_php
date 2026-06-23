@@ -53,7 +53,6 @@ class TdsMergeControllerTest extends \Codeception\Test\Unit
             'stmt_id' => 100,
             'format_type' => 'CAMT053',
             'account_no' => 'CAMT-ACC-1',
-            'msg_key' => 99001001,
             'stmt_ref' => 'CAMT-STMT-100',
             'opening_currency' => 'USD',
             'opening_value_dt' => '2026-01-10',
@@ -64,7 +63,7 @@ class TdsMergeControllerTest extends \Codeception\Test\Unit
         ]);
         $this->insertDtl([
             'stmt_id' => 100, 'line_no' => 1, 'dc_mark' => 'DBIT',
-            'amount' => '111.11', 'currency' => 'USD',
+            'amount' => '111.11', 'currency' => 'USD', 'msg_id' => 'MSG-CAMT-1',
         ]);
         $this->insertDtl([
             'stmt_id' => 100, 'line_no' => 2, 'dc_mark' => 'CRDT',
@@ -81,7 +80,8 @@ class TdsMergeControllerTest extends \Codeception\Test\Unit
         $this->assertSame('CAMT053', $entries[0]['source']);
         $this->assertSame((int)$account->id, (int)$entries[0]['account_id']);
         $this->assertSame('CAMT-STMT-100', $entries[0]['statement_number']);
-        $this->assertSame('99001001', (string)$entries[0]['message_id']);
+        // message_id для CAMT053 берётся из ph_tds_stmt_dtl.msg_id.
+        $this->assertSame('MSG-CAMT-1', (string)$entries[0]['message_id']);
 
         $balance = NostroBalance::findOne(['stmt_id' => 100]);
         $this->assertNotNull($balance);
@@ -98,7 +98,7 @@ class TdsMergeControllerTest extends \Codeception\Test\Unit
 
         $this->assertTrue((bool)$this->statusIsMerged($statusId));
 
-        $this->stdout('TC-001: CAMT053 — DBIT→Debit, CRDT→Credit; создан баланс S (source=CAMT053), opening/closing_dc хранятся как C/D, статус помечен merged.');
+        $this->stdout('TC-001: CAMT053 — DBIT→Debit, CRDT→Credit; message_id из dtl.msg_id; создан баланс S (source=CAMT053), opening/closing_dc хранятся как C/D, статус помечен merged.');
     }
 
     // ── TC-002 ────────────────────────────────────────────────────────────
@@ -346,7 +346,6 @@ class TdsMergeControllerTest extends \Codeception\Test\Unit
         $this->insertHdr([
             'stmt_id' => 800, 'format_type' => 'MT950', 'account_no' => 'MT-REF-ACC',
             'stmt_ref' => 'STMT-REF-42',
-            'msg_key' => 88008001,
             'opening_currency' => 'USD', 'opening_value_dt' => '2026-03-01',
             'opening_amount' => '0.00', 'opening_dc' => 'C',
             'closing_amount' => '0.00', 'closing_dc' => 'C',
@@ -366,7 +365,8 @@ class TdsMergeControllerTest extends \Codeception\Test\Unit
 
         $entry = $this->entriesByStmt(800)[0];
         $this->assertSame('STMT-REF-42', $entry['statement_number']);
-        $this->assertSame('88008001', (string)$entry['message_id']);
+        // MT950 не заполняет message_id (нет маппинга для этого типа).
+        $this->assertNull($entry['message_id']);
         $this->assertSame('NTRF', $entry['other_id']);
         $this->assertSame('2026-03-02', $entry['value_date']);
         $this->assertSame('2026-03-03', $entry['post_date']);
@@ -540,13 +540,15 @@ class TdsMergeControllerTest extends \Codeception\Test\Unit
     // ── TC-014 ────────────────────────────────────────────────────────────
 
     /**
-     * TC-014. Несколько типов за один прогон без --type обрабатываются все.
+     * TC-014. Один пакет PH_TDS содержит несколько format_type — за прогон без
+     * --type обрабатываются все.
      *
      * @return void
      */
     public function testMultipleTypesProcessedInOneRun(): void
     {
         $this->seedAccount('MULTI-ACC', 'USD');
+        // Оба вызова возвращают один и тот же пакет PH_TDS.
         $camtStatus = $this->insertStatus('CAMT053');
         $mtStatus   = $this->insertStatus('MT950');
 
@@ -573,7 +575,7 @@ class TdsMergeControllerTest extends \Codeception\Test\Unit
         $this->assertTrue((bool)$this->statusIsMerged($camtStatus));
         $this->assertTrue((bool)$this->statusIsMerged($mtStatus));
 
-        $this->stdout('TC-014: за один прогон без --type обработаны оба типа (CAMT053 и MT950), оба статуса помечены merged.');
+        $this->stdout('TC-014: один пакет PH_TDS с CAMT053 и MT950 — за прогон без --type обработаны оба format_type, пакет помечен merged.');
     }
 
     // ── TC-015 ────────────────────────────────────────────────────────────
@@ -677,6 +679,70 @@ class TdsMergeControllerTest extends \Codeception\Test\Unit
         $this->stdout('TC-017: непустой ph_tds_stmt_dtl.other_id перенесён в nostro_entries.other_id.');
     }
 
+    // ── TC-018 ────────────────────────────────────────────────────────────
+
+    /**
+     * TC-018. Занятая пачка (is_processing=true) пропускается: данные не
+     * переносятся, пакет не помечается merged (взаимоисключение с другим процессом).
+     *
+     * @return void
+     */
+    public function testProcessingLockSkipsBusyBatch(): void
+    {
+        $this->seedAccount('LOCK-ACC', 'USD');
+        $statusId = $this->insertStatus();
+        Yii::$app->db->createCommand()->update('{{%tds_status}}', [
+            'is_processing' => true,
+            'processing_owner' => 'background',
+        ], ['id' => $statusId])->execute();
+
+        $this->insertHdr([
+            'stmt_id' => 1800, 'format_type' => 'CAMT053', 'account_no' => 'LOCK-ACC',
+            'opening_currency' => 'USD', 'opening_value_dt' => '2026-01-10',
+            'opening_amount' => '0.00', 'opening_dc' => 'C',
+            'closing_amount' => '0.00', 'closing_dc' => 'D',
+        ]);
+        $this->insertDtl(['stmt_id' => 1800, 'line_no' => 1, 'dc_mark' => 'DBIT', 'amount' => '5.00', 'currency' => 'USD']);
+
+        $this->assertSame(ExitCode::OK, $this->runTdsMerge());
+
+        $this->assertSame(0, (int)NostroEntry::find()->count());
+        $this->assertFalse((bool)$this->statusIsMerged($statusId));
+
+        $this->stdout('TC-018: пачка с is_processing=true пропускается merge-командой (lock держит другой процесс), данные не переносятся.');
+    }
+
+    // ── TC-019 ────────────────────────────────────────────────────────────
+
+    /**
+     * TC-019. После успешной обработки блокировка снимается (is_processing=false).
+     *
+     * @return void
+     */
+    public function testProcessingLockReleasedAfterRun(): void
+    {
+        $this->seedAccount('REL-ACC', 'USD');
+        $statusId = $this->insertStatus();
+        $this->insertHdr([
+            'stmt_id' => 1900, 'format_type' => 'CAMT053', 'account_no' => 'REL-ACC',
+            'opening_currency' => 'USD', 'opening_value_dt' => '2026-01-10',
+            'opening_amount' => '0.00', 'opening_dc' => 'C',
+            'closing_amount' => '0.00', 'closing_dc' => 'D',
+        ]);
+        $this->insertDtl(['stmt_id' => 1900, 'line_no' => 1, 'dc_mark' => 'DBIT', 'amount' => '5.00', 'currency' => 'USD']);
+
+        $this->assertSame(ExitCode::OK, $this->runTdsMerge());
+
+        $this->assertTrue((bool)$this->statusIsMerged($statusId));
+        $processing = Yii::$app->db->createCommand(
+            "SELECT is_processing FROM {{%tds_status}} WHERE id = :id",
+            [':id' => $statusId]
+        )->queryScalar();
+        $this->assertFalse((bool)$processing);
+
+        $this->stdout('TC-019: после успешного processOne блокировка снимается (is_processing=false).');
+    }
+
     // ── Хелперы ─────────────────────────────────────────────────────────────
 
     /**
@@ -716,15 +782,28 @@ class TdsMergeControllerTest extends \Codeception\Test\Unit
     }
 
     /**
-     * Добавляет pending tds_status указанного типа.
+     * Добавляет (один раз) pending tds_status типа PH_TDS.
      *
-     * @param string $type Тип пакета (CAMT053/MT950/ED211/ED743).
-     * @return int ID статуса.
+     * format_type больше не хранится в tds_status — один пакет PH_TDS содержит
+     * все типы разом, а конкретный тип лежит в ph_tds_stmt_hdr.format_type.
+     * Поэтому параметр `$type` игнорируется, а повторные вызовы возвращают тот
+     * же пакет (это покрывает сценарий «несколько типов в одном прогоне»).
+     *
+     * @param string $type Игнорируется (оставлен для совместимости вызовов).
+     * @return int ID статуса PH_TDS.
      */
-    private function insertStatus(string $type): int
+    private function insertStatus(string $type = TdsMergeController::STATUS_TYPE): int
     {
+        $existing = Yii::$app->db->createCommand(
+            "SELECT id FROM {{%tds_status}} WHERE type = :type ORDER BY id LIMIT 1",
+            [':type' => TdsMergeController::STATUS_TYPE]
+        )->queryScalar();
+        if ($existing) {
+            return (int)$existing;
+        }
+
         Yii::$app->db->createCommand()->insert('{{%tds_status}}', [
-            'type' => $type,
+            'type' => TdsMergeController::STATUS_TYPE,
             'is_merged' => false,
         ])->execute();
 

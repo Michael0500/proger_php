@@ -14,6 +14,7 @@
 
 $showMultiPoolFilter = $showMultiPoolFilter ?? false;
 $showAccountFilter   = $showAccountFilter   ?? false;
+$showBatchFilter     = $showBatchFilter     ?? false;
 $poolSelectId        = $poolSelectId        ?? 'filter-pools-select2';
 $accountSelectId     = $accountSelectId     ?? 'filter-account-select2';
 $currencySelectId    = $currencySelectId    ?? 'filter-currency-select2';
@@ -42,6 +43,19 @@ $currencySelectId    = $currencySelectId    ?? 'filter-currency-select2';
             <div class="filter-field" style="grid-column:span 2">
                 <label class="filter-label">Ностро счёт</label>
                 <select id="<?= htmlspecialchars($accountSelectId) ?>" style="width:100%"></select>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($showBatchFilter): ?>
+            <!-- Номер пакета загрузки -->
+            <div class="filter-field" style="grid-column:span 2">
+                <label class="filter-label">Номер пакета</label>
+                <div class="filter-input-wrap">
+                    <input type="number" class="filter-input" placeholder="ID пакета загрузки..."
+                           :value="filters.batch_id||''"
+                           @change="applyFilter('batch_id',$event.target.value)">
+                    <button v-if="filters.batch_id" class="filter-clear-btn" @click="clearFilter('batch_id')">×</button>
+                </div>
             </div>
         <?php endif; ?>
 

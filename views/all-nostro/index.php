@@ -101,6 +101,7 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
     <?= $this->render("//partials/_entries-filters", [
         "showMultiPoolFilter" => true,
         "showAccountFilter"   => true,
+        "showBatchFilter"     => true,
         "poolSelectId"        => "an-filter-pools",
         "accountSelectId"     => "an-filter-account",
         "currencySelectId"    => "an-filter-currency",

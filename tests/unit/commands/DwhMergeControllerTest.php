@@ -252,7 +252,7 @@ class DwhMergeControllerTest extends \Codeception\Test\Unit
         $this->assertFalse((bool)$isMerged);
         $this->assertSame(0, $entryCount);
 
-        $this->stdout('DWH merge: без pending-строки type=DWH в tds_status источник не переносится (is_merged=false, записей нет).');
+        $this->stdout('DWH merge: без pending-строки type=SUSPENSE_POSTING в tds_status источник не переносится (is_merged=false, записей нет).');
     }
 
     /**
@@ -274,7 +274,7 @@ class DwhMergeControllerTest extends \Codeception\Test\Unit
     private function insertDwhStatus(): int
     {
         Yii::$app->db->createCommand()->insert('{{%tds_status}}', [
-            'type' => DwhMergeController::SOURCE,
+            'type' => DwhMergeController::STATUS_TYPE,
             'is_merged' => false,
         ])->execute();
 

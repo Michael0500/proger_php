@@ -2,6 +2,7 @@
 
 namespace app\commands;
 
+use app\commands\concerns\ImportProcessingLock;
 use app\models\NostroBalance;
 use app\models\NostroEntry;
 use Yii;
@@ -13,7 +14,8 @@ use yii\helpers\Console;
  * Переносит проводки DWH из suspend_posting в INV-балансы и записи выверки.
  *
  * Алгоритм:
- *   1. В tds_status ищем type = 'DWH' и is_merged = false.
+ *   1. В tds_status ищем type = 'SUSPENSE_POSTING' и is_merged = false
+ *      (источник данных в nostro_* остаётся source='DWH').
  *   2. Для каждой такой записи открываем транзакцию.
  *   3. Из suspend_posting выбираем строки с is_merged = false.
  *      - сгруппированные остатки → nostro_balance (section=INV, ls_type=L);
@@ -29,7 +31,14 @@ use yii\helpers\Console;
  */
 class DwhMergeController extends Controller
 {
+    use ImportProcessingLock;
+
+    /** Подавлять консольный вывод (true при вызове processOne из web-контекста). */
+    public bool $quiet = false;
+
     const COMPANY_ID = 2;
+    /** Тип пачки в tds_status (источник данных в nostro_* остаётся SOURCE='DWH'). */
+    const STATUS_TYPE = 'SUSPENSE_POSTING';
     const SOURCE = 'DWH';
     const SECTION = 'INV';
     const LS_LEDGER = 'L';
@@ -83,7 +92,7 @@ class DwhMergeController extends Controller
               WHERE type = :type
                 AND is_merged = FALSE
               ORDER BY id",
-            [':type' => self::SOURCE]
+            [':type' => self::STATUS_TYPE]
         )->queryAll();
 
         if (empty($pending)) {
@@ -100,49 +109,35 @@ class DwhMergeController extends Controller
             $statusId = (int)$row['id'];
             $this->stdout("\n┌─ tds_status.id={$statusId}, type={$row['type']}\n", Console::FG_CYAN);
 
-            $tx = $db->beginTransaction();
-            try {
-                $this->currentBatchId = $statusId;
-                $summary = $this->mergePending($this->deleteSource);
+            $res = $this->processOne($statusId, 'background');
 
-                if ($summary['source_rows'] === 0) {
-                    $this->stdout("│  Нет строк suspend_posting для обработки.\n", Console::FG_GREY);
-                }
-
-                $allOk = $summary['skipped_rows'] === 0;
-                if ($allOk) {
-                    $db->createCommand()
-                        ->update('{{%tds_status}}', [
-                            'is_merged'      => true,
-                            'company_id'     => self::COMPANY_ID,
-                            'entries_count'  => $summary['entries'],
-                            'balances_count' => $summary['balances'],
-                        ], ['id' => $statusId])
-                        ->execute();
-                }
-
-                $tx->commit();
-                $this->addSummary($total, $summary);
-
-                $this->stdout("│  Балансов: {$summary['balances']}, записей: {$summary['entries']}");
-                if ($summary['skipped_rows'] > 0) {
-                    $this->stdout(", пропущено строк: {$summary['skipped_rows']}", Console::FG_YELLOW);
-                }
-                if ($summary['duplicate_posting_ids'] > 0) {
-                    $this->stdout(", дублей posting_id: {$summary['duplicate_posting_ids']}", Console::FG_YELLOW);
-                }
-                $this->stdout("\n");
-
-                if ($allOk) {
-                    $this->stdout("└─ OK\n");
-                } else {
-                    $this->stdout("└─ PARTIAL (tds_status не помечен merged, будет повторён)\n", Console::FG_YELLOW);
-                }
-            } catch (\Throwable $e) {
-                $tx->rollBack();
+            if ($res['busy']) {
+                $this->stdout("└─ SKIP (пачка уже обрабатывается другим процессом)\n", Console::FG_GREY);
+                continue;
+            }
+            if ($res['error'] !== null) {
                 $errors++;
-                $this->stderr("│  Ошибка: " . $e->getMessage() . "\n", Console::FG_RED);
+                $this->stderr("│  Ошибка: " . $res['error'] . "\n", Console::FG_RED);
                 $this->stdout("└─ ROLLBACK\n", Console::FG_RED);
+                continue;
+            }
+
+            $summary = $res['summary'];
+            $this->addSummary($total, $summary);
+
+            $this->stdout("│  Балансов: {$summary['balances']}, записей: {$summary['entries']}");
+            if ($summary['skipped_rows'] > 0) {
+                $this->stdout(", пропущено строк: {$summary['skipped_rows']}", Console::FG_YELLOW);
+            }
+            if ($summary['duplicate_posting_ids'] > 0) {
+                $this->stdout(", дублей posting_id: {$summary['duplicate_posting_ids']}", Console::FG_YELLOW);
+            }
+            $this->stdout("\n");
+
+            if ($res['ok']) {
+                $this->stdout("└─ OK\n");
+            } else {
+                $this->stdout("└─ PARTIAL (tds_status не помечен merged, будет повторён)\n", Console::FG_YELLOW);
             }
         }
 
@@ -164,6 +159,67 @@ class DwhMergeController extends Controller
         $this->stdout(" ===\n");
 
         return $errors > 0 ? ExitCode::SOFTWARE : ExitCode::OK;
+    }
+
+    /**
+     * Обрабатывает один пакет SUSPENSE_POSTING под блокировкой.
+     *
+     * Захватывает строку tds_status (взаимоисключение ручного и фонового
+     * процессов), переносит необработанные `suspend_posting` в INV-балансы и
+     * записи, помечает пакет merged (если не было пропусков) и снимает
+     * блокировку. Используется и фоновым `actionRun`, и ручным запуском из
+     * интерфейса (web). При `$quiet=true` консольный вывод деталей подавляется.
+     *
+     * @param int $statusId ID строки tds_status (type=SUSPENSE_POSTING).
+     * @param string $owner Кто запустил: 'manual' или 'background'.
+     * @return array `['busy'=>bool,'ok'=>bool,'balances'=>int,'entries'=>int,'skipped'=>int,'summary'=>array,'error'=>?string]`.
+     */
+    public function processOne(int $statusId, string $owner = 'background'): array
+    {
+        if (!$this->acquireProcessingLock($statusId, $owner)) {
+            return ['busy' => true, 'ok' => false, 'balances' => 0, 'entries' => 0, 'skipped' => 0, 'summary' => $this->emptySummary(), 'error' => null];
+        }
+
+        $db = Yii::$app->db;
+
+        try {
+            $tx = $db->beginTransaction();
+            try {
+                $this->currentBatchId = $statusId;
+                $summary = $this->mergePending($this->deleteSource);
+
+                if ($summary['source_rows'] === 0) {
+                    $this->out("│  Нет строк suspend_posting для обработки.\n", Console::FG_GREY);
+                }
+
+                $allOk = $summary['skipped_rows'] === 0;
+                if ($allOk) {
+                    $db->createCommand()->update('{{%tds_status}}', [
+                        'is_merged'      => true,
+                        'company_id'     => self::COMPANY_ID,
+                        'entries_count'  => $summary['entries'],
+                        'balances_count' => $summary['balances'],
+                    ], ['id' => $statusId])->execute();
+                }
+
+                $tx->commit();
+
+                return [
+                    'busy'     => false,
+                    'ok'       => $allOk,
+                    'balances' => $summary['balances'],
+                    'entries'  => $summary['entries'],
+                    'skipped'  => $summary['skipped_rows'],
+                    'summary'  => $summary,
+                    'error'    => null,
+                ];
+            } catch (\Throwable $e) {
+                $tx->rollBack();
+                return ['busy' => false, 'ok' => false, 'balances' => 0, 'entries' => 0, 'skipped' => 0, 'summary' => $this->emptySummary(), 'error' => $e->getMessage()];
+            }
+        } finally {
+            $this->releaseProcessingLock($statusId);
+        }
     }
 
     /**
@@ -879,6 +935,6 @@ class DwhMergeController extends Controller
      */
     private function progress(string $message): void
     {
-        $this->stdout("│  {$message}\n", Console::FG_YELLOW);
+        $this->out("│  {$message}\n", Console::FG_YELLOW);
     }
 }

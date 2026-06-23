@@ -58,6 +58,12 @@
                 });
                 self.pools = self.accountPools;
 
+                // Предустановленный фильтр по номеру пакета (переход со страницы отката).
+                if (INIT.batchId) {
+                    self.$set(self.filters, 'batch_id', parseInt(INIT.batchId, 10));
+                    self.filtersOpen = true;
+                }
+
                 self._initColManagement();
                 self.loadTableColumnsPrefs();
                 self.loadAllNostroEntries(true);

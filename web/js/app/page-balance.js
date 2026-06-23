@@ -61,6 +61,13 @@
                 var self = this;
                 document.addEventListener('click', function () { self.openRowMenu = null; });
 
+                // Предустановленный фильтр по номеру пакета (переход со страницы отката).
+                var pageInit = (typeof window.BalancePageInit === 'object' && window.BalancePageInit) || {};
+                if (pageInit.batchId) {
+                    this.$set(this.balanceFilters, 'batch_id', parseInt(pageInit.batchId, 10));
+                    this.balanceFiltersOpen = true;
+                }
+
                 this._initBalanceColManagement();
                 this.loadBalanceTableColumnsPrefs();
                 this.loadBalanceAccounts();

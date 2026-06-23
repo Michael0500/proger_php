@@ -43,7 +43,9 @@ class NostroBalanceController extends BaseController
     public function actionPage()
     {
         $this->view->title = 'Баланс по всем ностро-банкам';
-        return $this->render('page');
+        // Предустановленный фильтр по номеру пакета (переход со страницы отката).
+        $batchId = (int)Yii::$app->request->get('batch_id', 0);
+        return $this->render('page', ['batchId' => $batchId ?: null]);
     }
 
     /**
@@ -137,6 +139,10 @@ class NostroBalanceController extends BaseController
         }
         if (!empty($filters['account_id'])) {
             $q->andWhere(['nb.account_id' => (int)$filters['account_id']]);
+        }
+        // Номер пакета загрузки (tds_status.id)
+        if (!empty($filters['batch_id'])) {
+            $q->andWhere(['nb.batch_id' => (int)$filters['batch_id']]);
         }
         if (!empty($filters['statement_number'])) {
             $q->andWhere(['ilike', 'nb.statement_number', $filters['statement_number']]);

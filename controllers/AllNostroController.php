@@ -60,10 +60,14 @@ class AllNostroController extends BaseController
             ->orderBy(['name' => SORT_ASC])
             ->all();
 
+        $batchId = (int)Yii::$app->request->get('batch_id', 0);
+
         $initData = [
             'pools' => array_map(function ($p) {
                 return ['id' => $p->id, 'name' => $p->name];
             }, $pools),
+            // Предустановленный фильтр по номеру пакета (переход со страницы отката).
+            'batchId' => $batchId ?: null,
         ];
 
         return $this->render('index', ['initData' => $initData]);
@@ -133,6 +137,10 @@ class AllNostroController extends BaseController
         }
         if (isset($filters['account_id']) && $filters['account_id'] !== '') {
             $q->andWhere(['ne.account_id' => (int)$filters['account_id']]);
+        }
+        // Номер пакета загрузки (tds_status.id)
+        if (isset($filters['batch_id']) && $filters['batch_id'] !== '') {
+            $q->andWhere(['ne.batch_id' => (int)$filters['batch_id']]);
         }
         if (isset($filters['amount_min']) && $filters['amount_min'] !== '') {
             $q->andWhere(['>=', 'ne.amount', (float)$filters['amount_min']]);
