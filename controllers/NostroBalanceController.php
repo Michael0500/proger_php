@@ -6,6 +6,7 @@ use Yii;
 use yii\web\Response;
 use yii\web\UploadedFile;
 use app\models\NostroBalance;
+use app\models\NostroBalanceArchive;
 use app\models\NostroBalanceAudit;
 use app\models\NostroEntry;
 use app\models\NostroEntryAudit;
@@ -585,6 +586,20 @@ class NostroBalanceController extends BaseController
         $entrySaved  = 0;
         $errors      = 0;
         $dbErrors    = [];
+
+        $statementErrors = $this->validateImportStatementNumbers($rows, $cid);
+        if ($statementErrors) {
+            return [
+                'success'      => false,
+                'saved'        => 0,
+                'entries_saved' => 0,
+                'errors'       => 0,
+                'parse_errors' => array_merge($parseErrors, $statementErrors),
+                'db_errors'    => [],
+                'message'      => $statementErrors[0],
+            ];
+        }
+
         $transaction = Yii::$app->db->beginTransaction();
 
         try {
@@ -725,6 +740,175 @@ class NostroBalanceController extends BaseController
         ])->execute();
 
         return (int)$db->getLastInsertID('tds_status_id_seq');
+    }
+
+    /**
+     * Проверяет номера выписок перед импортом файла.
+     *
+     * Для BND/ASB импорт блокируется, если по тому же счёту уже есть такой
+     * номер выписки в активных или архивных балансах, либо если числовой хвост
+     * номера меньше максимального уже загруженного номера с тем же префиксом.
+     *
+     * @param array $rows Строки балансов парсера.
+     * @param int $cid ID компании.
+     * @return string[] Ошибки, блокирующие импорт.
+     */
+    private function validateImportStatementNumbers(array $rows, int $cid): array
+    {
+        $errors = [];
+        $seenInFile = [];
+
+        foreach ($rows as $row) {
+            $accountId = (int)($row['account_id'] ?? 0);
+            $statementNumber = trim((string)($row['statement_number'] ?? ''));
+            if (!$accountId || $statementNumber === '') {
+                continue;
+            }
+
+            $fileKey = $accountId . '|' . $statementNumber;
+            if (isset($seenInFile[$fileKey])) {
+                $errors[] = "В файле повторяется номер выписки \"{$statementNumber}\" для выбранного счёта";
+                continue;
+            }
+            $seenInFile[$fileKey] = true;
+
+            if ($this->statementNumberExists($cid, $accountId, $statementNumber)) {
+                $errors[] = "Выписка № {$statementNumber} по выбранному счёту уже загружена";
+                continue;
+            }
+
+            $currentParts = $this->statementOrdinalParts($statementNumber);
+            if ($currentParts === null) {
+                continue;
+            }
+
+            [$currentPrefix, $currentNumber] = $currentParts;
+            $maxExisting = $this->maxExistingStatementNumber($cid, $accountId, $currentPrefix);
+            if ($maxExisting === null) {
+                continue;
+            }
+
+            if ($this->compareNumericStrings($currentNumber, $maxExisting['number']) < 0) {
+                $errors[] = sprintf(
+                    'Нельзя загрузить выписку № %s по выбранному счёту: уже есть более поздняя выписка № %s',
+                    $statementNumber,
+                    $maxExisting['statement_number']
+                );
+            }
+        }
+
+        return $errors;
+    }
+
+    /**
+     * Проверяет наличие номера выписки в активных или архивных балансах.
+     *
+     * @param int $cid ID компании.
+     * @param int $accountId ID счёта.
+     * @param string $statementNumber Номер выписки.
+     * @return bool Найден ли дубль.
+     */
+    private function statementNumberExists(int $cid, int $accountId, string $statementNumber): bool
+    {
+        $where = [
+            'company_id'       => $cid,
+            'account_id'       => $accountId,
+            'ls_type'          => NostroBalance::LS_STATEMENT,
+            'statement_number' => $statementNumber,
+        ];
+
+        return NostroBalance::find()->where($where)->exists()
+            || NostroBalanceArchive::find()->where($where)->exists();
+    }
+
+    /**
+     * Возвращает максимальный загруженный номер выписки с заданным префиксом.
+     *
+     * @param int $cid ID компании.
+     * @param int $accountId ID счёта.
+     * @param string $prefix Префикс номера до числового хвоста.
+     * @return array|null `['statement_number'=>string,'number'=>string]`.
+     */
+    private function maxExistingStatementNumber(int $cid, int $accountId, string $prefix): ?array
+    {
+        $numbers = array_merge(
+            $this->existingStatementNumbers(NostroBalance::class, $cid, $accountId),
+            $this->existingStatementNumbers(NostroBalanceArchive::class, $cid, $accountId)
+        );
+
+        $max = null;
+        foreach ($numbers as $statementNumber) {
+            $parts = $this->statementOrdinalParts((string)$statementNumber);
+            if ($parts === null || $parts[0] !== $prefix) {
+                continue;
+            }
+
+            if ($max === null || $this->compareNumericStrings($parts[1], $max['number']) > 0) {
+                $max = [
+                    'statement_number' => (string)$statementNumber,
+                    'number'           => $parts[1],
+                ];
+            }
+        }
+
+        return $max;
+    }
+
+    /**
+     * Читает номера выписок из указанной AR-модели.
+     *
+     * @param string $modelClass Класс `NostroBalance` или `NostroBalanceArchive`.
+     * @param int $cid ID компании.
+     * @param int $accountId ID счёта.
+     * @return string[] Номера выписок.
+     */
+    private function existingStatementNumbers(string $modelClass, int $cid, int $accountId): array
+    {
+        return $modelClass::find()
+            ->select('statement_number')
+            ->where([
+                'company_id' => $cid,
+                'account_id' => $accountId,
+                'ls_type'    => NostroBalance::LS_STATEMENT,
+            ])
+            ->andWhere(['not', ['statement_number' => null]])
+            ->column();
+    }
+
+    /**
+     * Разбирает номер выписки на префикс и числовой хвост.
+     *
+     * @param string $statementNumber Номер выписки.
+     * @return array|null `[prefix, numericPart]` или `null`.
+     */
+    private function statementOrdinalParts(string $statementNumber): ?array
+    {
+        if (!preg_match('/^(.*?)(\d+)$/u', trim($statementNumber), $m)) {
+            return null;
+        }
+
+        return [$m[1], ltrim($m[2], '0') === '' ? '0' : ltrim($m[2], '0')];
+    }
+
+    /**
+     * Сравнивает две неотрицательные числовые строки произвольной длины.
+     *
+     * @param string $a Первое число.
+     * @param string $b Второе число.
+     * @return int `-1`, `0` или `1`.
+     */
+    private function compareNumericStrings(string $a, string $b): int
+    {
+        $a = ltrim($a, '0');
+        $b = ltrim($b, '0');
+        $a = $a === '' ? '0' : $a;
+        $b = $b === '' ? '0' : $b;
+
+        if (strlen($a) !== strlen($b)) {
+            return strlen($a) < strlen($b) ? -1 : 1;
+        }
+
+        return $a <=> $b;
     }
 
     /**
