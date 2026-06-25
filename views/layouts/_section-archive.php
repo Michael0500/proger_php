@@ -20,7 +20,7 @@
                             {{ activeArchiveFilterCount() }}
                         </span>
                 </button>
-                <button type="button" class="toolbar-btn outline" @click.prevent="archiveSettingsOpen=true">
+                <button type="button" class="toolbar-btn outline" @click.prevent="openArchiveSettings">
                     <i class="fas fa-cog"></i>Настройки
                 </button>
                 <button type="button" class="toolbar-btn outline" @click.prevent="purgeExpired" :disabled="archivePurging">
@@ -431,11 +431,11 @@
         </div>
 
         <!-- МОДАЛ: Настройки архивирования -->
-        <div v-show="archiveSettingsOpen" class="modal-backdrop-custom"  @click.self="archiveSettingsOpen=false">
+        <div v-show="archiveSettingsOpen" class="modal-backdrop-custom" @click.self="closeArchiveSettings">
             <div class="modal-card" style="max-width:440px">
                 <div class="modal-card-header">
                     <span><i class="fas fa-cog me-2"></i>Настройки архивирования</span>
-                    <button type="button" class="btn-close" @click.prevent="archiveSettingsOpen=false"></button>
+                    <button type="button" class="btn-close" @click.prevent="closeArchiveSettings"></button>
                 </div>
                 <div class="modal-card-body">
                     <div class="row g-3">
@@ -475,7 +475,7 @@
                     </div>
                 </div>
                 <div class="modal-card-footer" style="display:flex;justify-content:flex-end;gap:8px">
-                    <button type="button" class="toolbar-btn outline" @click.prevent="archiveSettingsOpen=false">Отмена</button>
+                    <button type="button" class="toolbar-btn outline" @click.prevent="closeArchiveSettings">Отмена</button>
                     <button type="button" class="toolbar-btn primary" @click.prevent="saveArchiveSettings" :disabled="archiveSettingsSaving">
                         <i :class="archiveSettingsSaving?'fas fa-spinner fa-spin':'fas fa-save'"></i>
                         {{ archiveSettingsSaving ? 'Сохранение...' : 'Сохранить' }}

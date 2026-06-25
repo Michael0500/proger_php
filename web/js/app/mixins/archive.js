@@ -51,6 +51,11 @@ var ArchiveMixin = {
                 retention_years:       5,
                 auto_archive_enabled:  true,
             },
+            archiveSavedSettings: {
+                archive_after_days:   90,
+                retention_years:       5,
+                auto_archive_enabled:  true,
+            },
             archiveSettingsOpen:   false,
             archiveSettingsSaving: false,
 
@@ -831,8 +836,9 @@ var ArchiveMixin = {
             self.archiveStatsLoading = true;
             SmartMatchApi.get(AppRoutes.archiveStats, {}).then(function (r) {
                 if (r.data && r.data.success) {
-                    self.archiveStats    = r.data.data;
-                    self.archiveSettings = r.data.data.settings;
+                    self.archiveStats = r.data.data;
+                    self.archiveSavedSettings = self.cloneArchiveSettings(r.data.data.settings);
+                    self.archiveSettings = self.cloneArchiveSettings(self.archiveSavedSettings);
                 }
             }).finally(function () {
                 self.archiveStatsLoading = false;
@@ -848,9 +854,46 @@ var ArchiveMixin = {
             var self = this;
             SmartMatchApi.get(AppRoutes.archiveSettings, {}).then(function (r) {
                 if (r.data && r.data.success) {
-                    self.archiveSettings = r.data.data;
+                    self.archiveSavedSettings = self.cloneArchiveSettings(r.data.data);
+                    self.archiveSettings = self.cloneArchiveSettings(self.archiveSavedSettings);
                 }
             });
+        },
+
+        /**
+         * Возвращает нормализованную копию настроек архива.
+         *
+         * @param {Object} settings Настройки из API или локального состояния.
+         * @returns {{archive_after_days: number, retention_years: number, auto_archive_enabled: boolean}}
+         */
+        cloneArchiveSettings: function (settings) {
+            settings = settings || {};
+            var hasAutoArchive = Object.prototype.hasOwnProperty.call(settings, 'auto_archive_enabled');
+            return {
+                archive_after_days: Number(settings.archive_after_days || 90),
+                retention_years: Number(settings.retention_years || 5),
+                auto_archive_enabled: hasAutoArchive ? !!settings.auto_archive_enabled : true,
+            };
+        },
+
+        /**
+         * Открывает форму настроек с копией последнего сохранённого состояния.
+         *
+         * @returns {void}
+         */
+        openArchiveSettings: function () {
+            this.archiveSettings = this.cloneArchiveSettings(this.archiveSavedSettings);
+            this.archiveSettingsOpen = true;
+        },
+
+        /**
+         * Закрывает форму настроек и сбрасывает несохранённые изменения.
+         *
+         * @returns {void}
+         */
+        closeArchiveSettings: function () {
+            this.archiveSettings = this.cloneArchiveSettings(this.archiveSavedSettings);
+            this.archiveSettingsOpen = false;
         },
 
         /**
@@ -867,6 +910,8 @@ var ArchiveMixin = {
             self.archiveSettingsSaving = true;
             SmartMatchApi.post(AppRoutes.archiveSaveSettings, self.archiveSettings).then(function (d) {
                 if (d.success) {
+                    self.archiveSavedSettings = self.cloneArchiveSettings(d.data || self.archiveSettings);
+                    self.archiveSettings = self.cloneArchiveSettings(self.archiveSavedSettings);
                     Swal.fire({ title: 'Сохранено', icon: 'success', timer: 1400, showConfirmButton: false });
                     self.archiveSettingsOpen = false;
                     self.loadArchiveStats();
