@@ -165,7 +165,7 @@ class BalanceParsersTest extends \Codeception\Test\Unit
         $this->assertSame([], $parser->getErrors());
         $this->assertCount(1, $rows);
         $this->assertSame(22, $rows[0]['account_id']);
-        $this->assertSame('ASB-001', $rows[0]['statement_number']);
+        $this->assertNull($rows[0]['statement_number']);
         $this->assertSame('RUB', $rows[0]['currency']);
         $this->assertSame('2026-01-10', $rows[0]['value_date']);
         $this->assertEquals(1000.50, $rows[0]['opening_balance']);
@@ -183,11 +183,51 @@ class BalanceParsersTest extends \Codeception\Test\Unit
         $this->assertSame('10.00', $entryRows[0]['amount']);
         $this->assertSame('RUB', $entryRows[0]['currency']);
         $this->assertSame('2026-01-10', $entryRows[0]['value_date']);
-        $this->assertSame('ASB-001', $entryRows[0]['statement_number']);
+        $this->assertNull($entryRows[0]['statement_number']);
         $this->assertSame(NostroBalance::SOURCE_ASB, $entryRows[0]['source']);
         $this->assertSame('U', $entryRows[0]['match_status']);
 
-        $this->stdout('ASB парсер: разбирает Windows-1251 файл (числа с запятой и пробелами), валюта RUB, дата dd.mm.yyyy→ISO, source=ASB, секция INV.');
+        $this->stdout('ASB парсер: разбирает Windows-1251 файл; номер выписки для ASB не заполняется.');
+    }
+
+    /**
+     * Проверяет, что `Номер` платежного документа не пишется как номер выписки.
+     *
+     * @return void
+     */
+    public function testAsbParserDoesNotUsePaymentNumberAsStatementNumber(): void
+    {
+        $content = "1CClientBankExchange\n"
+            . "ВерсияФормата=1.02\n"
+            . "РасчСчет=30109810800000000091\n"
+            . "СекцияРасчСчет\n"
+            . "ДатаНачала=27.09.2024\n"
+            . "ДатаКонца=27.09.2024\n"
+            . "НачальныйОстаток=22800410633.82\n"
+            . "ВсегоПоступило=718545.13\n"
+            . "ВсегоСписано=0.00\n"
+            . "КонечныйОстаток=22801129178.95\n"
+            . "КонецРасчСчет\n"
+            . "СекцияДокумент=Платежное поручение\n"
+            . "Номер=734845\n"
+            . "Дата=27.09.2024\n"
+            . "Сумма=718545.13\n"
+            . "КонецДокумента\n";
+        $path = $this->tempFile('txt', $content);
+
+        $parser = new AsbTextParser();
+        $rows = $parser->parse($path, 91, NostroBalance::SECTION_NRE);
+
+        $this->assertSame([], $parser->getErrors());
+        $this->assertCount(1, $rows);
+        $this->assertNull($rows[0]['statement_number']);
+        $this->assertNotSame('734845', $rows[0]['statement_number']);
+
+        $entryRows = $parser->getEntryRows();
+        $this->assertCount(1, $entryRows);
+        $this->assertNull($entryRows[0]['statement_number']);
+
+        $this->stdout('ASB парсер: Номер платежного документа не используется как номер выписки; statement_number остаётся null.');
     }
 
     /**

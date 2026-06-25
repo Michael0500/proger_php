@@ -749,11 +749,13 @@ class NostroBalanceController extends BaseController
     }
 
     /**
-     * Проверяет номера выписок перед импортом файла.
+     * Проверяет уникальность импортируемых выписок.
      *
-     * Для BND/ASB импорт блокируется, если по тому же счёту уже есть такой
-     * номер выписки в активных или архивных балансах, либо если числовой хвост
-     * номера меньше максимального уже загруженного номера с тем же префиксом.
+     * Для ASB номера выписки нет: импорт блокируется по счёту, дате, секции
+     * и валюте. Для остальных источников импорт блокируется, если по тому же
+     * счёту уже есть такой номер выписки в активных или архивных балансах, либо
+     * если числовой хвост номера меньше максимального уже загруженного номера
+     * с тем же префиксом.
      *
      * @param array $rows Строки балансов парсера.
      * @param int $cid ID компании.
@@ -766,6 +768,32 @@ class NostroBalanceController extends BaseController
 
         foreach ($rows as $row) {
             $accountId = (int)($row['account_id'] ?? 0);
+            if (($row['source'] ?? null) === NostroBalance::SOURCE_ASB) {
+                if (!$accountId || empty($row['value_date'])) {
+                    continue;
+                }
+
+                $fileKey = implode('|', [
+                    $accountId,
+                    $row['value_date'],
+                    $row['section'] ?? NostroBalance::SECTION_NRE,
+                    $row['currency'] ?? 'RUB',
+                ]);
+                if (isset($seenInFile[$fileKey])) {
+                    $date = date('d.m.Y', strtotime((string)$row['value_date']));
+                    $errors[] = "В файле повторяется ASB-выписка за {$date} для выбранного счёта";
+                    continue;
+                }
+                $seenInFile[$fileKey] = true;
+
+                if ($this->asbStatementDateExists($cid, $row)) {
+                    $date = date('d.m.Y', strtotime((string)$row['value_date']));
+                    $errors[] = "ASB-выписка за {$date} по выбранному счёту уже загружена";
+                }
+
+                continue;
+            }
+
             $statementNumber = trim((string)($row['statement_number'] ?? ''));
             if (!$accountId || $statementNumber === '') {
                 continue;
@@ -822,6 +850,33 @@ class NostroBalanceController extends BaseController
             'ls_type'          => NostroBalance::LS_STATEMENT,
             'statement_number' => $statementNumber,
         ];
+
+        return NostroBalance::find()->where($where)->exists()
+            || NostroBalanceArchive::find()->where($where)->exists();
+    }
+
+    /**
+     * Проверяет ASB-дубль по счёту и дате выписки.
+     *
+     * @param int $cid ID компании.
+     * @param array $row Строка баланса из парсера.
+     * @return bool Найдена уже загруженная ASB-выписка за эту дату.
+     */
+    private function asbStatementDateExists(int $cid, array $row): bool
+    {
+        $where = [
+            'company_id' => $cid,
+            'account_id' => (int)($row['account_id'] ?? 0),
+            'ls_type'    => NostroBalance::LS_STATEMENT,
+            'source'     => NostroBalance::SOURCE_ASB,
+            'value_date' => $row['value_date'] ?? null,
+            'section'    => $row['section'] ?? NostroBalance::SECTION_NRE,
+            'currency'   => $row['currency'] ?? 'RUB',
+        ];
+
+        if (!$where['account_id'] || !$where['value_date']) {
+            return false;
+        }
 
         return NostroBalance::find()->where($where)->exists()
             || NostroBalanceArchive::find()->where($where)->exists();

@@ -10,7 +10,7 @@ use app\models\NostroEntry;
  *
  * Маппинг:
  *   ls_type          = 'S'
- *   statement_number = поле НомерВыписки или из имени файла
+ *   statement_number = null (в ASB нет номера выписки)
  *   account          = значение после РасчСчет=
  *   currency         = 'RUB' (фиксировано)
  *   value_date       = ДатаНачала= → YYYY-MM-DD
@@ -65,7 +65,7 @@ class AsbTextParser
 
         $rows = [];
         foreach ($sections as $section_text) {
-            $row = $this->parseSection($section_text, $accountId, $section, $filePath);
+            $row = $this->parseSection($section_text, $accountId, $section);
             if ($row) $rows[] = $row;
         }
 
@@ -100,17 +100,11 @@ class AsbTextParser
      * @param string $text Текст секции.
      * @param int $accountId ID счёта.
      * @param string $section Раздел баланса.
-     * @param string $filePath Путь к файлу для извлечения номера выписки.
      * @return array|null Строка баланса или `null`, если секция некорректна.
      */
-    private function parseSection(string $text, int $accountId, string $section, string $filePath): ?array
+    private function parseSection(string $text, int $accountId, string $section): ?array
     {
         $fields = $this->extractFields($text);
-
-        // Номер выписки: из поля или из имени файла
-        $stmtNumber = $fields['НомерВыписки']
-            ?? $fields['НомерДокумента']
-            ?? $this->extractFromFileName($filePath);
 
         // Счёт
         $acct = $fields['РасчСчет'] ?? $fields['СчетОтправителя'] ?? '';
@@ -135,13 +129,13 @@ class AsbTextParser
 
         $this->entryRows = array_merge(
             $this->entryRows,
-            $this->buildEntryRows($accountId, $stmtNumber, $valueDate, $incoming, $outgoing)
+            $this->buildEntryRows($accountId, null, $valueDate, $incoming, $outgoing)
         );
 
         return [
             'account_id'       => $accountId,
             'ls_type'          => NostroBalance::LS_STATEMENT,
-            'statement_number' => $stmtNumber ?: null,
+            'statement_number' => null,
             'currency'         => 'RUB',
             'value_date'       => $valueDate,
             'opening_balance'  => $openingRaw,
@@ -302,19 +296,4 @@ class AsbTextParser
         return (float)$raw;
     }
 
-    /**
-     * Извлекает предполагаемый номер выписки из имени файла.
-     *
-     * @param string $filePath Путь к файлу.
-     * @return string|null Номер выписки или имя файла без расширения.
-     */
-    private function extractFromFileName(string $filePath): ?string
-    {
-        $base = pathinfo($filePath, PATHINFO_FILENAME);
-        // Ищем числовую часть
-        if (preg_match('/(\d[\d_\-]+\d)/', $base, $m)) {
-            return $m[1];
-        }
-        return $base ?: null;
-    }
 }

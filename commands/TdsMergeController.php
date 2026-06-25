@@ -369,9 +369,6 @@ class TdsMergeController extends Controller
                     $skippedStmtIds[] = $stmtId;
                     continue;
                 }
-                if($type === 'ED211' || $type === 'ED743'){
-                    $accountNo = 'CB_'.$accountNo;
-                }
 
                 if (!array_key_exists($accountNo, $accountCache)) {
                     $accountCache[$accountNo] = $db->createCommand(
@@ -642,13 +639,8 @@ class TdsMergeController extends Controller
         }
         $v = strtoupper(trim((string)$raw));
 
-        if ($type === 'CAMT053') {
-            if ($v === 'DBIT' || $v === 'D') return 'Debit';
-            if ($v === 'CRDT' || $v === 'C') return 'Credit';
-        } else {
-            if ($v === 'D' || $v === 'DBIT') return 'Debit';
-            if ($v === 'C' || $v === 'CRDT') return 'Credit';
-        }
+        if ($v === 'DBIT' || $v === 'D' || $v === 'DEBIT') return 'Debit';
+        if ($v === 'CRDT' || $v === 'C' || $v === 'CREDIT') return 'Credit';
 
         throw new \RuntimeException("Некорректный D/C для {$type}: '{$raw}'");
     }
