@@ -41,15 +41,18 @@ var MatchingMixin = {
             },
             autoMatchRunning: false,
             /**
-             * Состояние пошагового автоквитования.
+             * Состояние пошагового автоквитования с живым прогрессом (вариант B).
              *
              * @type {?Object}
-             * @property {string} job_id ID задачи в серверном FileCache.
-             * @property {number} total_steps Количество правил/шагов.
-             * @property {number} current_step Номер выполненного шага.
-             * @property {number} total_matched Общее количество найденных пар.
+             * @property {string} job_id ID задания в таблице automatch_jobs.
+             * @property {number} percent Процент выполнения (по сквитованным записям).
+             * @property {number} total_matched Сквитовано пар на текущий момент.
+             * @property {number} remaining_unmatched Оценка оставшихся несквитованных записей.
+             * @property {string} phase 'searching' (поиск пар) | 'matching' (квитование).
+             * @property {string} current_rule_name Имя текущего правила.
+             * @property {string} eta_text Человекочитаемая оценка оставшегося времени.
              */
-            autoMatchProgress: null,  // { job_id, total_steps, current_step, total_matched, rules, step_results, unmatched_count }
+            autoMatchProgress: null,
             autoMatchScope: {
                 type: 'all',   // 'all' | 'pool' | 'group' | 'category'
                 poolId: null,
@@ -466,19 +469,31 @@ var MatchingMixin = {
 
             SmartMatchApi.post(window.AppRoutes.autoMatchStart, payload).then(function (res) {
                 if (!res.success) {
-                    Swal.fire({ icon: 'error', title: 'Ошибка', text: res.message });
+                    // Уже выполняется (защита от двойного запуска) — отдельный текст.
+                    Swal.fire({
+                        icon: res.already_running ? 'warning' : 'error',
+                        title: res.already_running ? 'Уже выполняется' : 'Ошибка',
+                        text: res.message
+                    });
                     self.autoMatchRunning = false;
                     return;
                 }
 
                 self.autoMatchProgress = {
-                    job_id:          res.job_id,
-                    total_steps:     res.total_steps,
-                    current_step:    0,
-                    total_matched:   0,
-                    rules:           res.rules,
-                    step_results:    [],
-                    unmatched_count: res.unmatched_count
+                    job_id:              res.job_id,
+                    total_steps:         res.total_steps,
+                    current_rule_index:  0,
+                    current_rule_name:   (res.rules && res.rules[0]) ? res.rules[0].name : '',
+                    total_matched:       0,
+                    matched_pairs:       0,
+                    rules:               res.rules,
+                    step_results:        [],
+                    unmatched_count:     res.unmatched_count,
+                    remaining_unmatched: res.unmatched_count,
+                    percent:             0,
+                    phase:               'searching',
+                    eta_text:            'оценка…',
+                    started_ts:          Date.now()
                 };
 
                 self._runAutoMatchNextStep();
@@ -489,11 +504,30 @@ var MatchingMixin = {
         },
 
         /**
-         * Выполняет следующий шаг серверного автоквитования.
+         * Человекочитаемая оценка оставшегося времени по проценту прогресса.
          *
-         * Рекурсивно вызывает POST `autoMatchStep` до `is_finished`, обновляет
-         * прогресс UI, перезагружает таблицу записей и показывает итог по
-         * правилам. Ошибки отдельного шага останавливают процесс.
+         * @param {number} percent Текущий процент (0..100).
+         * @param {number} startedTs Метка времени старта (Date.now()).
+         * @returns {string} Например «~1 мин 20 сек» или «оценка…».
+         */
+        _autoMatchEta: function (percent, startedTs) {
+            if (!percent || percent <= 0 || percent >= 100) return percent >= 100 ? '' : 'оценка…';
+            var elapsed = (Date.now() - startedTs) / 1000;
+            if (elapsed < 2) return 'оценка…';
+            var remain = elapsed * (100 - percent) / percent;
+            if (remain < 1) return 'меньше секунды';
+            var m = Math.floor(remain / 60);
+            var s = Math.round(remain % 60);
+            return '~' + (m > 0 ? (m + ' мин ' + s + ' сек') : (s + ' сек'));
+        },
+
+        /**
+         * Выполняет следующий ограниченный шаг серверного автоквитования.
+         *
+         * Рекурсивно вызывает POST `autoMatchStep` до `is_finished`, обновляя на
+         * каждом ответе живой прогресс (сквитовано / осталось / процент / ETA),
+         * затем перезагружает таблицу и показывает итог. Ошибка шага или сети
+         * останавливает процесс и снимает задание (cancel).
          *
          * @returns {void}
          */
@@ -506,21 +540,27 @@ var MatchingMixin = {
             }).then(function (res) {
                 if (!res.success) {
                     self.autoMatchRunning = false;
+                    self.autoMatchProgress = null;
                     Swal.fire({ icon: 'error', title: 'Ошибка', text: res.message });
                     return;
                 }
 
-                // Обновляем прогресс
-                self.autoMatchProgress.current_step  = res.current_step;
-                self.autoMatchProgress.total_matched  = res.total_matched;
-                self.autoMatchProgress.step_results   = res.step_results;
+                // Живой прогресс
+                var p = self.autoMatchProgress;
+                p.total_matched       = res.total_matched;
+                p.matched_pairs       = res.matched_pairs;
+                p.remaining_unmatched = res.remaining_unmatched;
+                p.percent             = res.percent;
+                p.phase               = res.phase;
+                p.current_rule_name   = res.current_rule_name || p.current_rule_name;
+                p.current_rule_index  = res.current_rule_index;
+                p.step_results        = res.step_results || p.step_results;
+                p.eta_text            = self._autoMatchEta(res.percent, p.started_ts);
 
                 if (res.is_finished) {
-                    // Готово
                     self.autoMatchRunning = false;
                     self.loadEntries(true);
 
-                    // Формируем итоговое сообщение
                     var html = '<div class="text-start">';
                     html += '<p><b>Сквитовано пар: ' + res.total_matched + '</b></p>';
                     if (res.step_results && res.step_results.length) {
@@ -544,15 +584,42 @@ var MatchingMixin = {
                     });
                     self.autoMatchProgress = null;
                 } else {
-                    // Следующий шаг
                     self._runAutoMatchNextStep();
                 }
             }).catch(function () {
-                self.autoMatchRunning = false;
-                self.autoMatchProgress = null;
+                // Сеть упала посреди прогона — снимаем задание, чтобы освободить замок.
+                self._cancelAutoMatch(true);
                 Swal.fire({ icon: 'error', title: 'Ошибка сети' });
             });
         },
+
+        /**
+         * Останавливает текущее автоквитование (по кнопке или при сбое).
+         *
+         * @param {boolean} silent Не показывать тост об остановке.
+         * @returns {void}
+         */
+        _cancelAutoMatch: function (silent) {
+            var self = this;
+            var job = self.autoMatchProgress ? self.autoMatchProgress.job_id : null;
+            self.autoMatchRunning = false;
+            self.autoMatchProgress = null;
+            if (!job) return;
+            SmartMatchApi.post(window.AppRoutes.autoMatchCancel, { job_id: job }).then(function () {
+                if (!silent) {
+                    Swal.fire({ icon: 'info', title: 'Автоквитование остановлено', toast: true,
+                        position: 'top-end', timer: 2000, showConfirmButton: false });
+                }
+                self.loadEntries(true);
+            }).catch(function () {});
+        },
+
+        /**
+         * Останавливает автоквитование по нажатию пользователя.
+         *
+         * @returns {void}
+         */
+        cancelAutoMatch: function () { this._cancelAutoMatch(false); },
 
         /**
          * Загружает правила автоквитования.

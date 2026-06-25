@@ -55,6 +55,7 @@ try {
         autoMatch:       '<?= Url::to(['/matching/auto-match']) ?>',
         autoMatchStart:  '<?= Url::to(['/matching/auto-match-start']) ?>',
         autoMatchStep:   '<?= Url::to(['/matching/auto-match-step']) ?>',
+        autoMatchCancel: '<?= Url::to(['/matching/auto-match-cancel']) ?>',
         matchGroup:      '<?= Url::to(['/matching/match-group']) ?>',
         getRules:        '<?= Url::to(['/matching/get-rules']) ?>',
         saveRule:        '<?= Url::to(['/matching/save-rule']) ?>',

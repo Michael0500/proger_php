@@ -34,6 +34,8 @@ final class SmartMatchTestHelper
             'tds_status',
             'suspend_posting',
             'user_preferences',
+            'automatch_pairs',
+            'automatch_jobs',
             'nostro_entry_audit',
             'nostro_entries_archive',
             'nostro_entries',

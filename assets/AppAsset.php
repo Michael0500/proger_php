@@ -51,7 +51,7 @@ class AppAsset extends AssetBundle
         'js/app/mixins/categories.js?v3',
         'js/app/mixins/pools.js?v4',
         'js/app/mixins/entries.js?v27',
-        'js/app/mixins/matching.js?v14',
+        'js/app/mixins/matching.js?v15',
         'js/app/mixins/balance.js?v17',
         'js/app/mixins/balance-archive.js?v5',
         'js/app/mixins/archive.js?v13',

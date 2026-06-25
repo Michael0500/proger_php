@@ -167,13 +167,14 @@ class AutoMatchingServiceTest extends \Codeception\Test\Unit
         verify($start['total_steps'])->equals(1);
         verify($start['unmatched_count'])->equals(2);
 
-        $step = $service->autoMatchStep($start['job_id']);
+        $step = $this->drainAutoMatch($service, $start['job_id']);
 
         verify($step['success'])->true();
         verify($step['is_finished'])->true();
         verify($step['total_matched'])->equals(1);
+        verify($step['percent'])->equals(100);
 
-        $this->stdout('Пошаговое автоквитование в области категории: start вернул 1 шаг и 2 незаквитованных, step завершил с 1 сквитованной парой.');
+        $this->stdout('Пошаговое автоквитование в области категории: start вернул 1 шаг и 2 незаквитованных, серия step завершилась 1 сквитованной парой (percent=100).');
     }
 
     // ── TC-020 ────────────────────────────────────────────────────────────
@@ -657,16 +658,190 @@ class AutoMatchingServiceTest extends \Codeception\Test\Unit
         $service = new MatchingService();
         $start = $service->autoMatchStart((int)$company->id);
 
-        $first = $service->autoMatchStep($start['job_id']);
+        $first = $this->drainAutoMatch($service, $start['job_id']);
         verify($first['is_finished'])->true();
         verify($first['total_matched'])->equals(1);
 
+        // Повторный шаг по завершённому заданию — идемпотентен.
         $second = $service->autoMatchStep($start['job_id']);
         verify($second['success'])->true();
         verify($second['is_finished'])->true();
         verify($second['total_matched'])->equals(1);
 
         $this->stdout('TC-032: повторный autoMatchStep по завершённому заданию идемпотентен — is_finished=true, total_matched остаётся 1.');
+    }
+
+    // ── TC-032b ───────────────────────────────────────────────────────────
+
+    /**
+     * TC-032b. Защита от двойного запуска: пока задание компании выполняется,
+     * второй autoMatchStart по той же компании отклоняется (already_running);
+     * после остановки (autoMatchCancel) запуск снова возможен.
+     *
+     * @return void
+     */
+    public function testAutoMatchStartRejectsConcurrentRun(): void
+    {
+        $company = \SmartMatchTestHelper::createCompany();
+        $pool = \SmartMatchTestHelper::createPool((int)$company->id);
+        $account = \SmartMatchTestHelper::createAccount((int)$company->id, (int)$pool->id);
+        \SmartMatchTestHelper::createRule((int)$company->id, ['match_instruction_id' => true]);
+        \SmartMatchTestHelper::createEntry([
+            'company_id' => $company->id, 'account_id' => $account->id,
+            'ls' => NostroEntry::LS_LEDGER, 'dc' => NostroEntry::DC_DEBIT, 'instruction_id' => 'LOCK-1',
+        ]);
+        \SmartMatchTestHelper::createEntry([
+            'company_id' => $company->id, 'account_id' => $account->id,
+            'ls' => NostroEntry::LS_STATEMENT, 'dc' => NostroEntry::DC_CREDIT, 'instruction_id' => 'LOCK-1',
+        ]);
+
+        $service = new MatchingService();
+        $first = $service->autoMatchStart((int)$company->id);
+        verify($first['success'])->true();
+
+        // Второй запуск по той же компании — отказ.
+        $second = $service->autoMatchStart((int)$company->id);
+        verify($second['success'])->false();
+        verify(!empty($second['already_running']))->true();
+
+        // Останавливаем — замок освобождается, запуск снова возможен.
+        $cancel = $service->autoMatchCancel($first['job_id'], (int)$company->id);
+        verify($cancel['success'])->true();
+
+        $third = $service->autoMatchStart((int)$company->id);
+        verify($third['success'])->true();
+
+        $this->stdout('TC-032b: второй autoMatchStart при активном задании отклонён (already_running); после autoMatchCancel запуск снова возможен.');
+    }
+
+    // ── TC-032c ───────────────────────────────────────────────────────────
+
+    /**
+     * TC-032c. Пошаговое квитование проходит несколько ностро-банков (пулов)
+     * за серию шагов: материализует и квитует каждый пул, прогресс монотонно
+     * растёт до 100%, перекрёстный поиск (ключ в разных ID-полях) срабатывает.
+     *
+     * @return void
+     */
+    public function testAutoMatchStepProcessesMultiplePools(): void
+    {
+        $company = \SmartMatchTestHelper::createCompany();
+        $poolA = \SmartMatchTestHelper::createPool((int)$company->id);
+        $poolB = \SmartMatchTestHelper::createPool((int)$company->id);
+        $accA = \SmartMatchTestHelper::createAccount((int)$company->id, (int)$poolA->id);
+        $accB = \SmartMatchTestHelper::createAccount((int)$company->id, (int)$poolB->id);
+        \SmartMatchTestHelper::createRule((int)$company->id, [
+            'match_instruction_id' => true,
+            'match_end_to_end_id'  => true,
+            'cross_id_search'      => true,
+        ]);
+
+        // По 3 перекрёстные пары в каждом пуле: ключ L в instruction_id, S — в end_to_end_id.
+        foreach ([$accA, $accB] as $acc) {
+            for ($i = 1; $i <= 3; $i++) {
+                $key = 'X-' . $acc->id . '-' . $i;
+                \SmartMatchTestHelper::createEntry([
+                    'company_id' => $company->id, 'account_id' => $acc->id,
+                    'ls' => NostroEntry::LS_LEDGER, 'dc' => NostroEntry::DC_DEBIT, 'instruction_id' => $key,
+                ]);
+                \SmartMatchTestHelper::createEntry([
+                    'company_id' => $company->id, 'account_id' => $acc->id,
+                    'ls' => NostroEntry::LS_STATEMENT, 'dc' => NostroEntry::DC_CREDIT, 'end_to_end_id' => $key,
+                ]);
+            }
+        }
+
+        $service = new MatchingService();
+        $start = $service->autoMatchStart((int)$company->id);
+        verify($start['unmatched_count'])->equals(12);
+
+        $percents = [];
+        $steps = 0;
+        $last = ['is_finished' => false];
+        for ($i = 0; $i < 1000; $i++) {
+            $last = $service->autoMatchStep($start['job_id']);
+            $steps++;
+            $percents[] = $last['percent'];
+            if ($last['is_finished']) break;
+        }
+
+        verify($last['is_finished'])->true();
+        verify($last['total_matched'])->equals(6);
+        verify($last['percent'])->equals(100);
+        verify($steps)->greaterThan(1); // прошли несколько шагов (≥2 пула)
+
+        // Прогресс монотонно не убывает.
+        $prev = -1;
+        foreach ($percents as $p) {
+            verify($p)->greaterThanOrEqual($prev);
+            $prev = $p;
+        }
+
+        $remaining = NostroEntry::find()
+            ->where(['company_id' => $company->id, 'match_status' => NostroEntry::STATUS_UNMATCHED])
+            ->count();
+        verify((int)$remaining)->equals(0);
+
+        $this->stdout('TC-032c: пошаговое квитование прошло 2 пула за несколько шагов, перекрёстный поиск сработал, прогресс монотонно дошёл до 100%, сквитовано 6 пар.');
+    }
+
+    // ── TC-032d ───────────────────────────────────────────────────────────
+
+    /**
+     * TC-032d. Один пул с числом пар больше STEP_UPDATE_PAIRS (8000) обновляется
+     * за несколько порций-шагов и сквитуется полностью.
+     *
+     * @group slow
+     * @return void
+     */
+    public function testAutoMatchStepChunksLargePool(): void
+    {
+        [$company, , $account] = \SmartMatchTestHelper::createCompanyPoolAccount();
+        \SmartMatchTestHelper::createRule((int)$company->id, ['match_instruction_id' => true]);
+
+        $pairs = 8500; // > STEP_UPDATE_PAIRS=8000 → минимум 2 порции UPDATE
+        $this->bulkInsertPairs((int)$company->id, (int)$account->id, $pairs);
+
+        $service = new MatchingService();
+        $start = $service->autoMatchStart((int)$company->id);
+
+        $updateSteps = 0;
+        $last = ['is_finished' => false];
+        for ($i = 0; $i < 100; $i++) {
+            $last = $service->autoMatchStep($start['job_id']);
+            if (($last['phase'] ?? '') === 'matching') $updateSteps++;
+            if ($last['is_finished']) break;
+        }
+
+        verify($last['is_finished'])->true();
+        verify($last['total_matched'])->equals($pairs);
+        verify($updateSteps)->greaterThan(1); // порция разбита минимум на 2 шага
+
+        $remaining = NostroEntry::find()
+            ->where(['company_id' => $company->id, 'match_status' => NostroEntry::STATUS_UNMATCHED])
+            ->count();
+        verify((int)$remaining)->equals(0);
+
+        $this->stdout('TC-032d: пул из 8500 пар (> STEP_UPDATE_PAIRS) сквитован за несколько порций-шагов полностью.');
+    }
+
+    /**
+     * Прогоняет пошаговое автоквитование до завершения (как это делает UI).
+     *
+     * @param MatchingService $service Сервис квитования.
+     * @param string $jobId ID задания.
+     * @return array Последний ответ шага с is_finished=true.
+     */
+    private function drainAutoMatch(MatchingService $service, string $jobId): array
+    {
+        $last = ['success' => false, 'is_finished' => false];
+        for ($i = 0; $i < 10000; $i++) {
+            $last = $service->autoMatchStep($jobId);
+            if (!($last['success'] ?? false) || ($last['is_finished'] ?? false)) {
+                break;
+            }
+        }
+        return $last;
     }
 
     // ── TC-033 ────────────────────────────────────────────────────────────

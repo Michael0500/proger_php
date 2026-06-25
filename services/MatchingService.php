@@ -322,19 +322,27 @@ class MatchingService
         return null;
     }
 
+    /** Стоп-кран от протухших заданий: running без активности дольше — реклеймится. */
+    private const JOB_STALE_SECONDS = 120;
+    /** Сколько пар обновляется за один шаг (≈ один HTTP-вызов). */
+    private const STEP_UPDATE_PAIRS = 8000;
+
     /**
-     * Инициализирует пошаговое автоквитование для UI.
+     * Инициализирует пошаговое автоквитование с живым прогрессом (вариант B).
      *
-     * Метод выбирает активные правила, считает количество незаквитованных
-     * записей в выбранной области и сохраняет состояние задания в `FileCache`
-     * на один час. Следующие шаги выполняются методом `autoMatchStep()`.
+     * Создаёт DB-задание `automatch_jobs` (состояние машины + счётчики прогресса)
+     * и захватывает замок от двойного запуска: частичный уникальный индекс
+     * `(company_id) WHERE status='running'` не даёт запустить второе квитование
+     * по той же компании. Перед этим реклеймятся протухшие running-задания
+     * (брошенный браузер). Следующие шаги выполняет `autoMatchStep()`.
      *
      * @param int $companyId ID компании.
      * @param int|null $accountId ID конкретного счёта или `null`.
      * @param string|null $section Фильтр раздела `NRE` или `INV`.
      * @param string $scopeType Область запуска: `all`, `pool`, `category`.
      * @param int|null $scopeId ID области запуска.
-     * @return array Данные задания: `job_id`, список правил, число шагов и незаквитованных записей.
+     * @return array Данные задания: `job_id`, список правил, число незаквитованных
+     *               или отказ (нет правил / нет счетов / уже выполняется).
      * @throws \Exception Если не удалось сгенерировать случайный `job_id`.
      */
     public function autoMatchStart(int $companyId, ?int $accountId = null, ?string $section = null, string $scopeType = 'all', ?int $scopeId = null): array
@@ -355,7 +363,7 @@ class MatchingService
         // Разрешаем scope в список account_id
         $scopeAccountIds = $this->resolveScopeAccounts($companyId, $scopeType, $scopeId);
 
-        // Считаем незаквитованные записи
+        // Считаем незаквитованные записи (знаменатель прогресса)
         $query = NostroEntry::find()
             ->where(['company_id' => $companyId, 'match_status' => NostroEntry::STATUS_UNMATCHED]);
         if ($scopeAccountIds !== null) {
@@ -366,32 +374,70 @@ class MatchingService
         }
         $unmatchedCount = (int) $query->count();
 
-        $jobId = 'job_' . bin2hex(random_bytes(8));
+        $db = Yii::$app->db;
+        $this->reclaimStaleJobs($companyId);
 
-        $rulesInfo = array_map(function (MatchingRule $r) {
+        // Предчек замка: не пытаемся вставлять, если задание уже идёт — так в
+        // обычном случае не бросаем IntegrityException (он испортил бы внешнюю
+        // транзакцию в тестовой среде). Уникальный индекс остаётся жёстким
+        // бэкстопом на случай гонки двух одновременных стартов.
+        $active = $db->createCommand(
+            "SELECT 1 FROM {{%automatch_jobs}} WHERE company_id = :c AND status = 'running' LIMIT 1",
+            [':c' => $companyId]
+        )->queryScalar();
+        if ($active) {
             return [
-                'id'   => $r->id,
-                'name' => $r->name,
+                'success'         => false,
+                'already_running' => true,
+                'message'         => 'Автоквитование для этой компании уже выполняется. Дождитесь завершения или остановите текущий запуск.',
             ];
-        }, $rules);
+        }
 
-        // Сохраняем состояние в кэш
+        $jobId = 'job_' . bin2hex(random_bytes(8));
+        $now   = date('Y-m-d H:i:s');
+
+        $rulesInfo = array_map(fn(MatchingRule $r) => ['id' => $r->id, 'name' => $r->name], $rules);
+
         $state = [
-            'company_id'       => $companyId,
-            'account_id'       => $accountId,
-            'section'          => $section,
-            'scope_type'       => $scopeType,
-            'scope_id'         => $scopeId,
-            'scope_account_ids'=> $scopeAccountIds,
-            'rules'            => array_map(fn($r) => $r->id, $rules),
-            'current_step'     => 0,
-            'total_steps'      => count($rules),
-            'total_matched'    => 0,
-            'step_results'     => [],
-            'is_finished'      => false,
-            'started_at'       => date('Y-m-d H:i:s'),
+            'company_id'        => $companyId,
+            'account_id'        => $accountId,
+            'section'           => $section,
+            'scope_account_ids' => $scopeAccountIds,
+            'rule_ids'          => array_map(fn($r) => (int) $r->id, $rules),
+            'current_rule'      => 0,           // индекс текущего правила
+            'rule_pools'        => null,        // пулы текущего правила (резолвятся лениво)
+            'pool_index'        => 0,
+            'phase'             => 'search',    // search | update
+            'pool_pair_total'   => 0,
+            'pool_offset'       => 0,
+            'rule_matched'      => 0,
+            'total_matched'     => 0,
+            'step_results'      => [],
+            'display_phase'     => 'searching',
+            'current_rule_name' => $rules[0]->name,
         ];
-        Yii::$app->cache->set('automatch_' . $jobId, $state, 3600);
+
+        try {
+            $db->createCommand()->insert('{{%automatch_jobs}}', [
+                'job_id'          => $jobId,
+                'company_id'      => $companyId,
+                'status'          => 'running',
+                'phase'           => 'searching',
+                'current_rule_name' => $rules[0]->name,
+                'matched_pairs'   => 0,
+                'total_unmatched' => $unmatchedCount,
+                'state'           => $state, // json-колонка: Yii сам кодирует массив
+                'started_at'      => $now,
+                'updated_at'      => $now,
+            ])->execute();
+        } catch (\yii\db\IntegrityException $e) {
+            // Сработал частичный уникальный индекс — уже есть running-задание компании.
+            return [
+                'success'        => false,
+                'already_running'=> true,
+                'message'        => 'Автоквитование для этой компании уже выполняется. Дождитесь завершения или остановите текущий запуск.',
+            ];
+        }
 
         return [
             'success'         => true,
@@ -399,104 +445,462 @@ class MatchingService
             'rules'           => $rulesInfo,
             'total_steps'     => count($rules),
             'unmatched_count' => $unmatchedCount,
+            'total_matched'   => 0,
+            'matched_pairs'   => 0,
+            'percent'         => 0,
         ];
     }
 
     /**
-     * Выполняет следующий шаг пошагового автоквитования.
+     * Выполняет один ограниченный шаг пошагового автоквитования.
      *
-     * За один вызов обрабатывается одно правило из состояния задания. После
-     * выполнения результат правила сохраняется обратно в кэш, чтобы фронтенд
-     * мог показывать прогресс и продолжить обработку следующим запросом.
+     * За вызов делается ровно одна «тяжёлая» операция БД — либо материализация
+     * пар текущего пула в рабочую таблицу `automatch_pairs`, либо обновление
+     * очередной порции из {@see STEP_UPDATE_PAIRS} пар. Так каждый HTTP-вызов
+     * короткий (~1–3 с), а UI обновляет прогресс и не выглядит зависшим.
+     * Состояние машины и счётчики хранятся в строке `automatch_jobs`.
      *
      * @param string $jobId ID задания, полученный из `autoMatchStart()`.
-     * @return array Состояние прогресса, результат последнего правила и общий итог.
+     * @return array Прогресс: сквитовано/осталось/процент/фаза/итоги по правилам.
      */
     public function autoMatchStep(string $jobId): array
     {
-        $cacheKey = 'automatch_' . $jobId;
-        $state = Yii::$app->cache->get($cacheKey);
+        $db  = Yii::$app->db;
+        $row = $db->createCommand('SELECT * FROM {{%automatch_jobs}} WHERE job_id = :j', [':j' => $jobId])->queryOne();
 
-        if (!$state) {
+        if (!$row) {
             return ['success' => false, 'message' => 'Задание не найдено или истекло'];
         }
 
-        if ($state['is_finished']) {
-            return [
-                'success'       => true,
-                'is_finished'   => true,
-                'total_matched' => $state['total_matched'],
-                'step_results'  => $state['step_results'],
-                'message'       => 'Автоквитование уже завершено. Сквитовано пар: ' . $state['total_matched'],
-            ];
+        // json-колонка может вернуться как массив (если Yii уже декодировал) или
+        // как строка (raw-запрос) — обрабатываем оба случая.
+        $state = is_array($row['state'])
+            ? $row['state']
+            : (json_decode((string) $row['state'], true) ?: []);
+
+        // Уже завершено/остановлено — идемпотентный ответ.
+        if ($row['status'] !== 'running') {
+            return $this->progressResponse($row, $state, true);
         }
 
-        $step    = $state['current_step'];
-        $ruleId  = $state['rules'][$step] ?? null;
-
-        if (!$ruleId) {
-            $state['is_finished'] = true;
-            Yii::$app->cache->set($cacheKey, $state, 3600);
-            return [
-                'success'       => true,
-                'is_finished'   => true,
-                'total_matched' => $state['total_matched'],
-                'step_results'  => $state['step_results'],
-                'message'       => 'Автоквитование завершено. Сквитовано пар: ' . $state['total_matched'],
-            ];
+        $now = date('Y-m-d H:i:s');
+        try {
+            $this->advanceJob($state, $jobId);
+        } catch (\Exception $e) {
+            $db->createCommand()->update('{{%automatch_jobs}}', [
+                'status'        => 'error',
+                'error_message' => $e->getMessage(),
+                'state'         => $state, // json-колонка: Yii сам кодирует массив
+                'updated_at'    => $now,
+                'finished_at'   => $now,
+            ], ['job_id' => $jobId])->execute();
+            $db->createCommand()->delete('{{%automatch_pairs}}', ['job_id' => $jobId])->execute();
+            Yii::error("AutoMatch step {$jobId}: " . $e->getMessage());
+            return ['success' => false, 'message' => 'Ошибка квитования: ' . $e->getMessage()];
         }
 
-        $rule = MatchingRule::findOne($ruleId);
-        $matched = 0;
-        $error = null;
+        $finished = $state['current_rule'] >= count($state['rule_ids']);
+        $status   = $finished ? 'finished' : 'running';
 
-        if ($rule) {
-            try {
-                $scopeIds = $state['scope_account_ids'] ?? null;
-                $matched = $this->runRule($rule, $state['company_id'], $state['account_id'], $scopeIds);
-            } catch (\Exception $e) {
-                $error = $e->getMessage();
-                Yii::error("AutoMatch step rule #{$ruleId}: " . $e->getMessage());
+        $update = [
+            'status'            => $status,
+            'phase'             => $finished ? 'finished' : ($state['display_phase'] ?? 'matching'),
+            'current_rule_name' => $state['current_rule_name'] ?? null,
+            'matched_pairs'     => (int) $state['total_matched'],
+            'state'             => $state, // json-колонка: Yii сам кодирует массив
+            'updated_at'        => $now,
+        ];
+        if ($finished) {
+            $update['finished_at'] = $now;
+        }
+        $db->createCommand()->update('{{%automatch_jobs}}', $update, ['job_id' => $jobId])->execute();
+
+        if ($finished) {
+            $db->createCommand()->delete('{{%automatch_pairs}}', ['job_id' => $jobId])->execute();
+        }
+
+        $row = array_merge($row, $update);
+        return $this->progressResponse($row, $state, $finished);
+    }
+
+    /**
+     * Останавливает выполняемое задание автоквитования и освобождает замок.
+     *
+     * Уже сквитованные на момент остановки пары остаются сквитованными —
+     * откатывается только незавершённый прогон (статус задания и рабочая
+     * таблица пар).
+     *
+     * @param string $jobId ID задания.
+     * @param int|null $companyId Ограничение по компании (tenant), если задано.
+     * @return array Результат остановки.
+     */
+    public function autoMatchCancel(string $jobId, ?int $companyId = null): array
+    {
+        $db  = Yii::$app->db;
+        $row = $db->createCommand('SELECT status, company_id FROM {{%automatch_jobs}} WHERE job_id = :j', [':j' => $jobId])->queryOne();
+        if (!$row) {
+            return ['success' => true, 'message' => 'Задание не найдено (возможно, уже завершено)'];
+        }
+        if ($companyId !== null && (int) $row['company_id'] !== $companyId) {
+            return ['success' => false, 'message' => 'Нет доступа к заданию'];
+        }
+
+        $db->createCommand()->delete('{{%automatch_pairs}}', ['job_id' => $jobId])->execute();
+        if ($row['status'] === 'running') {
+            $now = date('Y-m-d H:i:s');
+            $db->createCommand()->update('{{%automatch_jobs}}', [
+                'status'      => 'canceled',
+                'finished_at' => $now,
+                'updated_at'  => $now,
+            ], ['job_id' => $jobId])->execute();
+        }
+        return ['success' => true, 'message' => 'Автоквитование остановлено'];
+    }
+
+    /**
+     * Выполняет одну ограниченную единицу работы задания (мутирует `$state`).
+     *
+     * Каждый вызов делает не более одной тяжёлой SQL-операции: материализацию
+     * пар пула или обновление одной порции пар. Лёгкая «навигация» (старт
+     * правила, завершение пула/правила) при необходимости выполняется и
+     * заканчивается на ближайшей тяжёлой операции.
+     *
+     * @param array $state Состояние машины (по ссылке).
+     * @param string $jobId ID задания (для рабочей таблицы пар).
+     * @return void
+     */
+    private function advanceJob(array &$state, string $jobId): void
+    {
+        $db        = Yii::$app->db;
+        $companyId = (int) $state['company_id'];
+        $accountId = $state['account_id'] !== null ? (int) $state['account_id'] : null;
+        $scopeIds  = $state['scope_account_ids'];
+
+        if ($state['current_rule'] >= count($state['rule_ids'])) {
+            return; // уже всё
+        }
+
+        $ruleId = (int) $state['rule_ids'][$state['current_rule']];
+        $rule   = MatchingRule::findOne($ruleId);
+
+        // Правило исчезло или без условий JOIN — закрываем как 0 пар.
+        if (!$rule || empty($this->buildJoinConditions($rule))) {
+            $state['step_results'][] = [
+                'rule_id' => $ruleId, 'rule_name' => $rule ? $rule->name : '?', 'matched' => 0, 'error' => null,
+            ];
+            $this->advanceToNextRule($state);
+            return;
+        }
+
+        $state['current_rule_name'] = $rule->name;
+
+        // Лениво резолвим пулы правила.
+        if ($state['rule_pools'] === null) {
+            $state['rule_pools']      = $this->resolvePoolIds($companyId, $accountId, $scopeIds);
+            $state['pool_index']      = 0;
+            $state['phase']           = 'search';
+            $state['rule_matched']    = 0;
+            $state['pool_pair_total'] = 0;
+            $state['pool_offset']     = 0;
+            if (empty($state['rule_pools'])) {
+                $state['step_results'][] = ['rule_id' => $ruleId, 'rule_name' => $rule->name, 'matched' => 0, 'error' => null];
+                $this->advanceToNextRule($state);
+                return;
             }
         }
 
-        $state['total_matched'] += $matched;
-        $state['step_results'][] = [
-            'rule_id'   => $ruleId,
-            'rule_name' => $rule ? $rule->name : '?',
-            'matched'   => $matched,
-            'error'     => $error,
-        ];
-        $state['current_step'] = $step + 1;
-
-        if ($state['current_step'] >= $state['total_steps']) {
-            $state['is_finished'] = true;
+        // Все пулы правила пройдены — закрываем правило.
+        if ($state['pool_index'] >= count($state['rule_pools'])) {
+            $state['step_results'][] = [
+                'rule_id' => $ruleId, 'rule_name' => $rule->name, 'matched' => (int) $state['rule_matched'], 'error' => null,
+            ];
+            $this->advanceToNextRule($state);
+            return;
         }
 
-        Yii::$app->cache->set($cacheKey, $state, 3600);
+        $poolId  = (int) $state['rule_pools'][$state['pool_index']];
+        $accIds  = $this->poolAccountIds($companyId, $poolId, $scopeIds);
+        if (empty($accIds)) {
+            $state['pool_index']++;
+            $state['phase'] = 'search';
+            return;
+        }
+
+        $accList = implode(',', array_map('intval', $accIds));
+        $filterA = $accountId
+            ? "AND a.account_id = {$accountId}"
+            : "AND a.account_id IN ({$accList})";
+
+        if ($state['phase'] === 'search') {
+            // ── Материализация пар текущего пула в automatch_pairs ──
+            $state['display_phase'] = 'searching';
+            $db->createCommand()->delete('{{%automatch_pairs}}', ['job_id' => $jobId])->execute();
+            $pairsSelect = $this->poolPairsSelect($rule, $companyId, $accList, $filterA);
+            $db->createCommand("
+                INSERT INTO {{%automatch_pairs}} (job_id, rn, id_a, id_b)
+                SELECT :job, row_number() OVER (ORDER BY id_a), id_a, id_b
+                FROM ({$pairsSelect}) p
+            ", [':job' => $jobId])->execute();
+
+            $cnt = (int) $db->createCommand(
+                'SELECT count(*) FROM {{%automatch_pairs}} WHERE job_id = :j', [':j' => $jobId]
+            )->queryScalar();
+
+            if ($cnt === 0) {
+                // Пул исчерпан — переходим к следующему.
+                $state['pool_index']++;
+                $state['phase'] = 'search';
+                return;
+            }
+
+            $state['pool_pair_total'] = $cnt;
+            $state['pool_offset']     = 0;
+            $state['phase']           = 'update';
+            return;
+        }
+
+        // ── phase 'update': обновляем очередную порцию пар ──
+        $state['display_phase'] = 'matching';
+        $lo = (int) $state['pool_offset'];
+        $hi = $lo + self::STEP_UPDATE_PAIRS;
+
+        $now    = date('Y-m-d H:i:s');
+        $userId = (Yii::$app instanceof \yii\web\Application && !Yii::$app->user->isGuest)
+            ? (int) Yii::$app->user->id : null;
+        $userIdSql = $userId !== null ? $userId : 'NULL';
+
+        $affected = $db->createCommand("
+            WITH chunk AS (
+                SELECT id_a, id_b,
+                       'MTCH' || lpad(nextval('match_id_seq')::text, 8, '0') AS mid
+                FROM {{%automatch_pairs}}
+                WHERE job_id = :job AND rn > {$lo} AND rn <= {$hi}
+            ),
+            to_update AS (
+                SELECT id_a AS eid, mid FROM chunk
+                UNION ALL
+                SELECT id_b AS eid, mid FROM chunk
+            )
+            UPDATE nostro_entries ne
+            SET match_id     = u.mid,
+                match_status = 'M',
+                matched_at   = '{$now}',
+                updated_at   = '{$now}',
+                updated_by   = {$userIdSql}
+            FROM to_update u
+            WHERE ne.id = u.eid
+        ", [':job' => $jobId])->execute();
+
+        $pairs = (int) ($affected / 2);
+        $state['rule_matched']  += $pairs;
+        $state['total_matched'] += $pairs;
+        $state['pool_offset']    = $hi;
+
+        if ($state['pool_offset'] >= $state['pool_pair_total']) {
+            // Порция пула закончилась — перематериализуем этот же пул, чтобы
+            // добрать «проигравших» в конкуренции за общую b (обычно их нет).
+            $state['phase'] = 'search';
+        }
+    }
+
+    /**
+     * Сбрасывает под-состояние пула и переводит машину к следующему правилу.
+     *
+     * @param array $state Состояние машины (по ссылке).
+     * @return void
+     */
+    private function advanceToNextRule(array &$state): void
+    {
+        $state['current_rule']++;
+        $state['rule_pools']      = null;
+        $state['pool_index']      = 0;
+        $state['phase']           = 'search';
+        $state['pool_pair_total'] = 0;
+        $state['pool_offset']     = 0;
+        $state['rule_matched']    = 0;
+        if ($state['current_rule'] < count($state['rule_ids'])) {
+            $next = MatchingRule::findOne((int) $state['rule_ids'][$state['current_rule']]);
+            $state['current_rule_name'] = $next ? $next->name : null;
+        }
+    }
+
+    /**
+     * Помечает зависшие running-задания компании как прерванные и чистит пары.
+     *
+     * Защищает от вечного замка, если пользователь закрыл вкладку посреди
+     * прогона: задание без активности дольше {@see JOB_STALE_SECONDS} реклеймится.
+     *
+     * @param int $companyId ID компании.
+     * @return void
+     */
+    private function reclaimStaleJobs(int $companyId): void
+    {
+        $db = Yii::$app->db;
+        $stale = $db->createCommand(
+            "SELECT job_id FROM {{%automatch_jobs}}
+              WHERE company_id = :c AND status = 'running'
+                AND updated_at < (now() - (:sec || ' seconds')::interval)",
+            [':c' => $companyId, ':sec' => self::JOB_STALE_SECONDS]
+        )->queryColumn();
+
+        foreach ($stale as $jid) {
+            $db->createCommand()->delete('{{%automatch_pairs}}', ['job_id' => $jid])->execute();
+            $db->createCommand()->update('{{%automatch_jobs}}', [
+                'status'        => 'error',
+                'error_message' => 'Прервано: нет активности',
+                'finished_at'   => date('Y-m-d H:i:s'),
+            ], ['job_id' => $jid])->execute();
+        }
+    }
+
+    /**
+     * Возвращает список ID пулов компании в области автоквитования.
+     *
+     * @param int $companyId ID компании.
+     * @param int|null $accountId Ограничение по конкретному счёту.
+     * @param int[]|null $limitAccountIds Список допустимых счетов из scope.
+     * @return int[] ID пулов.
+     */
+    private function resolvePoolIds(int $companyId, ?int $accountId, ?array $limitAccountIds): array
+    {
+        $db  = Yii::$app->db;
+        $sql = "SELECT DISTINCT pool_id FROM accounts WHERE company_id = {$companyId} AND pool_id IS NOT NULL";
+        if ($accountId) {
+            $sql .= " AND id = {$accountId}";
+        }
+        if ($limitAccountIds !== null) {
+            if (empty($limitAccountIds)) {
+                return [];
+            }
+            $list = implode(',', array_map('intval', $limitAccountIds));
+            $sql .= " AND id IN ({$list})";
+        }
+        return array_map('intval', $db->createCommand($sql)->queryColumn());
+    }
+
+    /**
+     * Возвращает счета пула в пределах компании и (опц.) scope-ограничения.
+     *
+     * @param int $companyId ID компании.
+     * @param int $poolId ID ностро-банка.
+     * @param int[]|null $limitAccountIds Список допустимых счетов из scope.
+     * @return int[] ID счетов.
+     */
+    private function poolAccountIds(int $companyId, int $poolId, ?array $limitAccountIds): array
+    {
+        $db  = Yii::$app->db;
+        $ids = array_map('intval', $db->createCommand(
+            "SELECT id FROM accounts WHERE pool_id = {$poolId} AND company_id = {$companyId}"
+        )->queryColumn());
+        if ($limitAccountIds !== null) {
+            $ids = array_values(array_intersect($ids, array_map('intval', $limitAccountIds)));
+        }
+        return $ids;
+    }
+
+    /**
+     * Строит SELECT уникальных пар (id_a, id_b) одного пула для правила.
+     *
+     * `DISTINCT ON (a.id)` — каждая запись a не более чем в одной паре;
+     * `DISTINCT ON (id_b)` — каждая запись b не более чем в одной паре.
+     * Используется и в `runRule` (синхронно), и в `advanceJob` (пошагово).
+     *
+     * @param MatchingRule $rule Правило автоквитования.
+     * @param int $companyId ID компании.
+     * @param string $accList CSV-список ID счетов пула.
+     * @param string $filterA Доп. фильтр стороны a (по конкретному счёту или пулу).
+     * @return string SQL-выражение SELECT id_a, id_b.
+     */
+    private function poolPairsSelect(MatchingRule $rule, int $companyId, string $accList, string $filterA): string
+    {
+        [$typeA, $typeB] = $this->pairTypes($rule->pair_type);
+        $joinSql     = implode(' AND ', $this->buildJoinConditions($rule));
+        $dcCondition = $rule->match_dc
+            ? "AND ((a.dc = 'Debit' AND b.dc = 'Credit') OR (a.dc = 'Credit' AND b.dc = 'Debit'))"
+            : '';
+        $sameSideCondition = ($typeA === $typeB) ? 'AND a.id < b.id' : '';
+
+        return "
+            WITH l_matches AS (
+                SELECT DISTINCT ON (a.id)
+                    a.id AS id_a,
+                    b.id AS id_b
+                FROM nostro_entries a
+                JOIN nostro_entries b
+                    ON b.company_id = {$companyId}
+                   AND b.ls         = '{$typeB}'
+                   AND b.match_status = 'U'
+                   AND b.account_id IN ({$accList})
+                   AND b.id <> a.id
+                   {$sameSideCondition}
+                   AND {$joinSql}
+                   {$dcCondition}
+                WHERE
+                    a.company_id   = {$companyId}
+                    AND a.ls       = '{$typeA}'
+                    AND a.match_status = 'U'
+                    {$filterA}
+                ORDER BY a.id, b.id
+            ),
+            s_dedup AS (
+                SELECT DISTINCT ON (id_b) id_a, id_b
+                FROM l_matches
+                ORDER BY id_b, id_a
+            )
+            SELECT id_a, id_b FROM s_dedup
+        ";
+    }
+
+    /**
+     * Формирует JSON-ответ с прогрессом задания для UI.
+     *
+     * @param array $row Строка `automatch_jobs` (или её обновлённая копия).
+     * @param array $state Состояние машины.
+     * @param bool $finished Завершено ли задание.
+     * @return array Прогресс: сквитовано, осталось, процент, фаза, итоги по правилам.
+     */
+    private function progressResponse(array $row, array $state, bool $finished): array
+    {
+        $matched   = (int) ($row['matched_pairs'] ?? 0);
+        $totalU    = (int) ($row['total_unmatched'] ?? 0);
+        $processed = $matched * 2;
+        $percent   = $finished
+            ? 100
+            : ($totalU > 0 ? min(99, (int) floor($processed / $totalU * 100)) : 0);
 
         return [
-            'success'        => true,
-            'is_finished'    => $state['is_finished'],
-            'current_step'   => $state['current_step'],
-            'total_steps'    => $state['total_steps'],
-            'total_matched'  => $state['total_matched'],
-            'last_rule_name' => $rule ? $rule->name : '?',
-            'last_matched'   => $matched,
-            'last_error'     => $error,
-            'step_results'   => $state['step_results'],
+            'success'             => true,
+            'is_finished'         => $finished,
+            'status'              => $row['status'] ?? ($finished ? 'finished' : 'running'),
+            'total_matched'       => $matched,
+            'matched_pairs'       => $matched,
+            'total_unmatched'     => $totalU,
+            'remaining_unmatched' => max(0, $totalU - $processed),
+            'percent'             => $percent,
+            'phase'               => $finished ? 'finished' : ($row['phase'] ?? 'matching'),
+            'current_rule_name'   => $row['current_rule_name'] ?? null,
+            'current_rule_index'  => $state['current_rule'] ?? null,
+            'total_steps'         => isset($state['rule_ids']) ? count($state['rule_ids']) : null,
+            'step_results'        => $state['step_results'] ?? [],
+            'message'             => $finished ? ('Автоквитование завершено. Сквитовано пар: ' . $matched) : null,
         ];
     }
 
     /**
      * Выполняет одно правило автоквитования.
      *
-     * Стратегия:
+     * Стратегия (оптимизирована для больших объёмов):
      *   1. Обрабатываем по одному ностро-банку (pool) за раз — меньший рабочий набор.
-     *   2. DISTINCT ON вместо ROW_NUMBER: с индексом idx_ne_unmatched_scan PostgreSQL
-     *      сканирует записи в порядке id и останавливается на LIMIT, не материализуя
-     *      все пары заранее.
-     *   3. Всё обновление — в одном SQL (CTE + UPDATE), PHP не держит данные в памяти.
+     *   2. За один проход находим ВСЕ уникальные пары пула (DISTINCT ON по обеим
+     *      сторонам) и материализуем их во временную таблицу. Этот SELECT идёт по
+     *      partial-индексам незаквитованных записей и быстр даже на сотнях тысяч
+     *      строк — в отличие от прежнего LIMIT-батча, который заставлял планировщик
+     *      пересортировывать весь набор пар на каждой итерации (O(n²)).
+     *   3. Сам UPDATE (смена match_status → M обновляет много индексов) выполняется
+     *      порциями по {$updateChunk} пар, каждая в своей короткой транзакции —
+     *      блокировки не держатся на всём пуле сразу.
+     *   4. Внешний do-while повторяет проход, пока находятся новые пары: так
+     *      «проигравшие» в конкуренции за общую b записи дойдут на следующем проходе.
      *
      * Побочный эффект: пакетно обновляет найденные записи в `nostro_entries`,
      * присваивает новый `match_id`, статус `M`, `matched_at` и служебные поля.
@@ -512,29 +916,19 @@ class MatchingService
     {
         $db = Yii::$app->db;
 
-        [$typeA, $typeB] = $this->pairTypes($rule->pair_type);
-
-        $joinConditions = $this->buildJoinConditions($rule);
-        if (empty($joinConditions)) {
+        // Условия пары строятся внутри poolPairsSelect(); здесь только ранний
+        // выход, если правило не содержит ни одного условия JOIN.
+        if (empty($this->buildJoinConditions($rule))) {
             return 0;
         }
-
-        $joinSql     = implode(' AND ', $joinConditions);
-        $dcCondition = $rule->match_dc
-            ? "AND ((a.dc = 'Debit' AND b.dc = 'Credit') OR (a.dc = 'Credit' AND b.dc = 'Debit'))"
-            : '';
-
-        // Для LL/SS: оба типа одинаковы → пара (a,b) и (b,a) найдутся обе.
-        // a.id < b.id гарантирует, что каждая пара найдётся ровно один раз.
-        $sameSideCondition = ($typeA === $typeB) ? 'AND a.id < b.id' : '';
 
         $now       = date('Y-m-d H:i:s');
         $userId    = (Yii::$app instanceof \yii\web\Application && !Yii::$app->user->isGuest)
             ? (int) Yii::$app->user->id
             : null;
         $userIdSql = $userId !== null ? $userId : 'NULL';
-        $batchSize = 5000;
-        $total     = 0;
+        $updateChunk = 10000; // пар на одну UPDATE-транзакцию
+        $total       = 0;
 
         // ── Получаем список пулов для обработки ───────────────────────────────
         $poolQuery = "
@@ -578,70 +972,70 @@ class MatchingService
                 ? "AND a.account_id = {$accountId}"
                 : "AND a.account_id IN ({$accList})";
 
-            // DISTINCT ON (a.id) ORDER BY a.id, b.id:
-            //   PostgreSQL использует idx_ne_unmatched_scan для обхода a в порядке id,
-            //   для каждой a находит первую подходящую b через idx_ne_automatch_v2,
-            //   и останавливается после LIMIT — без сортировки всего набора пар.
-            $sql = "
-                WITH l_matches AS (
-                    SELECT DISTINCT ON (a.id)
-                        a.id AS id_a,
-                        b.id AS id_b
-                    FROM nostro_entries a
-                    JOIN nostro_entries b
-                        ON b.company_id = {$companyId}
-                       AND b.ls         = '{$typeB}'
-                       AND b.match_status = 'U'
-                       AND b.account_id IN ({$accList})
-                       AND b.id <> a.id
-                       {$sameSideCondition}
-                       AND {$joinSql}
-                       {$dcCondition}
-                    WHERE
-                        a.company_id   = {$companyId}
-                        AND a.ls       = '{$typeA}'
-                        AND a.match_status = 'U'
-                        {$filterA}
-                    ORDER BY a.id, b.id
-                    LIMIT {$batchSize}
-                ),
-                s_dedup AS (
-                    -- Гарантируем что каждая запись b входит максимум в одну пару
-                    SELECT DISTINCT ON (id_b) id_a, id_b
-                    FROM l_matches
-                    ORDER BY id_b, id_a
-                ),
-                numbered AS (
-                    SELECT id_a, id_b,
-                           'MTCH' || lpad(nextval('match_id_seq')::text, 8, '0') AS mid
-                    FROM s_dedup
-                ),
-                to_update AS (
-                    SELECT id_a AS eid, mid FROM numbered
-                    UNION ALL
-                    SELECT id_b AS eid, mid FROM numbered
-                )
-                UPDATE nostro_entries ne
-                SET match_id     = u.mid,
-                    match_status = 'M',
-                    matched_at   = '{$now}',
-                    updated_at   = '{$now}',
-                    updated_by   = {$userIdSql}
-                FROM to_update u
-                WHERE ne.id = u.eid
+            // Запрос материализации всех уникальных пар пула во временную таблицу.
+            // Общий с пошаговым автоквитованием SELECT (poolPairsSelect):
+            //   DISTINCT ON (a.id) — каждая запись a участвует не более чем в одной паре;
+            //   DISTINCT ON (id_b) — каждая запись b участвует не более чем в одной паре.
+            // Идёт по partial-индексам незаквитованных записей, без LIMIT и без
+            // материализации всего декартова набора пар.
+            $pairsSelect = $this->poolPairsSelect($rule, $companyId, $accList, $filterA);
+            $materializeSql = "
+                CREATE TEMP TABLE _am_pairs AS
+                SELECT id_a, id_b, row_number() OVER (ORDER BY id_a) AS rn
+                FROM ({$pairsSelect}) p
             ";
 
+            // Внешний цикл: повторяем, пока находятся новые пары (конкуренция за b).
             do {
-                $transaction = $db->beginTransaction();
-                try {
-                    $affected = $db->createCommand($sql)->execute();
-                    $transaction->commit();
-                } catch (\Exception $e) {
-                    $transaction->rollBack();
-                    throw $e;
+                $db->createCommand('DROP TABLE IF EXISTS _am_pairs')->execute();
+                $db->createCommand($materializeSql)->execute();
+
+                $pairCount = (int) $db->createCommand('SELECT count(*) FROM _am_pairs')->queryScalar();
+                if ($pairCount === 0) {
+                    $db->createCommand('DROP TABLE IF EXISTS _am_pairs')->execute();
+                    break;
                 }
-                $total += (int) ($affected / 2);
-            } while ($affected > 0);
+                $db->createCommand('CREATE INDEX ON _am_pairs (rn)')->execute();
+
+                // Обновляем порциями по {$updateChunk} пар — короткие транзакции.
+                for ($lo = 0; $lo < $pairCount; $lo += $updateChunk) {
+                    $hi = $lo + $updateChunk;
+                    $sql = "
+                        WITH chunk AS (
+                            SELECT id_a, id_b,
+                                   'MTCH' || lpad(nextval('match_id_seq')::text, 8, '0') AS mid
+                            FROM _am_pairs
+                            WHERE rn > {$lo} AND rn <= {$hi}
+                        ),
+                        to_update AS (
+                            SELECT id_a AS eid, mid FROM chunk
+                            UNION ALL
+                            SELECT id_b AS eid, mid FROM chunk
+                        )
+                        UPDATE nostro_entries ne
+                        SET match_id     = u.mid,
+                            match_status = 'M',
+                            matched_at   = '{$now}',
+                            updated_at   = '{$now}',
+                            updated_by   = {$userIdSql}
+                        FROM to_update u
+                        WHERE ne.id = u.eid
+                    ";
+
+                    $transaction = $db->beginTransaction();
+                    try {
+                        $affected = $db->createCommand($sql)->execute();
+                        $transaction->commit();
+                    } catch (\Exception $e) {
+                        $transaction->rollBack();
+                        $db->createCommand('DROP TABLE IF EXISTS _am_pairs')->execute();
+                        throw $e;
+                    }
+                    $total += (int) ($affected / 2);
+                }
+
+                $db->createCommand('DROP TABLE IF EXISTS _am_pairs')->execute();
+            } while ($pairCount > 0);
         }
 
         return $total;

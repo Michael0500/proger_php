@@ -244,6 +244,27 @@ class MatchingController extends BaseController
         return $this->service()->autoMatchStep($jobId);
     }
 
+    /**
+     * Останавливает выполняемое задание автоквитования.
+     *
+     * POST `/matching/auto-match-cancel`, body: `job_id`. Используется UI при
+     * отмене пользователем или закрытии прогресса. Уже сквитованные пары
+     * остаются сквитованными; освобождается замок от двойного запуска.
+     *
+     * @return array JSON-результат остановки.
+     */
+    public function actionAutoMatchCancel(): array
+    {
+        Yii::$app->response->format = Response::FORMAT_JSON;
+
+        $jobId = Yii::$app->request->post('job_id');
+        if (!$jobId) {
+            return ['success' => false, 'message' => 'Не указан job_id'];
+        }
+
+        return $this->service()->autoMatchCancel($jobId, $this->companyId());
+    }
+
     // ── Просмотр сквитованной группы ─────────────────────────────────
 
     /**

@@ -41,11 +41,13 @@
                     <button class="toolbar-btn primary" :disabled="autoMatchRunning" @click="runAutoMatch(null)">
                         <i :class="autoMatchRunning ? 'fas fa-spinner fa-spin' : 'fas fa-magic'"></i>
                         <template v-if="autoMatchRunning && autoMatchProgress">
-                            Правило {{ autoMatchProgress.current_step }}/{{ autoMatchProgress.total_steps }}
-                            (пар: {{ autoMatchProgress.total_matched }})
+                            {{ autoMatchProgress.percent }}% (пар: {{ autoMatchProgress.total_matched }})
                         </template>
                         <template v-else-if="autoMatchRunning">Запуск...</template>
                         <template v-else>Автоквитование</template>
+                    </button>
+                    <button v-if="autoMatchRunning" class="toolbar-btn outline" @click="cancelAutoMatch()" title="Остановить автоквитование">
+                        <i class="fas fa-stop"></i>Стоп
                     </button>
                     <button class="toolbar-btn success" :disabled="!hasSelection" @click="matchSelected">
                         <i class="fas fa-link"></i>
@@ -75,19 +77,29 @@
             <div v-if="autoMatchProgress && autoMatchRunning" class="auto-match-progress-bar">
                 <div class="d-flex align-items-center justify-content-between mb-1">
                     <small class="text-muted">
-                        <i class="fas fa-cog fa-spin me-1"></i>
-                        <template v-if="autoMatchProgress.current_step < autoMatchProgress.total_steps">
-                            Обрабатывается правило {{ autoMatchProgress.current_step + 1 }} из {{ autoMatchProgress.total_steps }}:
-                            <b>{{ autoMatchProgress.rules[autoMatchProgress.current_step] ? autoMatchProgress.rules[autoMatchProgress.current_step].name : '' }}</b>
+                        <i :class="autoMatchProgress.phase === 'searching' ? 'fas fa-search me-1' : 'fas fa-cog fa-spin me-1'"></i>
+                        <template v-if="autoMatchProgress.phase === 'searching'">
+                            Поиск пар: <b>{{ autoMatchProgress.current_rule_name }}</b>
                         </template>
-                        <template v-else>Завершение...</template>
+                        <template v-else>
+                            Квитование: <b>{{ autoMatchProgress.current_rule_name }}</b>
+                        </template>
                     </small>
-                    <small class="fw-bold">Сквитовано пар: {{ autoMatchProgress.total_matched }}</small>
+                    <small class="fw-bold">{{ autoMatchProgress.percent }}%</small>
                 </div>
                 <div class="progress" style="height:6px">
                     <div class="progress-bar bg-primary progress-bar-striped progress-bar-animated"
-                         :style="{ width: (autoMatchProgress.total_steps > 0 ? (autoMatchProgress.current_step / autoMatchProgress.total_steps * 100) : 0) + '%' }">
+                         :style="{ width: autoMatchProgress.percent + '%' }">
                     </div>
+                </div>
+                <div class="d-flex align-items-center justify-content-between mt-1">
+                    <small class="text-muted">
+                        Сквитовано пар: <b>{{ autoMatchProgress.total_matched }}</b>
+                        · осталось ≈ <b>{{ autoMatchProgress.remaining_unmatched }}</b> зап.
+                    </small>
+                    <small class="text-muted">
+                        <i class="far fa-clock me-1"></i>осталось: {{ autoMatchProgress.eta_text }}
+                    </small>
                 </div>
                 <div v-if="autoMatchProgress.step_results && autoMatchProgress.step_results.length" class="mt-1">
                     <small v-for="sr in autoMatchProgress.step_results" :key="sr.rule_id" class="d-block text-muted" style="font-size:11px">
