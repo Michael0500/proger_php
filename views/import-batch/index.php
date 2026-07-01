@@ -62,11 +62,14 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                     <span v-if="b.is_processing" class="imp-status imp-status-proc">
                         <i class="fas fa-spinner fa-spin"></i> Выполняется ({{ b.processing_owner === 'manual' ? 'вручную' : 'фоном' }})
                     </span>
-                    <span v-else-if="!b.is_merged" class="imp-status imp-status-pending">
-                        <i class="fas fa-clock"></i> Ожидает загрузки
-                    </span>
                     <span v-else-if="b.is_rolled_back" class="imp-status imp-status-rolled" :title="'Откатано: ' + fmtDateTime(b.rolled_back_at)">
                         <i class="fas fa-undo"></i> Откатано
+                    </span>
+                    <span v-else-if="!b.is_merged && hasData(b)" class="imp-status imp-status-partial">
+                        <i class="fas fa-exclamation-triangle"></i> Загружено частично
+                    </span>
+                    <span v-else-if="!b.is_merged" class="imp-status imp-status-pending">
+                        <i class="fas fa-clock"></i> Ожидает загрузки
                     </span>
                     <span v-else-if="b.matched > 0" class="imp-status imp-status-locked">
                         <i class="fas fa-link"></i> Есть матчи ({{ b.matched }})
@@ -77,6 +80,11 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                     <span v-else class="imp-status imp-status-ok">
                         <i class="fas fa-check"></i> Импортировано
                     </span>
+                    <div v-if="b.skipped_accounts && b.skipped_accounts.length" class="imp-missing"
+                         :title="'Этих счетов нет в системе — их строки не загружены:\n' + b.skipped_accounts.join('\n')">
+                        <i class="fas fa-triangle-exclamation"></i>
+                        Нет счетов в системе ({{ b.skipped_accounts.length }}): {{ missingAccountsShort(b.skipped_accounts) }}
+                    </div>
                 </td>
                 <td style="text-align:center;white-space:nowrap">
                     <a class="imp-link" :href="entriesUrl(b.id)" title="Открыть записи пакета в выверке по всем банкам">
@@ -87,15 +95,17 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                     </a>
                 </td>
                 <td style="text-align:right">
-                    <button v-if="b.can_load" class="btn-action btn-load" @click="confirmLoad(b)" :disabled="loadingId === b.id">
-                        <i class="fas" :class="loadingId === b.id ? 'fa-spinner fa-spin' : 'fa-play'"></i>
-                        <span class="ms-1">Запустить загрузку</span>
-                    </button>
-                    <button v-else-if="b.can_rollback" class="btn-action btn-danger-soft" @click="confirmRollback(b)" :disabled="rollingId === b.id">
-                        <i class="fas" :class="rollingId === b.id ? 'fa-spinner fa-spin' : 'fa-undo'"></i>
-                        <span class="ms-1">Откатить</span>
-                    </button>
-                    <span v-else style="font-size:11px;color:#9ca3af">{{ (!b.is_merged ? b.load_reason : b.reason) || '—' }}</span>
+                    <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap">
+                        <button v-if="b.can_load" class="btn-action btn-load" @click="confirmLoad(b)" :disabled="loadingId === b.id">
+                            <i class="fas" :class="loadingId === b.id ? 'fa-spinner fa-spin' : 'fa-play'"></i>
+                            <span class="ms-1">{{ hasData(b) ? 'Догрузить' : 'Запустить загрузку' }}</span>
+                        </button>
+                        <button v-if="b.can_rollback" class="btn-action btn-danger-soft" @click="confirmRollback(b)" :disabled="rollingId === b.id">
+                            <i class="fas" :class="rollingId === b.id ? 'fa-spinner fa-spin' : 'fa-undo'"></i>
+                            <span class="ms-1">Откатить</span>
+                        </button>
+                        <span v-if="!b.can_load && !b.can_rollback" style="font-size:11px;color:#9ca3af">{{ (!b.is_merged ? b.load_reason : b.reason) || '—' }}</span>
+                    </div>
                 </td>
             </tr>
             <tr v-if="!batches.length">
@@ -126,6 +136,11 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
 .imp-status-rolled  { background:#f3f4f6; color:#6b7280; }
 .imp-status-pending { background:#e0e7ff; color:#3730a3; }
 .imp-status-proc    { background:#dbeafe; color:#1d4ed8; }
+.imp-status-partial { background:#ffedd5; color:#9a3412; }
+
+.imp-missing { margin-top:5px; font-size:10.5px; font-weight:600; color:#b45309; line-height:1.35;
+    max-width:260px; margin-left:auto; margin-right:auto; cursor:help; }
+.imp-missing i { margin-right:3px; }
 
 .btn-load { background:#eef2ff; color:#4338ca; border:none; border-radius:8px; padding:5px 12px; font-size:12px; font-weight:600; cursor:pointer; }
 .btn-load:hover { background:#e0e7ff; }
@@ -175,6 +190,14 @@ document.addEventListener('DOMContentLoaded', function () {
             displayCount: function (imported, live) {
                 if (imported === null || imported === undefined) return live;
                 return imported;
+            },
+            hasData: function (b) {
+                return (b.live_entries > 0) || (b.live_balances > 0);
+            },
+            missingAccountsShort: function (list) {
+                if (!list || !list.length) return '';
+                if (list.length <= 3) return list.join(', ');
+                return list.slice(0, 3).join(', ') + ' и ещё ' + (list.length - 3);
             },
             reload: function () {
                 var self = this;

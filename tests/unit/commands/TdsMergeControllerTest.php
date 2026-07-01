@@ -386,7 +386,7 @@ class TdsMergeControllerTest extends \Codeception\Test\Unit
      */
     public function testEd211WritesEdFields(): void
     {
-        $this->seedAccount('CB_ED-ACC', 'RUB');
+        $this->seedAccount('ED-ACC', 'RUB');
         $this->insertStatus('ED211');
         $this->insertHdr([
             'stmt_id' => 900, 'format_type' => 'ED211', 'account_no' => 'ED-ACC',

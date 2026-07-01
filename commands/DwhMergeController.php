@@ -177,7 +177,7 @@ class DwhMergeController extends Controller
     public function processOne(int $statusId, string $owner = 'background'): array
     {
         if (!$this->acquireProcessingLock($statusId, $owner)) {
-            return ['busy' => true, 'ok' => false, 'balances' => 0, 'entries' => 0, 'skipped' => 0, 'summary' => $this->emptySummary(), 'error' => null];
+            return ['busy' => true, 'ok' => false, 'balances' => 0, 'entries' => 0, 'skipped' => 0, 'skipped_accounts' => [], 'summary' => $this->emptySummary(), 'error' => null];
         }
 
         $db = Yii::$app->db;
@@ -186,11 +186,18 @@ class DwhMergeController extends Controller
             $tx = $db->beginTransaction();
             try {
                 $this->currentBatchId = $statusId;
-                $summary = $this->mergePending($this->deleteSource);
+                [$summary, $skippedAccounts] = $this->mergePending($this->deleteSource);
 
                 if ($summary['source_rows'] === 0) {
                     $this->out("│  Нет строк suspend_posting для обработки.\n", Console::FG_GREY);
                 }
+
+                // Причина частичной загрузки — какие счета не найдены в системе.
+                $db->createCommand()->update('{{%tds_status}}', [
+                    'skipped_accounts' => empty($skippedAccounts)
+                        ? null
+                        : json_encode(array_values($skippedAccounts), JSON_UNESCAPED_UNICODE),
+                ], ['id' => $statusId])->execute();
 
                 $allOk = $summary['skipped_rows'] === 0;
                 if ($allOk) {
@@ -210,12 +217,13 @@ class DwhMergeController extends Controller
                     'balances' => $summary['balances'],
                     'entries'  => $summary['entries'],
                     'skipped'  => $summary['skipped_rows'],
+                    'skipped_accounts' => array_values($skippedAccounts),
                     'summary'  => $summary,
                     'error'    => null,
                 ];
             } catch (\Throwable $e) {
                 $tx->rollBack();
-                return ['busy' => false, 'ok' => false, 'balances' => 0, 'entries' => 0, 'skipped' => 0, 'summary' => $this->emptySummary(), 'error' => $e->getMessage()];
+                return ['busy' => false, 'ok' => false, 'balances' => 0, 'entries' => 0, 'skipped' => 0, 'skipped_accounts' => [], 'summary' => $this->emptySummary(), 'error' => $e->getMessage()];
             }
         } finally {
             $this->releaseProcessingLock($statusId);
@@ -226,7 +234,7 @@ class DwhMergeController extends Controller
      * Обрабатывает все строки suspend_posting, у которых is_merged=false.
      *
      * @param bool $deleteSource Удалять успешно обработанные строки источника.
-     * @return array Статистика обработки.
+     * @return array `[summary, skippedAccountNames]`.
      */
     private function mergePending(bool $deleteSource = false): array
     {
@@ -234,6 +242,7 @@ class DwhMergeController extends Controller
 
         $lastId = 0;
         $accountCache = [];
+        $skippedAccounts = [];
 
         while (true) {
             $rows = Yii::$app->db->createCommand(
@@ -253,14 +262,14 @@ class DwhMergeController extends Controller
             $summary['source_rows'] += count($rows);
             $lastId = (int)$rows[count($rows) - 1]['id'];
 
-            $this->processRows($rows, $deleteSource, $accountCache, $summary);
+            $this->processRows($rows, $deleteSource, $accountCache, $summary, $skippedAccounts);
 
             if (count($rows) < self::FETCH_CHUNK) {
                 break;
             }
         }
 
-        return $summary;
+        return [$summary, array_keys($skippedAccounts)];
     }
 
     /**
@@ -301,9 +310,10 @@ class DwhMergeController extends Controller
      * @param bool $deleteSource Удалять успешно обработанные строки.
      * @param array $accountCache Кэш `cbaccount => account_id|null`.
      * @param array $summary Статистика обработки.
+     * @param array $skippedAccounts Карта ненайденных счетов `cbaccount => true` (заполняется).
      * @return void
      */
-    private function processRows(array $rows, bool $deleteSource, array &$accountCache, array &$summary): void
+    private function processRows(array $rows, bool $deleteSource, array &$accountCache, array &$summary, array &$skippedAccounts): void
     {
         $validRows = [];
 
@@ -331,6 +341,7 @@ class DwhMergeController extends Controller
             if ($accountCache[$cbaccount] === null) {
                 $this->progress("Пропуск suspend_posting.id={$sourceId}: счёт не найден для cbaccount='{$cbaccount}'");
                 $summary['skipped_rows']++;
+                $skippedAccounts[$cbaccount] = true;
                 continue;
             }
 

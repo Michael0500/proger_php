@@ -16,8 +16,9 @@ use yii\helpers\Console;
  *   1. В tds_status ищем type = 'FCC12' И is_merged = false.
  *   2. Для каждой такой записи открываем транзакцию.
  *   3. Из gitb_nostro_extract_custom выбираем строки с extract_no = tds_status.fcc_extract_no.
- *      - строка-баланс (opening_bal/closing_bal заданы, amount пустая) → nostro_balance
- *      - строка-транзакция (amount задана) → nostro_entries
+ *      Тип строки определяется полем data_section:
+ *      - data_section = 60 → строка-баланс → nostro_balance
+ *      - data_section = 61 → строка-транзакция → nostro_entries
  *      При этом в обе таблицы пишем extract_no, line_no и branch_code.
  *   4. tds_status.is_merged := true.
  *   5. Удаляем строки из gitb_nostro_extract_custom с этим extract_no.
@@ -138,7 +139,7 @@ class FccMergeController extends Controller
     public function processOne(int $statusId, string $owner = 'background'): array
     {
         if (!$this->acquireProcessingLock($statusId, $owner)) {
-            return ['busy' => true, 'ok' => false, 'balances' => 0, 'entries' => 0, 'skipped' => 0, 'error' => null];
+            return ['busy' => true, 'ok' => false, 'balances' => 0, 'entries' => 0, 'skipped' => 0, 'skipped_accounts' => [], 'error' => null];
         }
 
         $db = Yii::$app->db;
@@ -151,7 +152,7 @@ class FccMergeController extends Controller
 
             $tx = $db->beginTransaction();
             try {
-                [$balances, $entries, $skipped] = $this->mergeExtract($extractNo, $statusId);
+                [$balances, $entries, $skipped, $skippedAccounts] = $this->mergeExtract($extractNo, $statusId);
 
                 if (!$this->keepSource) {
                     if (empty($skipped)) {
@@ -167,6 +168,13 @@ class FccMergeController extends Controller
                         )->execute();
                     }
                 }
+
+                // Причина частичной загрузки — какие счета не найдены в системе.
+                $db->createCommand()->update('{{%tds_status}}', [
+                    'skipped_accounts' => empty($skippedAccounts)
+                        ? null
+                        : json_encode(array_values($skippedAccounts), JSON_UNESCAPED_UNICODE),
+                ], ['id' => $statusId])->execute();
 
                 if (empty($skipped) && !$this->keepSource) {
                     $db->createCommand()->update('{{%tds_status}}', [
@@ -185,11 +193,12 @@ class FccMergeController extends Controller
                     'balances' => $balances,
                     'entries'  => $entries,
                     'skipped'  => count($skipped),
+                    'skipped_accounts' => array_values($skippedAccounts),
                     'error'    => null,
                 ];
             } catch (\Throwable $e) {
                 $tx->rollBack();
-                return ['busy' => false, 'ok' => false, 'balances' => 0, 'entries' => 0, 'skipped' => 0, 'error' => $e->getMessage()];
+                return ['busy' => false, 'ok' => false, 'balances' => 0, 'entries' => 0, 'skipped' => 0, 'skipped_accounts' => [], 'error' => $e->getMessage()];
             }
         } finally {
             $this->releaseProcessingLock($statusId);
@@ -205,7 +214,7 @@ class FccMergeController extends Controller
      *
      * @param int $extractNo Номер FCC12-выгрузки.
      * @param int $batchId ID пачки `tds_status` для трассировки/отката.
-     * @return array `[balancesInserted, entriesInserted, skippedLineNos]`.
+     * @return array `[balancesInserted, entriesInserted, skippedLineNos, skippedAccountNames]`.
      */
     private function mergeExtract(int $extractNo, int $batchId): array
     {
@@ -231,6 +240,7 @@ class FccMergeController extends Controller
         $entryBuf    = [];
         $balanceBuf  = [];
         $skippedLineNos = [];
+        $skippedAccounts = [];
         $totalEntries  = 0;
         $totalBalances = 0;
 
@@ -281,8 +291,13 @@ class FccMergeController extends Controller
             }
 
             foreach ($rows as $r) {
-                $isEntry   = $r['amount'] !== null && $r['amount'] !== '';
-                $isBalance = $r['opening_bal'] !== null || $r['closing_bal'] !== null;
+                // Тип строки определяется полем data_section:
+                //   60 → баланс (nostro_balance), 61 → транзакция (nostro_entries).
+                $dataSection = ($r['data_section'] === null || $r['data_section'] === '')
+                    ? null
+                    : (int)$r['data_section'];
+                $isBalance = $dataSection === 60;
+                $isEntry   = $dataSection === 61;
 
                 // строки-заголовки / хвостовики — без финансовых данных, пропускаем
                 if (!$isEntry && !$isBalance) {
@@ -309,6 +324,7 @@ class FccMergeController extends Controller
                 if (!$accountId) {
                     $this->out("│  Пропуск line_no={$r['line_no']}: счёт не найден для cbr_cc_no='{$cbrCcNo}'\n", Console::FG_YELLOW);
                     $skippedLineNos[] = (int)$r['line_no'];
+                    $skippedAccounts[$cbrCcNo] = true;
                     $lastLineNo = (int)$r['line_no'];
                     continue;
                 }
@@ -375,7 +391,7 @@ class FccMergeController extends Controller
         $flushEntries();
         $flushBalances();
 
-        return [$totalBalances, $totalEntries, $skippedLineNos];
+        return [$totalBalances, $totalEntries, $skippedLineNos, array_keys($skippedAccounts)];
     }
 
     /**

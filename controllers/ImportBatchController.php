@@ -215,10 +215,26 @@ class ImportBatchController extends BaseController
                 'reason'          => $check['reason'],
                 'can_load'        => $load['ok'],
                 'load_reason'     => $load['reason'],
+                'skipped_accounts' => $this->decodeSkippedAccounts($row['skipped_accounts'] ?? null),
             ];
         }
 
         return $result;
+    }
+
+    /**
+     * Декодирует JSON-список ненайденных счетов из `tds_status.skipped_accounts`.
+     *
+     * @param string|null $raw Сырое значение колонки.
+     * @return string[] Список имён счетов (пустой, если нет).
+     */
+    private function decodeSkippedAccounts(?string $raw): array
+    {
+        if ($raw === null || $raw === '') {
+            return [];
+        }
+        $decoded = json_decode($raw, true);
+        return is_array($decoded) ? array_values(array_filter(array_map('strval', $decoded), static fn($v) => $v !== '')) : [];
     }
 
     /**
@@ -264,6 +280,9 @@ class ImportBatchController extends BaseController
         $type = (string)$row['type'];
         if (!in_array($type, self::LOADABLE_TYPES, true)) {
             return ['ok' => false, 'reason' => 'Загрузка не применима для этого типа'];
+        }
+        if (!empty($row['is_rolled_back'])) {
+            return ['ok' => false, 'reason' => 'Пачка откатана'];
         }
         if (!empty($row['is_merged'])) {
             return ['ok' => false, 'reason' => 'Уже загружено'];
@@ -326,12 +345,17 @@ class ImportBatchController extends BaseController
         $msg = "Загружено: записей {$res['entries']}, балансов {$res['balances']}";
         if (!$res['ok']) {
             $msg .= "; пропущено {$res['skipped']} (счёт не найден) — пакет не помечен загруженным";
+            $missing = $res['skipped_accounts'] ?? [];
+            if (!empty($missing)) {
+                $msg .= ". Нет счетов в системе: " . implode(', ', $missing);
+            }
         }
 
         return [
             'success' => true,
             'message' => $msg,
             'ok'      => $res['ok'],
+            'skipped_accounts' => $res['skipped_accounts'] ?? [],
             'data'    => $this->buildBatchList($cid),
         ];
     }

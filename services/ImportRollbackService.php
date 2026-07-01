@@ -12,9 +12,11 @@ use Yii;
  * несут `batch_id = tds_status.id`. Откат удаляет эти строки вместе с их аудитом.
  *
  * Правила:
- *   - откатить можно только пачку, у которой ещё нет ни одной сквитованной записи
- *     (`match_id` задан или `match_status ∈ {M, I}`) И ни одна запись пачки не ушла
- *     в архив (`nostro_entries_archive.batch_id`);
+ *   - откатить можно пачку, у которой есть вставленные ею данные (в т.ч. частично
+ *     загруженную: `is_merged=false`, но часть строк уже в системе), при условии, что
+ *     она сейчас не обрабатывается (`is_processing=false`), у неё ещё нет ни одной
+ *     сквитованной записи (`match_id` задан или `match_status ∈ {M, I}`) И ни одна
+ *     запись пачки не ушла в архив (`nostro_entries_archive.batch_id`);
  *   - `is_merged` при откате НЕ снимается; выставляется отдельный флаг
  *     `is_rolled_back` + `rolled_back_at` / `rolled_back_by`;
  *   - исходные таблицы (ph_tds_stmt_*, suspend_posting, gitb_nostro_extract_custom)
@@ -30,15 +32,26 @@ class ImportRollbackService
      */
     public function canRollback(array $batch): array
     {
-        if (empty($batch['is_merged'])) {
-            return ['ok' => false, 'reason' => 'Пачка ещё не обработана'];
-        }
         if (!empty($batch['is_rolled_back'])) {
             return ['ok' => false, 'reason' => 'Пачка уже откатывалась'];
+        }
+        if (!empty($batch['is_processing'])) {
+            return ['ok' => false, 'reason' => 'Пачка обрабатывается'];
         }
 
         $batchId = (int)$batch['id'];
         $db = Yii::$app->db;
+
+        // Откатить можно любую пачку, у которой есть вставленные ею данные —
+        // в т.ч. частично загруженную (is_merged=false, но часть строк уже в системе).
+        $liveEntries  = (int)$db->createCommand("SELECT COUNT(*) FROM {{%nostro_entries}} WHERE batch_id = :id", [':id' => $batchId])->queryScalar();
+        $liveBalances = (int)$db->createCommand("SELECT COUNT(*) FROM {{%nostro_balance}} WHERE batch_id = :id", [':id' => $batchId])->queryScalar();
+
+        if ($liveEntries === 0 && $liveBalances === 0) {
+            return ['ok' => false, 'reason' => empty($batch['is_merged'])
+                ? 'Пачка ещё не загружена'
+                : 'Нет данных для отката (импорт до внедрения отката)'];
+        }
 
         $matched = (int)$db->createCommand(
             "SELECT COUNT(*) FROM {{%nostro_entries}}
@@ -58,13 +71,6 @@ class ImportRollbackService
 
         if ($archived > 0) {
             return ['ok' => false, 'reason' => 'Часть записей пачки уже в архиве'];
-        }
-
-        $liveEntries  = (int)$db->createCommand("SELECT COUNT(*) FROM {{%nostro_entries}} WHERE batch_id = :id", [':id' => $batchId])->queryScalar();
-        $liveBalances = (int)$db->createCommand("SELECT COUNT(*) FROM {{%nostro_balance}} WHERE batch_id = :id", [':id' => $batchId])->queryScalar();
-
-        if ($liveEntries === 0 && $liveBalances === 0) {
-            return ['ok' => false, 'reason' => 'Нет данных для отката (импорт до внедрения отката)'];
         }
 
         return ['ok' => true, 'reason' => ''];

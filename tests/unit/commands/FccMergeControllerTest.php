@@ -39,6 +39,7 @@ class FccMergeControllerTest extends \Codeception\Test\Unit
         $this->insertSourceRow([
             'extract_no' => 9001,
             'line_no' => 20,
+            'data_section' => 60,
             'cbr_cc_no' => 'FCC-ACC-001',
             'ccy' => 'USD',
             'dt' => '2026-01-10',
@@ -51,6 +52,7 @@ class FccMergeControllerTest extends \Codeception\Test\Unit
         $this->insertSourceRow([
             'extract_no' => 9001,
             'line_no' => 30,
+            'data_section' => 61,
             'cbr_cc_no' => 'FCC-ACC-001',
             'ccy' => 'USD',
             'amount' => '123.45',
@@ -117,6 +119,7 @@ class FccMergeControllerTest extends \Codeception\Test\Unit
         $this->insertSourceRow([
             'extract_no' => 9002,
             'line_no' => 5,
+            'data_section' => 61,
             'cbr_cc_no' => 'UNKNOWN-FCC',
             'ccy' => 'EUR',
             'amount' => '10.00',

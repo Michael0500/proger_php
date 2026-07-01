@@ -192,7 +192,7 @@ class TdsMergeController extends Controller
     public function processOne(int $statusId, string $owner = 'background'): array
     {
         if (!$this->acquireProcessingLock($statusId, $owner)) {
-            return ['busy' => true, 'ok' => false, 'balances' => 0, 'entries' => 0, 'skipped' => 0, 'error' => null];
+            return ['busy' => true, 'ok' => false, 'balances' => 0, 'entries' => 0, 'skipped' => 0, 'skipped_accounts' => [], 'error' => null];
         }
 
         $db = Yii::$app->db;
@@ -212,15 +212,19 @@ class TdsMergeController extends Controller
                 $batchEntries        = 0;
                 $allProcessedStmtIds = [];
                 $allSkippedHdrs      = [];
+                $allSkippedAccounts  = [];
 
                 // Все format_type обрабатываются в рамках одного пакета (batch_id = statusId).
                 foreach ($formatTypes as $formatType) {
-                    [$balances, $entries, $processedStmtIds, $skippedHdrs] = $this->mergeType($formatType, $statusId);
+                    [$balances, $entries, $processedStmtIds, $skippedHdrs, $skippedAccounts] = $this->mergeType($formatType, $statusId);
 
                     $batchBalances      += $balances;
                     $batchEntries       += $entries;
                     $allProcessedStmtIds = array_merge($allProcessedStmtIds, $processedStmtIds);
                     $allSkippedHdrs      = array_merge($allSkippedHdrs, $skippedHdrs);
+                    foreach ($skippedAccounts as $acc) {
+                        $allSkippedAccounts[$acc] = true;
+                    }
 
                     if ($balances > 0 || $entries > 0 || !empty($skippedHdrs)) {
                         $line = "│  {$formatType}: балансов {$balances}, записей {$entries}";
@@ -236,6 +240,13 @@ class TdsMergeController extends Controller
                 }
 
                 $allOk = empty($allSkippedHdrs);
+
+                // Причина частичной загрузки — какие счета не найдены в системе.
+                $db->createCommand()->update('{{%tds_status}}', [
+                    'skipped_accounts' => empty($allSkippedAccounts)
+                        ? null
+                        : json_encode(array_keys($allSkippedAccounts), JSON_UNESCAPED_UNICODE),
+                ], ['id' => $statusId])->execute();
 
                 if ($allOk) {
                     if ($this->deleteSource && !empty($allProcessedStmtIds)) {
@@ -260,11 +271,12 @@ class TdsMergeController extends Controller
                     'balances' => $batchBalances,
                     'entries'  => $batchEntries,
                     'skipped'  => count($allSkippedHdrs),
+                    'skipped_accounts' => array_keys($allSkippedAccounts),
                     'error'    => null,
                 ];
             } catch (\Throwable $e) {
                 $tx->rollBack();
-                return ['busy' => false, 'ok' => false, 'balances' => 0, 'entries' => 0, 'skipped' => 0, 'error' => $e->getMessage()];
+                return ['busy' => false, 'ok' => false, 'balances' => 0, 'entries' => 0, 'skipped' => 0, 'skipped_accounts' => [], 'error' => $e->getMessage()];
             }
         } finally {
             $this->releaseProcessingLock($statusId);
@@ -279,7 +291,7 @@ class TdsMergeController extends Controller
      *
      * @param string $type Один из {CAMT053, MT950, ED211, ED743}.
      * @param int $batchId ID пачки `tds_status` для трассировки/отката.
-     * @return array `[balancesInserted, entriesInserted, processedStmtIds, skippedStmtIds]`.
+     * @return array `[balancesInserted, entriesInserted, processedStmtIds, skippedStmtIds, skippedAccountNames]`.
      */
     private function mergeType(string $type, int $batchId): array
     {
@@ -312,6 +324,7 @@ class TdsMergeController extends Controller
 
         $processedStmtIds = [];
         $skippedStmtIds   = [];
+        $skippedAccounts  = [];
 
         $flushEntries = function () use ($db, $entryColumns, &$entryBuf, &$totalEntries, $type) {
             if (empty($entryBuf)) return;
@@ -384,6 +397,7 @@ class TdsMergeController extends Controller
                 if (!$accountId) {
                     $this->out("│  Пропуск stmt_id={$stmtId}: счёт не найден для account_no='{$accountNo}'\n", Console::FG_YELLOW);
                     $skippedStmtIds[] = $stmtId;
+                    $skippedAccounts[$accountNo] = true;
                     continue;
                 }
 
@@ -437,7 +451,7 @@ class TdsMergeController extends Controller
         $flushEntries();
         $flushBalances();
 
-        return [$totalBalances, $totalEntries, $processedStmtIds, $skippedStmtIds];
+        return [$totalBalances, $totalEntries, $processedStmtIds, $skippedStmtIds, array_keys($skippedAccounts)];
     }
 
     /**
