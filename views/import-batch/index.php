@@ -56,7 +56,9 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                     <span :title="'В системе сейчас: ' + b.live_entries">{{ displayCount(b.imported_entries, b.live_entries) }}</span>
                 </td>
                 <td style="text-align:center">
-                    <span :title="'В системе сейчас: ' + b.live_balances">{{ displayCount(b.imported_balances, b.live_balances) }}</span>
+                    <span v-if="balanceCount(b) > 0" :title="'В системе сейчас: ' + b.live_balances">{{ balanceCount(b) }}</span>
+                    <span v-else-if="showNoBalanceNote(b)" class="imp-nobal" title="Балансовых строк за этот день в выписке не было">нет данных за день</span>
+                    <span v-else style="color:#d1d5db">—</span>
                 </td>
                 <td style="text-align:center">
                     <span v-if="b.is_processing" class="imp-status imp-status-proc">
@@ -65,8 +67,11 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                     <span v-else-if="b.is_rolled_back" class="imp-status imp-status-rolled" :title="'Откатано: ' + fmtDateTime(b.rolled_back_at)">
                         <i class="fas fa-undo"></i> Откатано
                     </span>
-                    <span v-else-if="!b.is_merged && hasData(b)" class="imp-status imp-status-partial">
+                    <span v-else-if="hasMissingAccounts(b)" class="imp-status imp-status-partial">
                         <i class="fas fa-exclamation-triangle"></i> Загружено частично
+                    </span>
+                    <span v-else-if="!b.is_merged && hasData(b)" class="imp-status imp-status-ok">
+                        <i class="fas fa-check"></i> Импортировано
                     </span>
                     <span v-else-if="!b.is_merged" class="imp-status imp-status-pending">
                         <i class="fas fa-clock"></i> Ожидает загрузки
@@ -142,6 +147,8 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
     max-width:260px; margin-left:auto; margin-right:auto; cursor:help; }
 .imp-missing i { margin-right:3px; }
 
+.imp-nobal { font-size:10.5px; color:#9ca3af; font-style:italic; cursor:help; }
+
 .btn-load { background:#eef2ff; color:#4338ca; border:none; border-radius:8px; padding:5px 12px; font-size:12px; font-weight:600; cursor:pointer; }
 .btn-load:hover { background:#e0e7ff; }
 .btn-load:disabled { opacity:.6; cursor:default; }
@@ -193,6 +200,16 @@ document.addEventListener('DOMContentLoaded', function () {
             },
             hasData: function (b) {
                 return (b.live_entries > 0) || (b.live_balances > 0);
+            },
+            hasMissingAccounts: function (b) {
+                return !!(b.skipped_accounts && b.skipped_accounts.length);
+            },
+            balanceCount: function (b) {
+                return this.displayCount(b.imported_balances, b.live_balances) || 0;
+            },
+            showNoBalanceNote: function (b) {
+                // Пачка загружена, но балансов за день не было (не путать с ещё не загруженной/откатанной).
+                return !b.is_rolled_back && (b.is_merged || b.live_entries > 0);
             },
             missingAccountsShort: function (list) {
                 if (!list || !list.length) return '';
