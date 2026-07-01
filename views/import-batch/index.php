@@ -56,9 +56,7 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                     <span :title="'В системе сейчас: ' + b.live_entries">{{ displayCount(b.imported_entries, b.live_entries) }}</span>
                 </td>
                 <td style="text-align:center">
-                    <span v-if="balanceCount(b) > 0" :title="'В системе сейчас: ' + b.live_balances">{{ balanceCount(b) }}</span>
-                    <span v-else-if="showNoBalanceNote(b)" class="imp-nobal" title="Балансовых строк за этот день в выписке не было">нет данных за день</span>
-                    <span v-else style="color:#d1d5db">—</span>
+                    <span :title="'В системе сейчас: ' + b.live_balances">{{ displayCount(b.imported_balances, b.live_balances) }}</span>
                 </td>
                 <td style="text-align:center">
                     <span v-if="b.is_processing" class="imp-status imp-status-proc">
@@ -101,7 +99,7 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
                 </td>
                 <td style="text-align:right">
                     <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap">
-                        <button v-if="b.can_load" class="btn-action btn-load" @click="confirmLoad(b)" :disabled="loadingId === b.id">
+                        <button v-if="b.can_load && (!hasData(b) || hasMissingAccounts(b))" class="btn-action btn-load" @click="confirmLoad(b)" :disabled="loadingId === b.id">
                             <i class="fas" :class="loadingId === b.id ? 'fa-spinner fa-spin' : 'fa-play'"></i>
                             <span class="ms-1">{{ hasData(b) ? 'Догрузить' : 'Запустить загрузку' }}</span>
                         </button>
@@ -146,8 +144,6 @@ $initJson = json_encode($initData, JSON_UNESCAPED_UNICODE);
 .imp-missing { margin-top:5px; font-size:10.5px; font-weight:600; color:#b45309; line-height:1.35;
     max-width:260px; margin-left:auto; margin-right:auto; cursor:help; }
 .imp-missing i { margin-right:3px; }
-
-.imp-nobal { font-size:10.5px; color:#9ca3af; font-style:italic; cursor:help; }
 
 .btn-load { background:#eef2ff; color:#4338ca; border:none; border-radius:8px; padding:5px 12px; font-size:12px; font-weight:600; cursor:pointer; }
 .btn-load:hover { background:#e0e7ff; }
@@ -203,13 +199,6 @@ document.addEventListener('DOMContentLoaded', function () {
             },
             hasMissingAccounts: function (b) {
                 return !!(b.skipped_accounts && b.skipped_accounts.length);
-            },
-            balanceCount: function (b) {
-                return this.displayCount(b.imported_balances, b.live_balances) || 0;
-            },
-            showNoBalanceNote: function (b) {
-                // Пачка загружена, но балансов за день не было (не путать с ещё не загруженной/откатанной).
-                return !b.is_rolled_back && (b.is_merged || b.live_entries > 0);
             },
             missingAccountsShort: function (list) {
                 if (!list || !list.length) return '';
