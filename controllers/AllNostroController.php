@@ -156,6 +156,11 @@ class AllNostroController extends BaseController
         $total = (int)(clone $q)->count('ne.id');
 
         $sortExpr = ($sort === 'account_id') ? 'ne.account_id' : "ne.{$sort}";
+        $order = [$sortExpr => $dir];
+        // При сортировке по сумме — вторичная сортировка по instruction_id по возрастанию.
+        if ($sort === 'amount') {
+            $order['ne.instruction_id'] = SORT_ASC;
+        }
         $rows = $q
             ->select([
                 'ne.*',
@@ -164,7 +169,7 @@ class AllNostroController extends BaseController
                 'a.pool_id AS pool_id',
                 'ap.name AS pool_name',
             ])
-            ->orderBy([$sortExpr => $dir])
+            ->orderBy($order)
             ->offset(($page - 1) * $limit)
             ->limit($limit)
             ->asArray()
