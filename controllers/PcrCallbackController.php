@@ -71,6 +71,11 @@ class PcrCallbackController extends Controller
             return ['status' => 'ignored', 'reason' => 'unknown_correlation_id'];
         }
 
+        // Дата выверки из исходного pcr/request --date. Если задана — именно
+        // она проставляется в pcr_wallet_info.from_date_time, чтобы pcr/export
+        // --date попадал в тот же день, что и запрос.
+        $reconDate = $this->reconDateFor($correlationId);
+
         // Идемпотентность: тот же (operationId, partId) уже обработан.
         $exists = $db->createCommand(
             "SELECT id FROM {{%pcr_callback}}
@@ -128,7 +133,9 @@ class PcrCallbackController extends Controller
                     'total_amount_credit'      => $rep['totalAmountCredit'] ?? null,
                     'total_amount_credit_ccy'  => $rep['totalAmountCreditCcy'] ?? null,
                     'wallet_status'            => $rep['walletStatus'] ?? null,
-                    'from_date_time'           => $this->ts($rep['fromDateTime'] ?? null),
+                    'from_date_time'           => $reconDate !== null
+                        ? $reconDate . ' 00:00:00'
+                        : $this->ts($rep['fromDateTime'] ?? null),
                     'to_date_time'             => $this->ts($rep['toDateTime'] ?? null),
                 ])->execute();
                 $walletInfoId = (int)$db->getLastInsertID('pcr_wallet_info_id_seq');
@@ -184,6 +191,36 @@ class PcrCallbackController extends Controller
               LIMIT 1",
             [':correlation_id' => $correlationId]
         )->queryScalar() !== false;
+    }
+
+    /**
+     * Возвращает дату выверки (recon_date) исходного запроса по correlationId,
+     * если она была задана через `pcr/request --date`.
+     *
+     * @param mixed $correlationId Значение correlationId из payload.
+     * @return string|null Дата в формате YYYY-MM-DD или null.
+     */
+    private function reconDateFor($correlationId): ?string
+    {
+        if (!is_string($correlationId) || trim($correlationId) === '') {
+            return null;
+        }
+
+        $value = Yii::$app->db->createCommand(
+            "SELECT recon_date FROM {{%pcr_request}}
+              WHERE correlation_id = :correlation_id
+                AND status = 'accepted'
+                AND recon_date IS NOT NULL
+              ORDER BY id DESC
+              LIMIT 1",
+            [':correlation_id' => $correlationId]
+        )->queryScalar();
+
+        if ($value === false || $value === null || $value === '') {
+            return null;
+        }
+
+        return substr((string)$value, 0, 10);
     }
 
     /**

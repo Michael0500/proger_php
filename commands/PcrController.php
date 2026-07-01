@@ -26,6 +26,7 @@ use yii\helpers\Console;
  *   php yii pcr/request
  *   php yii pcr/request --type=balance
  *   php yii pcr/request --date-from="2025-05-27T00:00:00.000Z" --date-to="2025-05-28T00:00:00.000Z"
+ *   php yii pcr/request --date=2025-05-25   # сутки 2025-05-25 в UTC+3 (from 2025-05-24T21:00Z, to 2025-05-25T21:00Z)
  *   php yii pcr/export
  *   php yii pcr/export --correlation-id=ef71d287-995f-4582-b5ec-d8585beecf45
  *   php yii pcr/export --date=2025-05-27
@@ -60,7 +61,7 @@ class PcrController extends Controller
     public ?string $wallet = null;
     /** --correlation-id: выбор конкретного запроса (для export) */
     public ?string $correlationId = null;
-    /** --date=YYYY-MM-DD: выбор по from_date_time (для export) */
+    /** --date=YYYY-MM-DD: дата выверки (request — сутки UTC+3; export — выбор по from_date_time) */
     public ?string $date = null;
     /** --out: путь выходного файла/каталога (для export) */
     public ?string $out = null;
@@ -128,7 +129,7 @@ class PcrController extends Controller
         }
 
         // Период: дефолт — предыдущие календарные сутки (UTC+3 → UTC).
-        [$from, $to] = $this->resolvePeriod();
+        [$from, $to, $reconDate] = $this->resolvePeriod();
 
         $wallets = $this->wallet !== null
             ? array_filter(array_map('trim', explode(',', $this->wallet)))
@@ -156,6 +157,7 @@ class PcrController extends Controller
             'wallet_id_list' => json_encode(array_values($wallets), JSON_UNESCAPED_UNICODE),
             'date_from'      => $from,
             'date_to'        => $to,
+            'recon_date'     => $reconDate,
             'node_id'        => $cfg['nodeId'] ?? null,
             'correlation_id' => is_array($resp) ? ($resp['correlationId'] ?? null) : null,
             'operation_id'   => is_array($resp) ? ($resp['operationId'] ?? null) : null,
@@ -179,34 +181,53 @@ class PcrController extends Controller
     }
 
     /**
-     * Вычисляет границы периода запроса в формате ISO `...T..:..:..000Z`.
+     * Вычисляет границы периода запроса в формате ISO `...T..:..:..000Z`
+     * и дату выверки (recon_date, YYYY-MM-DD) для сохранения в pcr_request.
      *
-     * Если --date-from/--date-to не заданы — берёт предыдущие календарные сутки
-     * в зоне UTC+3 и переводит их в UTC.
+     * Приоритет источников периода:
+     *   1. --date=YYYY-MM-DD — календарные сутки этой даты в зоне UTC+3,
+     *      переведённые в UTC. Например --date=2025-05-25 →
+     *      dateFrom=2025-05-24T21:00:00.000Z, dateTo=2025-05-25T21:00:00.000Z,
+     *      recon_date=2025-05-25.
+     *   2. --date-from/--date-to — переданные ISO-границы как есть (recon_date=null).
+     *   3. дефолт — предыдущие календарные сутки в UTC+3; recon_date=вчера.
      *
-     * @return array{0:string,1:string} `[dateFrom, dateTo]`.
+     * @return array{0:string,1:string,2:?string} `[dateFrom, dateTo, reconDate]`.
      */
     private function resolvePeriod(): array
     {
-        if ($this->dateFrom !== null && $this->dateTo !== null) {
-            return [$this->dateFrom, $this->dateTo];
-        }
-
-        // Предыдущие сутки в UTC+3.
-        $tz   = new \DateTimeZone('+0300');
-        $utc  = new \DateTimeZone('UTC');
-        $from = new \DateTime('yesterday 00:00:00', $tz);
-        $to   = new \DateTime('today 00:00:00', $tz);
-        $from->setTimezone($utc);
-        $to->setTimezone($utc);
+        $utc = new \DateTimeZone('UTC');
+        $tz  = new \DateTimeZone('+0300');
 
         $fmt = function (\DateTime $d): string {
             return $d->format('Y-m-d\TH:i:s') . '.000Z';
         };
 
+        // 1. Явно заданная дата выверки → сутки этой даты в UTC+3.
+        if ($this->date !== null && $this->date !== '') {
+            $reconDate = (new \DateTime($this->date, $tz))->format('Y-m-d');
+            $from = (new \DateTime($reconDate . ' 00:00:00', $tz))->setTimezone($utc);
+            $to   = (new \DateTime($reconDate . ' 00:00:00', $tz))->modify('+1 day')->setTimezone($utc);
+
+            return [$fmt($from), $fmt($to), $reconDate];
+        }
+
+        // 2. Явные ISO-границы.
+        if ($this->dateFrom !== null && $this->dateTo !== null) {
+            return [$this->dateFrom, $this->dateTo, null];
+        }
+
+        // 3. Дефолт — предыдущие сутки в UTC+3.
+        $reconDate = (new \DateTime('yesterday', $tz))->format('Y-m-d');
+        $from = new \DateTime('yesterday 00:00:00', $tz);
+        $to   = new \DateTime('today 00:00:00', $tz);
+        $from->setTimezone($utc);
+        $to->setTimezone($utc);
+
         return [
             $this->dateFrom ?? $fmt($from),
             $this->dateTo ?? $fmt($to),
+            $reconDate,
         ];
     }
 
